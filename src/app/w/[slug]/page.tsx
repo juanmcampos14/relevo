@@ -8,7 +8,7 @@ import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/en
 import { EmptyState, Pill, Section, formatDate } from "@/components/app/bits";
 import { setHomeView } from "./home-actions";
 import { loadNews } from "@/server/news/queries";
-import { NewsList, ago } from "@/components/app/news-list";
+import { NewsCards, ago } from "@/components/app/news-list";
 import { RefreshNewsButton } from "@/components/app/refresh-news-button";
 import { refreshNewsNow } from "./noticias/actions";
 
@@ -202,14 +202,14 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
       }
     >
       {news.rows.length ? (
-        <NewsList slug={slug} rows={news.rows} canEdit={ctx.canEdit} />
+        <NewsCards slug={slug} rows={news.rows} canEdit={ctx.canEdit} />
       ) : (
         <EmptyState title={news.refreshing ? "Buscando noticias…" : "Sin noticias de los últimos 7 días"}>
           {news.refreshing ? "La primera carga tarda unos segundos. Recargá la página en un momento." : null}
         </EmptyState>
       )}
       <p className="text-xs text-muted-foreground">
-        Notas que nombran “Vaca Muerta” o “Añelo”, vía Google Noticias.{" "}
+        Notas que nombran “Vaca Muerta” o “Añelo”, vía Bing Noticias.{" "}
         {news.lastOkAt ? `Actualizado ${ago(news.lastOkAt)}.` : "Todavía no se actualizó."}{" "}
         {news.lastError && <span className="text-destructive">Último intento falló: {news.lastError}.</span>} Una noticia no es evidencia de demanda:
         pasala a hallazgo para revisarla.

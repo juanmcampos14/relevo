@@ -3,7 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { TOPICS, mentions } from "@/domain/news";
-import { PROVIDER, fetchGoogleNews } from "./google-news";
+import * as google from "./google-news";
+import * as bing from "./bing-news";
 
 export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
 
@@ -27,7 +28,14 @@ export async function refreshNews(
   });
   if (!won) return { ok: true as const, received: 0, created: 0, skipped: true };
   try {
-    const items = (await fetchGoogleNews(topic.query, 7)).filter((i) => mentions(i, topic.mustMention));
+    // Bing primero (imagen + URL real + resumen); Google como respaldo si Bing falla o no trae nada.
+    let provider = bing.PROVIDER;
+    let fetched = await bing.fetchBingNews(topic.query).catch(() => [] as Awaited<ReturnType<typeof bing.fetchBingNews>>);
+    if (!fetched.length) {
+      provider = google.PROVIDER;
+      fetched = await google.fetchGoogleNews(topic.query, 7);
+    }
+    const items = fetched.filter((i) => mentions(i, topic.mustMention));
     let created = 0;
     if (items.length) {
       const { data, error } = await db
@@ -36,7 +44,7 @@ export async function refreshNews(
           items.map((i) => ({
             workspace_id: workspaceId,
             topic: topic.key,
-            provider: PROVIDER,
+            provider,
             external_id: i.externalId,
             url: i.url,
             title: i.title,
@@ -44,6 +52,7 @@ export async function refreshNews(
             source_url: i.sourceUrl,
             snippet: i.snippet,
             published_at: i.publishedAt,
+            image_url: i.imageUrl ?? null,
           })),
           { onConflict: "workspace_id,provider,external_id", ignoreDuplicates: true },
         )
@@ -51,12 +60,12 @@ export async function refreshNews(
       if (error) throw new Error("No se pudieron guardar las noticias");
       created = data?.length ?? 0;
     }
-    await db.from("news_fetch_runs").insert({ workspace_id: workspaceId, topic: topic.key, provider: PROVIDER, status: "ok", received: items.length, created });
+    await db.from("news_fetch_runs").insert({ workspace_id: workspaceId, topic: topic.key, provider, status: "ok", received: items.length, created });
     await db.rpc("finish_news_refresh", { p_ws: workspaceId, p_topic: topic.key, p_ok: true });
     return { ok: true as const, received: items.length, created, skipped: false };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error desconocido";
-    await db.from("news_fetch_runs").insert({ workspace_id: workspaceId, topic: topic.key, provider: PROVIDER, status: "error", error: message });
+    await db.from("news_fetch_runs").insert({ workspace_id: workspaceId, topic: topic.key, provider: bing.PROVIDER, status: "error", error: message });
     await db.rpc("finish_news_refresh", { p_ws: workspaceId, p_topic: topic.key, p_ok: false });
     return { ok: false as const, error: message };
   }

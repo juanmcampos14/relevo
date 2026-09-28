@@ -9,6 +9,7 @@ export type NewsItem = {
   sourceUrl: string | null;
   snippet: string | null;
   publishedAt: string | null;
+  imageUrl?: string | null;
 };
 
 export type NewsTopic = { key: string; label: string; query: string; mustMention: string[] };

@@ -42,7 +42,7 @@ export default async function NoticiasPage({ params, searchParams }: PageProps<"
         <EmptyState title={q ? "Ninguna noticia coincide con el filtro" : "Todavía no hay noticias"} />
       )}
       <p className="mt-6 text-xs text-muted-foreground">
-        Fuente: Google Noticias (búsqueda RSS, uso interno). Los títulos y enlaces pertenecen a cada medio. “Pasar a hallazgo” crea un hallazgo
+        Fuente: Bing Noticias (Google Noticias como respaldo), búsqueda RSS de uso interno. Los títulos y enlaces pertenecen a cada medio. “Pasar a hallazgo” crea un hallazgo
         pendiente de revisión con la nota como fuente; nunca una oportunidad.
       </p>
     </>

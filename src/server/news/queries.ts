@@ -14,17 +14,18 @@ import { STALE_AFTER_MS, refreshNews } from "./refresh";
  * la reserva atómica de refreshNews evita consultas duplicadas.
  */
 export async function loadNews(db: SupabaseClient<Database>, workspaceId: string, limit: number, topics: readonly string[] = RADAR_TOPICS) {
-  const [{ data: rows }, { data: runs }] = await Promise.all([
+  const [{ data: rows }, { data: states }, { data: last }] = await Promise.all([
     db
       .from("news_articles")
-      .select("id, title, url, source_name, published_at, snippet, finding_id, topic")
+      .select("id, title, url, source_name, published_at, snippet, finding_id, topic, image_url")
       .in("topic", [...topics])
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(limit),
-    db.from("news_fetch_runs").select("topic, status, error, created_at").in("topic", [...topics]).order("created_at", { ascending: false }).limit(20),
+    // Única fuente de verdad sobre frescura: la misma tabla que usa la reserva atómica.
+    db.from("news_refresh_state").select("topic, last_ok_at").in("topic", [...topics]),
+    db.from("news_fetch_runs").select("status, error").in("topic", [...topics]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
-  const lastOkByTopic = new Map<string, string>();
-  for (const r of runs ?? []) if (r.status === "ok" && !lastOkByTopic.has(r.topic)) lastOkByTopic.set(r.topic, r.created_at);
+  const lastOkByTopic = new Map((states ?? []).filter((s) => s.last_ok_at).map((s) => [s.topic, s.last_ok_at as string]));
   const stale = topics.filter((t) => {
     const at = lastOkByTopic.get(t);
     return !at || Date.now() - new Date(at).getTime() > STALE_AFTER_MS;
@@ -36,7 +37,6 @@ export async function loadNews(db: SupabaseClient<Database>, workspaceId: string
     });
   }
   const oks = [...lastOkByTopic.values()].sort();
-  const last = runs?.[0];
   return {
     rows: rows ?? [],
     // La más vieja de las últimas actualizaciones: honesto sobre qué tan fresco está todo.

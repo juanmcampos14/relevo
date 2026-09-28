@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mentions, cleanTitle, topicsOf } from "@/domain/news";
 import { feedUrl, parseFeed } from "./google-news";
+import { originalUrl, parseBingFeed, thumbnail } from "./bing-news";
 
 const XML = `<?xml version="1.0"?><rss version="2.0"><channel>
 <item><title>Chevron quiere triplicar su producción en Vaca Muerta - Clarín</title>
@@ -52,5 +53,26 @@ describe("radar de noticias", () => {
     expect(u.searchParams.get("q")).toBe('"Vaca Muerta" when:7d');
     expect(u.searchParams.get("ceid")).toBe("AR:es-419");
     expect(cleanTitle("Nota - Medio", "Medio")).toBe("Nota");
+  });
+
+  it("Bing: URL original de la nota, miniatura HTTPS 16:9 y resumen", () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0" xmlns:News="x"><channel><item>
+<title>Cafe Mart&#237;nez llega a Vaca Muerta</title>
+<link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3a%2f%2fwww.iprofesional.com%2fenergia%2fnota&amp;mkt=es-ar</link>
+<description>Desembarca en A&#241;elo ...</description><pubDate>Mon, 28 Sep 2026 03:31:00 GMT</pubDate>
+<News:Source>iProfesional</News:Source><News:Image>http://www.bing.com/th?id=ONUT.abc&amp;pid=News</News:Image></item></channel></rss>`;
+    const [i] = parseBingFeed(xml);
+    expect(i).toMatchObject({
+      url: "https://www.iprofesional.com/energia/nota",
+      externalId: "https://www.iprofesional.com/energia/nota",
+      title: "Cafe Martínez llega a Vaca Muerta",
+      snippet: "Desembarca en Añelo ...",
+      sourceName: "iProfesional",
+      sourceUrl: "https://www.iprofesional.com",
+      publishedAt: "2026-09-28T03:31:00.000Z",
+    });
+    expect(i.imageUrl).toBe("https://www.bing.com/th?id=ONUT.abc&pid=News&w=400&h=225&c=14");
+    expect(thumbnail("https://evil.example/x.jpg")).toBeNull();
+    expect(originalUrl("https://www.bing.com/news/apiclick.aspx?url=javascript:alert(1)")).toBe("https://www.bing.com/news/apiclick.aspx?url=javascript:alert(1)");
   });
 });

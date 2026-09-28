@@ -8,7 +8,7 @@ import { RADAR_TOPICS } from "@/domain/news";
 import { ingestFindings } from "@/server/ingest";
 import type { ActionState } from "@/server/action-result";
 
-export async function refreshNewsNow(slug: string, _: ActionState): Promise<ActionState> {
+export async function refreshNewsNow(slug: string): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   // Manual: sin exigir antigüedad, pero igual respetando la reserva (no dos a la vez).

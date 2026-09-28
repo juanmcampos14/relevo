@@ -621,13 +621,13 @@ isOneToOne: false
                   ]
                 },"news_articles": {
                   Row: {
-                    "external_id": string,"fetched_at": string,"finding_id": string | null,"id": string,"provider": string,"published_at": string | null,"snippet": string | null,"source_name": string | null,"source_url": string | null,"title": string,"topic": string,"url": string,"workspace_id": string
+                    "external_id": string,"fetched_at": string,"finding_id": string | null,"id": string,"image_url": string | null,"provider": string,"published_at": string | null,"snippet": string | null,"source_name": string | null,"source_url": string | null,"title": string,"topic": string,"url": string,"workspace_id": string
                   }
                   Insert: {
-                    "external_id": string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"provider": string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title": string,"topic": string,"url": string,"workspace_id": string
+                    "external_id": string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"image_url"?: string | null,"provider": string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title": string,"topic": string,"url": string,"workspace_id": string
                   }
                   Update: {
-                    "external_id"?: string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"provider"?: string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title"?: string,"topic"?: string,"url"?: string,"workspace_id"?: string
+                    "external_id"?: string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"image_url"?: string | null,"provider"?: string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title"?: string,"topic"?: string,"url"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {

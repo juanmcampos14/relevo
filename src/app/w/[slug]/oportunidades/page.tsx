@@ -89,7 +89,7 @@ export default async function HallazgosPage({ params, searchParams }: PageProps<
         <details className="mt-8 rounded-lg border p-4">
           <summary className="cursor-pointer text-sm font-medium">+ Hallazgo de research externo (noticia, aviso, informe)</summary>
           <p className="mt-2 mb-4 text-xs text-muted-foreground">
-            Carga manual. La ingesta automática del Morning Brief llega en P1 y usará este mismo circuito.
+            Carga manual de un ítem. Para lotes del Morning Brief (JSON o API) usá <Link href={`/w/${slug}/integraciones`} className="text-primary underline">Integraciones</Link>.
           </p>
           <FindingForm action={createFinding.bind(null, slug)} sources={sources} entities={entities} origin="research_externo" />
         </details>

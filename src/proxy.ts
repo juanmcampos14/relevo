@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+// /api/ingest se autentica con token propio (no con sesión de usuario).
+const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest"];
 
 // Refresca la sesión en cada request y exige login fuera de las rutas públicas.
 // La autorización real vive en RLS; esto solo evita renderizar páginas sin sesión.

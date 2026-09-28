@@ -65,6 +65,7 @@ export default async function OpportunityPage({ params }: PageProps<"/w/[slug]/o
           </Link>
         }
         title={opp.title}
+        actions={<Link href={`/w/${slug}/ai?scope=opportunity:${oppId}`} className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted">Preguntar a RELEVO AI</Link>}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <Pill className={opp.status === "aprobada" ? "border-primary text-primary" : ""}>{opportunityStatus.label(opp.status)}</Pill>

@@ -25,6 +25,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
         <SideNav slug={slug} />
         <div className="mt-auto space-y-1 px-3 text-xs text-muted-foreground">
           <Link href={`/w/${slug}/miembros`} className="block hover:underline">Miembros</Link>
+          <Link href={`/w/${slug}/integraciones`} className="block hover:underline">Integraciones</Link>
           <Link href="/cuenta" className="block hover:underline">
             {profile?.display_name || ctx.user.email} · {roleCatalog.label(ctx.role)}
             {ctx.canApprove ? " · aprueba" : ""}

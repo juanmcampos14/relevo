@@ -23,7 +23,89 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "assets": {
+            "ai_action_drafts": {
+                  Row: {
+                    "action": string,"conversation_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"error": string | null,"evidence_refs": NonNullable<Json>,"id": string,"message_id": string | null,"payload": NonNullable<Json>,"rationale": string | null,"result_ref": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "action": string,"conversation_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload": NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "action"?: string,"conversation_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload"?: NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_action_drafts_workspace_id_conversation_id_fkey"
+      columns: ["workspace_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "ai_conversations"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"ai_conversations": {
+                  Row: {
+                    "created_at": string,"id": string,"scope": NonNullable<Json>,"title": string,"updated_at": string,"user_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"scope"?: NonNullable<Json>,"title"?: string,"updated_at"?: string,"user_id"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"scope"?: NonNullable<Json>,"title"?: string,"updated_at"?: string,"user_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_conversations_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"ai_messages": {
+                  Row: {
+                    "api_content": Json | null,"citations": NonNullable<Json>,"conversation_id": string,"created_at": string,"id": string,"role": string,"run_id": string | null,"text": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "api_content"?: Json | null,"citations"?: NonNullable<Json>,"conversation_id": string,"created_at"?: string,"id"?: string,"role": string,"run_id"?: string | null,"text"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "api_content"?: Json | null,"citations"?: NonNullable<Json>,"conversation_id"?: string,"created_at"?: string,"id"?: string,"role"?: string,"run_id"?: string | null,"text"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_messages_workspace_id_conversation_id_fkey"
+      columns: ["workspace_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "ai_conversations"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"ai_runs": {
+                  Row: {
+                    "cache_read_tokens": number,"cache_write_tokens": number,"conversation_id": string | null,"cost_usd": number,"created_at": string,"duration_ms": number | null,"error": string | null,"id": string,"input_tokens": number,"model": string,"output_tokens": number,"prompt_version": string,"status": string,"tool_calls": number,"user_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"conversation_id"?: string | null,"cost_usd"?: number,"created_at"?: string,"duration_ms"?: number | null,"error"?: string | null,"id"?: string,"input_tokens"?: number,"model": string,"output_tokens"?: number,"prompt_version": string,"status": string,"tool_calls"?: number,"user_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "cache_read_tokens"?: number,"cache_write_tokens"?: number,"conversation_id"?: string | null,"cost_usd"?: number,"created_at"?: string,"duration_ms"?: number | null,"error"?: string | null,"id"?: string,"input_tokens"?: number,"model"?: string,"output_tokens"?: number,"prompt_version"?: string,"status"?: string,"tool_calls"?: number,"user_id"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_runs_workspace_id_conversation_id_fkey"
+      columns: ["workspace_id","conversation_id"]
+isOneToOne: false
+      referencedRelation: "ai_conversations"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "ai_runs_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"assets": {
                   Row: {
                     "address_status": string,"address_text": string | null,"country": string | null,"created_at": string,"created_by": string | null,"establishment_id": string | null,"id": string,"is_demo": boolean,"kind": string,"latitude": number | null,"locality": string | null,"location_source_id": string | null,"location_verified_at": string | null,"longitude": number | null,"notes": string | null,"operation": string,"owner_company_id": string | null,"price_amount": number | null,"price_currency": string | null,"price_observed_on": string | null,"price_source_id": string | null,"province": string | null,"source_id": string | null,"surface_m2": number | null,"title": string,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
@@ -434,16 +516,22 @@ isOneToOne: false
                   ]
                 },"findings": {
                   Row: {
-                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"kind": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
+                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"ingest_meta": Json | null,"ingest_token_id": string | null,"kind": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"kind": string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind": string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"kind"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "findings_ingest_token_fk"
+      columns: ["workspace_id","ingest_token_id"]
+isOneToOne: false
+      referencedRelation: "ingest_tokens"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "findings_workspace_id_asset_id_fkey"
       columns: ["workspace_id","asset_id"]
 isOneToOne: false
@@ -491,6 +579,25 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "visits"
       referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"ingest_tokens": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"id": string,"last_used_at": string | null,"name": string,"revoked_at": string | null,"token_hash": string,"token_hint": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"last_used_at"?: string | null,"name": string,"revoked_at"?: string | null,"token_hash": string,"token_hint": string,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"last_used_at"?: string | null,"name"?: string,"revoked_at"?: string | null,"token_hash"?: string,"token_hint"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ingest_tokens_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
     }
                   ]
                 },"memberships": {
@@ -848,6 +955,9 @@ isOneToOne: false
                            },
 "is_verification_status":
 { Args: { "v": string }; Returns: boolean
+                           },
+"owns_conversation":
+{ Args: { "conv": string }; Returns: boolean
                            },
 "shares_workspace_with":
 { Args: { "other": string }; Returns: boolean

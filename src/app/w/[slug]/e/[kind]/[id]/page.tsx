@@ -157,7 +157,12 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
             {!mainSource && <span>Sin fuente registrada</span>}
           </span>
         }
-        actions={<MapsButton place={place} />}
+        actions={
+          <>
+            <MapsButton place={place} />
+            <Link href={`/w/${slug}/ai?scope=${kind}:${id}`} className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted">Preguntar a RELEVO AI</Link>
+          </>
+        }
       />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">

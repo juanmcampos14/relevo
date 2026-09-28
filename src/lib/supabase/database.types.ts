@@ -85,6 +85,25 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"briefings": {
+                  Row: {
+                    "audience_user_id": string | null,"content": NonNullable<Json>,"created_at": string,"created_by": string | null,"id": string,"period_end": string,"period_start": string,"published_at": string | null,"scope": string,"status": string,"title": string,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "audience_user_id"?: string | null,"content": NonNullable<Json>,"created_at"?: string,"created_by"?: string | null,"id"?: string,"period_end": string,"period_start": string,"published_at"?: string | null,"scope": string,"status"?: string,"title": string,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "audience_user_id"?: string | null,"content"?: NonNullable<Json>,"created_at"?: string,"created_by"?: string | null,"id"?: string,"period_end"?: string,"period_start"?: string,"published_at"?: string | null,"scope"?: string,"status"?: string,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "briefings_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"campaign_targets": {
                   Row: {
                     "asset_id": string | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"status": string,"updated_at": string,"workspace_id": string
@@ -221,6 +240,49 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"comments": {
+                  Row: {
+                    "author_id": string,"body": string,"briefing_id": string | null,"created_at": string,"decision_id": string | null,"finding_id": string | null,"id": string,"opportunity_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "author_id"?: string,"body": string,"briefing_id"?: string | null,"created_at"?: string,"decision_id"?: string | null,"finding_id"?: string | null,"id"?: string,"opportunity_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "author_id"?: string,"body"?: string,"briefing_id"?: string | null,"created_at"?: string,"decision_id"?: string | null,"finding_id"?: string | null,"id"?: string,"opportunity_id"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "comments_workspace_id_briefing_id_fkey"
+      columns: ["workspace_id","briefing_id"]
+isOneToOne: false
+      referencedRelation: "briefings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "comments_workspace_id_decision_id_fkey"
+      columns: ["workspace_id","decision_id"]
+isOneToOne: false
+      referencedRelation: "decisions"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "comments_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "comments_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "comments_workspace_id_opportunity_id_fkey"
+      columns: ["workspace_id","opportunity_id"]
+isOneToOne: false
+      referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"companies": {
                   Row: {
                     "created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"source_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
@@ -308,6 +370,31 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"decisions": {
+                  Row: {
+                    "context": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"decision_note": string | null,"due_on": string | null,"id": string,"kind": string,"opportunity_id": string | null,"question": string,"requested_by": string | null,"status": string,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question": string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question"?: string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "decisions_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "decisions_workspace_id_opportunity_id_fkey"
+      columns: ["workspace_id","opportunity_id"]
+isOneToOne: false
+      referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"establishments": {
                   Row: {
                     "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_source_id": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
@@ -345,6 +432,67 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"findings": {
+                  Row: {
+                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"kind": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"kind": string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"kind"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "findings_workspace_id_asset_id_fkey"
+      columns: ["workspace_id","asset_id"]
+isOneToOne: false
+      referencedRelation: "assets"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_company_id_fkey"
+      columns: ["workspace_id","company_id"]
+isOneToOne: false
+      referencedRelation: "companies"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_establishment_id_fkey"
+      columns: ["workspace_id","establishment_id"]
+isOneToOne: false
+      referencedRelation: "establishments"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "findings_workspace_id_source_id_fkey"
+      columns: ["workspace_id","source_id"]
+isOneToOne: false
+      referencedRelation: "sources"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_vertical_id_fkey"
+      columns: ["workspace_id","vertical_id"]
+isOneToOne: false
+      referencedRelation: "verticals"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "findings_workspace_id_visit_id_fkey"
+      columns: ["workspace_id","visit_id"]
+isOneToOne: false
+      referencedRelation: "visits"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"memberships": {
                   Row: {
                     "can_approve_decisions": boolean,"created_at": string,"id": string,"role": string,"status": string,"updated_at": string,"user_id": string,"workspace_id": string
@@ -362,6 +510,56 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "workspaces"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"opportunities": {
+                  Row: {
+                    "campaign_id": string | null,"created_at": string,"created_by": string | null,"id": string,"idempotency_key": string | null,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"route": string,"stage": string | null,"stage_reason": string | null,"status": string,"thesis": string | null,"title": string,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "campaign_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"idempotency_key"?: string | null,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "campaign_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"idempotency_key"?: string | null,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "opportunities_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunities_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"opportunity_findings": {
+                  Row: {
+                    "created_at": string,"finding_id": string,"opportunity_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"finding_id": string,"opportunity_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"finding_id"?: string,"opportunity_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "opportunity_findings_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunity_findings_workspace_id_opportunity_id_fkey"
+      columns: ["workspace_id","opportunity_id"]
+isOneToOne: false
+      referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
     }
                   ]
                 },"profiles": {
@@ -418,6 +616,43 @@ isOneToOne: false
       columns: ["workspace_id","vertical_id"]
 isOneToOne: false
       referencedRelation: "verticals"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"tasks": {
+                  Row: {
+                    "assignee_id": string | null,"completed_at": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"finding_id": string | null,"id": string,"idempotency_key": string | null,"opportunity_id": string | null,"status": string,"target_id": string | null,"title": string,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "assignee_id"?: string | null,"completed_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"opportunity_id"?: string | null,"status"?: string,"target_id"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "assignee_id"?: string | null,"completed_at"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"opportunity_id"?: string | null,"status"?: string,"target_id"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tasks_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "tasks_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "tasks_workspace_id_opportunity_id_fkey"
+      columns: ["workspace_id","opportunity_id"]
+isOneToOne: false
+      referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "tasks_workspace_id_target_id_fkey"
+      columns: ["workspace_id","target_id"]
+isOneToOne: false
+      referencedRelation: "campaign_targets"
       referencedColumns: ["workspace_id","id"]
     }
                   ]
@@ -599,8 +834,14 @@ isOneToOne: false
 "can_edit":
 { Args: { "ws": string }; Returns: boolean
                            },
+"decide_opportunity":
+{ Args: { "p_decision": string,"p_note": string,"p_verdict": string }; Returns: undefined
+                           },
 "has_role":
 { Args: { "roles": (string)[],"ws": string }; Returns: boolean
+                           },
+"is_dealflow_stage":
+{ Args: { "v": string }; Returns: boolean
                            },
 "is_member":
 { Args: { "ws": string }; Returns: boolean

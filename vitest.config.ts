@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
+    exclude: ["e2e/**", "node_modules/**"],
     // Las pruebas de DB comparten el Postgres local: sin paralelismo entre archivos.
     fileParallelism: false,
   },

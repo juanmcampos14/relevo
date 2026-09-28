@@ -19,22 +19,28 @@ export function ActionForm({
   className,
   resetOnSuccess = false,
   onSuccess,
+  id,
 }: {
+  id?: string;
   action: (state: ActionState, fd: FormData) => Promise<ActionState>;
   children: ReactNode;
   className?: string;
   resetOnSuccess?: boolean;
   onSuccess?: () => void;
 }) {
-  const [state, formAction, pending] = useActionState(action, initialActionState);
+  // El aviso se muestra apenas responde el servidor: si el formulario se desmonta al
+  // revalidar (p. ej. un hallazgo aprobado sale de la lista), igual se ve.
+  const [state, formAction, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
+    const res = await action(prev, fd);
+    if (res.ok && res.message) toast.success(res.message);
+    else if (!res.ok && res.message) toast.error(res.message);
+    return res;
+  }, initialActionState);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state.ok) {
-      if (state.message) toast.success(state.message);
       if (resetOnSuccess) ref.current?.reset();
       onSuccess?.();
-    } else if (state.message) {
-      toast.error(state.message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
@@ -44,10 +50,13 @@ export function ActionForm({
       {/* onSubmit en lugar de action={...}: React 19 vacía el formulario tras cada envío,
           y ante un error de validación no queremos perder lo cargado. */}
       <form
+        id={id}
         ref={ref}
         onSubmit={(e) => {
           e.preventDefault();
-          const fd = new FormData(e.currentTarget);
+          // Incluye el botón que envió (p. ej. Aprobar/Rechazar con name/value).
+          const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+          const fd = new FormData(e.currentTarget, submitter);
           startTransition(() => formAction(fd));
         }}
         className={cn("space-y-4", className)}

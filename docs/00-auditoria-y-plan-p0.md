@@ -213,3 +213,21 @@ No se escribe código hasta la aprobación de este delta.
 | Script de bootstrap del workspace en producción | **pendiente** | |
 | 3 casos reales cargados | **bloqueado** | esperando datos de Tano |
 | Inicios personalizados Tano/Fran, findings, revisión, candidatas, decisiones, briefing | **posterior (Corte B)** | la UI los muestra como "no disponible" |
+
+## 9. Estado del Corte B (28/09, local + producción)
+
+| Pieza | Estado | Evidencia |
+|---|---|---|
+| Findings con fuente obligatoria, desde visita (fuente = la visita) o research externo manual; `dedup_key` para ingesta idempotente | **probado** | `tests/db/dealflow.test.ts`, E2E |
+| Revisión humana por ítem (aprobar/rechazar con nota), autor y hora por trigger; un revisado no se edita sin volver a pendiente | **probado** | tests + E2E |
+| Aprobar un finding no crea nada; la candidata se propone a mano desde findings aprobados | **probado** | E2E verifica que no aparece ninguna oportunidad |
+| Candidata → aprobación solo con `can_approve_decisions` y decisión registrada (`decide_opportunity` atómica) → dealflow | **probado** | tests (miembro sin capacidad rechazado, decisión no repetible) + E2E con Fran |
+| Idempotencia (candidata, tareas, findings): doble envío no duplica | **probado en DB** | tests |
+| Advertencia si ningún finding que la sustenta está confirmado | **probado en E2E** | |
+| Dealflow por etapas (pausar/descartar con motivo), ficha 360 con hallazgos, registros, tareas, decisiones, comentarios, historial | **implementado; etapa probada en DB** | |
+| Decisiones generales y de aprobación, comentarios (también de viewers) | **probado** | tests + E2E |
+| Briefing conjunto/personal armado desde registros (sin IA), con enlaces; "Sin nuevos avances registrados" si no hay; publicado solo **en la app**; copiar texto | **probado en E2E** | |
+| Inicio operativo (Tano) / ejecutivo (Fran) como preferencia personal, sin tocar permisos | **probado en E2E** | |
+| Prueba rectora E2E (Playwright), escritorio + móvil | **pasa** | `npm run e2e` |
+| Recortado (ya autorizado): kanban, timeline UI unificada, export CSV | **posterior** | |
+| RELEVO AI, importador CSV, ingesta Morning Brief, audio | **P1** | la UI los marca "no disponible" |

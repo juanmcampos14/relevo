@@ -12,7 +12,8 @@
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -32,6 +33,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.19.0",
     "@types/pg": "^8.23.1",

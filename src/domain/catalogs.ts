@@ -121,3 +121,70 @@ export const role = catalog({
 
 /** Estados que necesitan una fuente registrada. */
 export const statusesRequiringSource = new Set(["confirmado", "declarado_por_contacto", "fuente_publica_sin_verificar"]);
+
+// --- Corte B -----------------------------------------------------------------------
+export const findingKind = catalog({
+  hecho_declarado: "Hecho declarado",
+  observacion: "Observación",
+  necesidad: "Necesidad",
+  riesgo: "Riesgo",
+  pregunta: "Pregunta abierta",
+  senal_de_mercado: "Señal de mercado",
+  oferta_publicada: "Oferta publicada",
+  accion_propuesta: "Acción propuesta",
+});
+
+export const findingOrigin = catalog({
+  manual: "Carga manual",
+  research_externo: "Research externo",
+  ia: "IA",
+});
+
+export const reviewStatus = catalog({
+  pendiente_revision: "Pendiente de revisión",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
+});
+
+export const opportunityRoute = catalog({
+  a_definir: "A definir",
+  adquisicion: "Adquisición",
+  participacion: "Participación",
+  gestion: "Gestión",
+  alianza: "Alianza",
+  creacion_propia: "Creación propia",
+});
+
+export const opportunityStatus = catalog({
+  candidata: "Candidata",
+  aprobada: "Aprobada (en dealflow)",
+  rechazada: "Rechazada",
+});
+
+export const dealflowStage = catalog({
+  contacto_identificado: "Contacto identificado",
+  primer_contacto: "Primer contacto",
+  entrevista_visita: "Entrevista / visita",
+  en_validacion: "En validación",
+  pre_diligencia: "Pre-diligencia",
+  diligencia: "Diligencia",
+  propuesta_negociacion: "Propuesta / negociación",
+  piloto_acuerdo: "Piloto / acuerdo",
+  operacion: "Operación",
+  pausada: "Pausada",
+  descartada: "Descartada",
+});
+
+export const decisionStatus = catalog({
+  requested: "Pendiente",
+  approved: "Aprobada",
+  rejected: "Rechazada",
+  deferred: "Diferida",
+});
+
+export const taskStatus = catalog({
+  todo: "Por hacer",
+  in_progress: "En curso",
+  blocked: "Bloqueada",
+  done: "Hecha",
+});

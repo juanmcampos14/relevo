@@ -10,7 +10,11 @@ import {
   consentStatus,
   contactPermission,
   contactRelation,
+  dealflowStage,
   entityKind,
+  findingKind,
+  opportunityRoute,
+  taskStatus,
   sourceKind,
   statusesRequiringSource,
   stopStatus,
@@ -323,3 +327,72 @@ export function zodFieldErrors(error: z.ZodError): FieldErrors {
   }
   return out;
 }
+
+// --- Corte B -----------------------------------------------------------------------
+export const findingSchema = z
+  .object({
+    kind: z.enum(findingKind.values),
+    statement: z.string().trim().min(1, "Escribí el hallazgo"),
+    evidence: opt,
+    analysis: opt,
+    verification_status: z.enum(verificationStatus.values).default("hipotesis"),
+    source_id: z.uuid({ message: "Todo hallazgo necesita una fuente" }),
+    visit_id: optUuid,
+    campaign_id: optUuid,
+    vertical_id: optUuid,
+    entity: z
+      .string()
+      .optional()
+      .transform((v) => (v ? v : null)),
+    origin: z.enum(["manual", "research_externo"]).default("manual"),
+  })
+  .superRefine(requireSourceForStatus);
+
+export const reviewSchema = z.object({
+  verdict: z.enum(["aprobado", "rechazado"]),
+  review_note: opt,
+});
+
+export const candidateSchema = z.object({
+  title: z.string().trim().min(1, "Poné un título"),
+  thesis: opt,
+  route: z.enum(opportunityRoute.values).default("a_definir"),
+  finding_ids: z.array(z.uuid()).min(1, "Elegí al menos un hallazgo aprobado"),
+  idempotency_key: z.string().min(8),
+});
+
+export const stageSchema = z
+  .object({
+    stage: z.enum(dealflowStage.values),
+    stage_reason: opt,
+    next_action: opt,
+    next_action_due: optDate,
+  })
+  .superRefine((v, ctx) => {
+    if ((v.stage === "pausada" || v.stage === "descartada") && !v.stage_reason) {
+      ctx.addIssue({ code: "custom", path: ["stage_reason"], message: "Indicá el motivo" });
+    }
+  });
+
+export const decisionRequestSchema = z.object({
+  question: z.string().trim().min(1, "Escribí la pregunta a decidir"),
+  context: opt,
+  due_on: optDate,
+});
+
+export const verdictSchema = z.object({
+  verdict: z.enum(["approved", "rejected", "deferred"]),
+  decision_note: opt,
+});
+
+export const taskSchema = z.object({
+  title: z.string().trim().min(1, "Poné un título"),
+  description: opt,
+  assignee_id: optUuid,
+  due_on: optDate,
+  idempotency_key: z.string().min(8),
+});
+
+export const taskStatusSchema = z.enum(taskStatus.values);
+
+export const commentSchema = z.object({ body: z.string().trim().min(1, "El comentario está vacío") });

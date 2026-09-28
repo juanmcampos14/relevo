@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cn } from "cn";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,10 +16,11 @@ export function TextField({
   className,
   ...props
 }: Base & Omit<React.ComponentProps<typeof Input>, "name">) {
+  const id = `${name}-${useId()}`;
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} className="h-10" {...props} />
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} name={name} className="h-10" {...props} />
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       <FieldError name={name} />
     </div>
@@ -33,10 +34,11 @@ export function TextAreaField({
   className,
   ...props
 }: Base & Omit<React.ComponentProps<typeof Textarea>, "name">) {
+  const id = `${name}-${useId()}`;
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={name}>{label}</Label>
-      <Textarea id={name} name={name} {...props} />
+      <Label htmlFor={id}>{label}</Label>
+      <Textarea id={id} name={name} {...props} />
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       <FieldError name={name} />
     </div>
@@ -54,11 +56,12 @@ export function SelectField({
   placeholder,
   ...props
 }: Base & { options: Option[]; placeholder?: string } & Omit<React.ComponentProps<"select">, "name">) {
+  const id = `${name}-${useId()}`;
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <select
-        id={name}
+        id={id}
         name={name}
         className="h-10 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         {...props}

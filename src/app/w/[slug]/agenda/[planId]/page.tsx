@@ -146,7 +146,7 @@ export default async function PlanPage({ params }: PageProps<"/w/[slug]/agenda/[
       )}
 
       {ctx.canEdit && (
-        <details className="mt-6 rounded-lg border p-4" open={!rows.length}>
+        <details className="mt-6 rounded-lg border p-4" open>
           <summary className="cursor-pointer text-sm font-medium">+ Agregar parada</summary>
           <ActionForm action={addStop.bind(null, slug, planId)} resetOnSuccess className="mt-4 max-w-xl">
             <SelectField name="target_id" label="Objetivo" options={options} placeholder={options.length ? "— Elegir —" : "No quedan objetivos para agregar"} />

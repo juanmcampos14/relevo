@@ -22,6 +22,10 @@ import { MapsButton } from "@/components/app/maps-button";
 import { EntityFields, SourcePicker } from "@/components/explorar/entity-fields";
 import { updateEntity, updateTarget } from "../../../explorar/actions";
 import { addClaim, addContact, updateClaimStatus } from "../../actions";
+import { findingSelect, profileNames, toFindingRow } from "@/server/findings";
+import { FindingCard } from "@/components/oportunidades/finding-card";
+import { FindingForm } from "@/components/oportunidades/finding-form";
+import { createFinding } from "../../../oportunidades/actions";
 
 type Row = Record<string, unknown> & { id: string; is_demo: boolean; verification_status: string; source_id: string | null };
 
@@ -75,6 +79,11 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
     supabase.from("audit_log").select("id, action, changes, created_at, actor_id").eq("entity_id", id).order("id", { ascending: false }).limit(15),
   ]);
 
+  const [{ data: rawFindings }] = await Promise.all([
+    supabase.from("findings").select(findingSelect).eq(fk, id).order("created_at", { ascending: false }),
+  ]);
+  const findings = (rawFindings ?? []).map(toFindingRow);
+  const findingNames = await profileNames(supabase, findings.flatMap((f) => [f.created_by, f.reviewed_by]));
   const sourceById = new Map((sources ?? []).map((s) => [s.id, s]));
   const sourceOptions = (sources ?? []).map((s) => ({ value: s.id, label: s.url ? `${s.title} — ${new URL(s.url).hostname}` : s.title }));
   const companyOptions = (companies ?? []).filter((c) => c.id !== id).map((c) => ({ value: c.id, label: companyName(c) }));
@@ -292,6 +301,22 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                   <TextField name="next_verification_step" label="Próximo paso para verificar" />
                   <SubmitButton>Registrar afirmación</SubmitButton>
                 </ActionForm>
+              </details>
+            )}
+          </Section>
+
+          {/* Hallazgos */}
+          <Section title={`Hallazgos (${findings.length})`}>
+            <div className="space-y-3">
+              {findings.map((f) => <FindingCard key={f.id} f={f} slug={slug} canEdit={ctx.canEdit} names={findingNames} />)}
+            </div>
+            {!findings.length && <EmptyState title="Sin hallazgos sobre este registro" />}
+            {ctx.canEdit && (
+              <details className="rounded-lg border p-4">
+                <summary className="cursor-pointer text-sm font-medium">+ Nuevo hallazgo</summary>
+                <div className="mt-4">
+                  <FindingForm action={createFinding.bind(null, slug)} sources={sourceOptions} defaultEntity={`${kind}:${id}`} />
+                </div>
               </details>
             )}
           </Section>

@@ -44,10 +44,13 @@ npm run check   # lint + typecheck + tests
 - Todo dato ficticio lleva `is_demo = true` (se ve como **DEMO**).
 - Funciones no construidas se muestran como "no disponible", nunca simuladas.
 
-## Staging / producción (pendiente)
+## Producción
 
-1. Crear proyecto Supabase y Vercel; variables de `.env.example` en Vercel (la secret key solo del lado servidor).
-2. `npx supabase link` + `npx supabase db push` (migraciones; **no** correr `seed.sql`).
-3. Configurar en Supabase Auth: alta pública deshabilitada, `Site URL` = URL de Vercel, redirect `https://<dominio>/**`,
-   y las plantillas `supabase/templates/*.html` (invitación y magic link apuntan a `/auth/confirm`).
-4. Crear el workspace Daicou y el owner (script de bootstrap: pendiente).
+- App: https://relevo-juan-campos.vercel.app (Vercel `juan-campos/relevo`, funciones en `pdx1`).
+- Base: Supabase `RELEVO` (`edsykefncxjonwlxlamp`, us-west-2). Migraciones: `npx supabase db push --linked` (nunca el seed).
+- Auth: alta pública deshabilitada; solo invitaciones. En plan gratis se usan los emails por defecto de Supabase:
+  invitación → `/auth/callback` (sesión en el fragmento), enlace mágico → `/auth/confirm?code=` (PKCE).
+  Las plantillas de `supabase/templates` solo aplican en local o con SMTP propio.
+- Alta de un workspace nuevo: `node --env-file=.env.production.local scripts/bootstrap-workspace.mjs --name … --slug … --owner …`.
+- Deploy: mientras el email de los commits no esté en la cuenta de Vercel, Vercel bloquea los deploys con metadatos de git;
+  se despliega una exportación limpia (`git archive HEAD`) con `npx vercel deploy --prod`.

@@ -45,7 +45,7 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/w
       <PageHeader title="Buscar" subtitle={q ? `Resultados para “${q}”` : "Escribí al menos 2 letras en el buscador."} />
       {q.length >= 2 &&
         (results.length ? (
-          <ul className="divide-y rounded-lg border">
+          <ul className="divide-y rounded-xl border bg-card shadow-xs">
             {results.map((r, i) => (
               <li key={i}>
                 <Link href={r.href} className="flex items-center justify-between gap-2 p-3 hover:bg-muted/50">

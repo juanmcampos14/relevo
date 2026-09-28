@@ -16,7 +16,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser> => {
 
 export type WorkspaceContext = {
   user: SessionUser;
-  workspace: { id: string; name: string; slug: string };
+  workspace: { id: string; name: string; slug: string; settings: unknown };
   role: "owner" | "admin" | "member" | "viewer";
   canEdit: boolean;
   canApprove: boolean;
@@ -32,7 +32,7 @@ export const getWorkspaceContext = cache(async (slug: string): Promise<Workspace
   const supabase = await createClient();
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("id, name, slug")
+    .select("id, name, slug, settings")
     .eq("slug", slug)
     .maybeSingle();
   if (!workspace) notFound();

@@ -52,6 +52,21 @@ export function DemoBadge({ show = true }: { show?: boolean }) {
   );
 }
 
+// Color por estado de objetivo; siempre acompaña al texto (nunca color solo).
+const targetTone: Record<string, string> = {
+  identificado: "bg-muted text-muted-foreground border-transparent",
+  por_investigar: "bg-sky-500/10 text-sky-800 border-transparent dark:text-sky-300",
+  por_contactar: "bg-indigo-500/10 text-indigo-800 border-transparent dark:text-indigo-300",
+  contactado: "bg-violet-500/10 text-violet-800 border-transparent dark:text-violet-300",
+  visita_programada: "bg-amber-500/15 text-amber-900 border-transparent dark:text-amber-300",
+  visitado: "bg-emerald-500/12 text-emerald-800 border-transparent dark:text-emerald-300",
+  seguimiento: "bg-primary/10 text-primary border-transparent",
+  descartado: "bg-muted text-muted-foreground line-through border-transparent",
+};
+export function statusTone(status: string) {
+  return targetTone[status] ?? "";
+}
+
 export function Pill({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span className={cn("inline-flex h-5 items-center rounded-full border px-2 text-xs whitespace-nowrap text-muted-foreground", className)}>
@@ -62,7 +77,7 @@ export function Pill({ children, className }: { children: ReactNode; className?:
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed p-6 text-center">
+    <div className="rounded-xl border border-dashed bg-card/60 p-6 text-center">
       <p className="text-sm font-medium">{title}</p>
       {children && <div className="mt-1 text-sm text-muted-foreground">{children}</div>}
     </div>
@@ -73,7 +88,10 @@ export function Section({ title, actions, children, className }: { title: string
   return (
     <section className={cn("space-y-3", className)}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{title}</h2>
+        <h2 className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+          <span className="h-3 w-1 rounded-full bg-primary" aria-hidden="true" />
+          {title}
+        </h2>
         {actions}
       </div>
       {children}

@@ -32,7 +32,7 @@ export default async function BriefingsPage({ params }: PageProps<"/w/[slug]/opo
         </ActionForm>
       )}
       {rows?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {rows.map((b) => (
             <li key={b.id}>
               <Link href={`/w/${slug}/oportunidades/briefings/${b.id}`} className="flex flex-wrap items-center justify-between gap-2 p-4 hover:bg-muted/50">

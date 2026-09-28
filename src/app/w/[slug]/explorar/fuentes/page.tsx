@@ -23,7 +23,7 @@ export default async function FuentesPage({ params }: PageProps<"/w/[slug]/explo
     <>
       <PageHeader title="Fuentes" subtitle="De dónde sale cada dato. Una URL se registra una sola vez por workspace." />
       {sources?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {sources.map((s) => (
             <li key={s.id} className="space-y-1 p-4">
               <div className="flex flex-wrap items-center gap-2">

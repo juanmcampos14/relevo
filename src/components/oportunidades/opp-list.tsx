@@ -18,7 +18,7 @@ export type OppRow = {
 export function OppList({ slug, rows, empty }: { slug: string; rows: OppRow[]; empty: string }) {
   if (!rows.length) return <EmptyState title={empty} />;
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {rows.map((o) => {
         const pendingApproval = o.decisions.some((d) => d.kind === "aprobar_oportunidad" && d.status === "requested");
         return (

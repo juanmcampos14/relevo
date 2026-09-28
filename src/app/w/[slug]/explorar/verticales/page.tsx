@@ -21,7 +21,7 @@ export default async function VerticalesPage({ params }: PageProps<"/w/[slug]/ex
     <>
       <PageHeader title="Verticales" subtitle="Categorías configurables. Un mismo objetivo puede estar en varias." />
       {verticals?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {verticals.map((v) => (
             <li key={v.id} className="p-4">
               <div className="flex justify-between gap-2">

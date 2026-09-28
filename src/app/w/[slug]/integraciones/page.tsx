@@ -70,7 +70,7 @@ export default async function IntegracionesPage({ params }: PageProps<"/w/[slug]
           </div>
           <TokenForm action={createIngestToken.bind(null, slug)} />
           {tokens?.length ? (
-            <ul className="divide-y rounded-lg border">
+            <ul className="divide-y rounded-xl border bg-card shadow-xs">
               {tokens.map((t) => (
                 <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
                   <div>

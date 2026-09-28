@@ -17,7 +17,7 @@ type PlanRow = { id: string; title: string; planned_on: string; campaigns: { nam
 
 function PlanList({ slug, items }: { slug: string; items: PlanRow[] }) {
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="divide-y rounded-xl border bg-card shadow-xs">
       {items.map((p) => {
         const done = p.visit_stops.filter((s) => s.status === "realizada").length;
         return (

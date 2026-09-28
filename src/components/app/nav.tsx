@@ -30,11 +30,12 @@ export function SideNav({ slug }: { slug: string }) {
           href={base + href}
           aria-current={isActive(href) ? "page" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
-            isActive(href) && "bg-muted font-medium text-foreground",
+            "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            isActive(href) &&
+              "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-sidebar-primary",
           )}
         >
-          <Icon className="size-4" />
+          <Icon className={cn("size-4", isActive(href) && "text-sidebar-primary")} aria-hidden="true" />
           {label}
         </Link>
       ))}
@@ -61,7 +62,7 @@ export function BottomNav({ slug }: { slug: string }) {
             isActive(href) && "font-medium text-primary",
           )}
         >
-          <Icon className="size-5" />
+          <Icon className="size-5" aria-hidden="true" />
           {short ?? label}
         </Link>
       ))}

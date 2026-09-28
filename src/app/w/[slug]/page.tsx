@@ -1,15 +1,19 @@
+import Image from "next/image";
 import Link from "next/link";
+import { workspaceCover } from "@/domain/photos";
+import { PhotoCredit } from "@/components/app/brand";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { dealflowStage, findingKind, taskStatus } from "@/domain/catalogs";
 import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/entities";
-import { EmptyState, PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
+import { EmptyState, Pill, Section, formatDate } from "@/components/app/bits";
 import { setHomeView } from "./home-actions";
 
 function todayAR() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
 }
 
+const viewLabel = { operativa: "operativo", ejecutiva: "ejecutivo" } as const;
 const linkCls = "text-sm text-primary hover:underline";
 
 // Dos inicios sobre los MISMOS datos. La vista es una preferencia personal:
@@ -25,6 +29,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("profiles").select("display_name").eq("user_id", ctx.user.id).maybeSingle(),
     supabase.from("user_preferences").select("home").eq("user_id", ctx.user.id).eq("workspace_id", ctx.workspace.id).maybeSingle(),
   ]);
+  const cover = workspaceCover(ctx.workspace.settings);
   const stored = (pref?.home as { view?: string } | null)?.view;
   const view: "operativa" | "ejecutiva" = stored === "ejecutiva" || stored === "operativa" ? stored : ctx.role === "admin" ? "ejecutiva" : "operativa";
   const other = view === "operativa" ? "ejecutiva" : "operativa";
@@ -53,7 +58,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Decisions = (
     <Section title={`Decisiones pendientes (${pendingDecisions.data?.length ?? 0})`} actions={<Link href={`${base}/oportunidades/decisiones`} className={linkCls}>Ver todas</Link>}>
       {pendingDecisions.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {pendingDecisions.data.map((d) => (
             <li key={d.id}>
               <Link href={d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`} className="block p-3 text-sm hover:bg-muted/50">
@@ -73,7 +78,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Review = (
     <Section title={`Hallazgos por revisar (${pendingFindings.count ?? 0})`} actions={<Link href={`${base}/oportunidades`} className={linkCls}>Revisar</Link>}>
       {pendingFindings.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {pendingFindings.data.map((f) => (
             <li key={f.id}>
               <Link href={`${base}/oportunidades?h=${f.id}#h-${f.id}`} className="block p-3 text-sm hover:bg-muted/50">
@@ -91,7 +96,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Tasks = (
     <Section title="Mis tareas">
       {myTasks.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {myTasks.data.map((t) => (
             <li key={t.id} className="p-3 text-sm">
               {t.opportunity_id ? <Link href={`${base}/oportunidades/o/${t.opportunity_id}`} className="hover:underline">{t.title}</Link> : t.title}
@@ -111,7 +116,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Plans = (
     <Section title="Próximas jornadas" actions={<Link href={`${base}/agenda`} className={linkCls}>Agenda</Link>}>
       {plans.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {plans.data.map((p) => (
             <li key={p.id}>
               <Link href={`${base}/agenda/${p.id}`} className="flex justify-between gap-2 p-3 text-sm hover:bg-muted/50">
@@ -130,7 +135,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Actions = (
     <Section title="Próximas acciones">
       {actions.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {actions.data.map((a) => {
             const e = resolveTargetEntity(a);
             const overdue = a.next_action_due && a.next_action_due < today;
@@ -159,7 +164,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
         {stageCounts.size === 0 && <Pill>Sin oportunidades aprobadas</Pill>}
       </div>
       {candidates.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {candidates.data.map((o) => (
             <li key={o.id}><Link href={`${base}/oportunidades/o/${o.id}`} className="block p-3 text-sm hover:bg-muted/50">{o.title} <span className="text-muted-foreground">· candidata</span></Link></li>
           ))}
@@ -183,7 +188,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
   const Approved = (
     <Section title="Hallazgos aprobados recientes">
       {recentApproved.data?.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {recentApproved.data.map((f) => (
             <li key={f.id}><Link href={`${base}/oportunidades?h=${f.id}#h-${f.id}`} className="block p-3 text-sm hover:bg-muted/50"><span className="text-muted-foreground">{findingKind.label(f.kind)}:</span> {f.statement}</Link></li>
           ))}
@@ -196,15 +201,34 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
 
   return (
     <>
-      <PageHeader
-        title={`Hola, ${profile?.display_name || ctx.user.email}`}
-        subtitle={`${ctx.workspace.name} · ${formatDate(today)} · inicio ${view}`}
-        actions={
-          <form action={setHomeView.bind(null, slug, other)}>
-            <button className="inline-flex h-8 items-center rounded-md border px-3 text-sm hover:bg-muted">Ver inicio {other}</button>
-          </form>
-        }
-      />
+      <section className="relative -mx-4 -mt-5 mb-8 overflow-hidden md:mx-0 md:mt-0 md:rounded-2xl">
+        <Image
+          src={`${cover.src}?w=1800&q=80&auto=format&fit=crop`}
+          alt={cover.alt}
+          fill
+          priority
+          sizes="(min-width: 1024px) 64rem, 100vw"
+          className="object-cover object-[center_28%]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[oklch(0.18_0.03_248/0.85)] via-[oklch(0.18_0.03_248/0.4)] to-transparent" />
+        <div className="relative flex min-h-48 flex-col justify-end gap-4 p-6 text-white sm:min-h-56 sm:flex-row sm:items-end sm:justify-between sm:p-8">
+          <div className="space-y-1">
+            <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">
+              {ctx.workspace.name} · {formatDate(today)}
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Hola, {profile?.display_name || ctx.user.email}</h1>
+            <p className="text-sm text-white/85">Inicio {viewLabel[view]}: {view === "operativa" ? "lo que hay que hacer hoy en campo" : "lo que hay que decidir"}.</p>
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <form action={setHomeView.bind(null, slug, other)}>
+              <button className="inline-flex h-9 items-center rounded-lg bg-white/15 px-3 text-sm font-medium text-white backdrop-blur hover:bg-white/25">
+                Ver inicio {viewLabel[other]}
+              </button>
+            </form>
+            <PhotoCredit photo={cover} className="text-white/60" />
+          </div>
+        </div>
+      </section>
       {view === "operativa" ? (
         <div className="grid gap-8 lg:grid-cols-2">
           {Review}

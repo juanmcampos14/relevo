@@ -258,7 +258,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
           {/* Afirmaciones */}
           <Section title="Afirmaciones y verificación">
             {claims?.length ? (
-              <ul className="divide-y rounded-lg border">
+              <ul className="divide-y rounded-xl border bg-card shadow-xs">
                 {claims.map((c) => (
                   <li key={c.id} className="space-y-1.5 p-4">
                     <p className="text-sm">{c.statement}</p>
@@ -329,7 +329,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
           {/* Visitas */}
           <Section title="Visitas">
             {visits.length ? (
-              <ul className="divide-y rounded-lg border">
+              <ul className="divide-y rounded-xl border bg-card shadow-xs">
                 {visits.map((v) => (
                   <li key={v.id} className="space-y-1 p-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm">

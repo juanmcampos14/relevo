@@ -26,7 +26,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/miemb
     <>
       <PageHeader title="Miembros" subtitle="Todos los miembros ven todo el workspace. El rol define quién edita; aprobar decisiones es una capacidad aparte." />
       <Section title="Con acceso">
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {(members ?? []).map((m) => {
             const p = profile.get(m.user_id);
             return (
@@ -54,7 +54,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/miemb
       {canInvite && (
         <Section title="Invitaciones pendientes" className="mt-8">
           {invitations?.length ? (
-            <ul className="divide-y rounded-lg border">
+            <ul className="divide-y rounded-xl border bg-card shadow-xs">
               {invitations.map((i) => (
                 <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
                   <span>{i.email} · {roleCatalog.label(i.role)}{i.can_approve_decisions ? " · aprueba" : ""} · vence {formatDate(i.expires_at)}</span>

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { campaignStatus, entityKind, assetKind, targetStatus } from "@/domain/catalogs";
 import { companyName, entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/entities";
-import { EmptyState, PageHeader, Pill, StatusBadges, formatDate } from "@/components/app/bits";
+import { EmptyState, PageHeader, Pill, StatusBadges, formatDate, statusTone } from "@/components/app/bits";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { CheckboxGroup } from "@/components/app/fields";
 import { MapsButton } from "@/components/app/maps-button";
@@ -98,7 +98,7 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
       </div>
 
       {visible.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {visible.map((t) => (
             <li key={t.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
@@ -111,8 +111,9 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
                   {t.entity && <Pill>{t.entity.subtype ? assetKind.label(t.entity.subtype) : entityKind.label(t.entity.kind)}</Pill>}
                   {t.entity && <StatusBadges verification={t.entity.verification} isDemo={t.entity.isDemo} />}
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  {targetStatus.label(t.status)} · prioridad {priorityLabel[t.priority]}
+                <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                  <Pill className={statusTone(t.status)}>{targetStatus.label(t.status)}</Pill>
+                  prioridad {priorityLabel[t.priority]}
                   {t.next_action && ` · ${t.next_action}`}
                   {t.next_action_due && ` (${formatDate(t.next_action_due)})`}
                 </div>

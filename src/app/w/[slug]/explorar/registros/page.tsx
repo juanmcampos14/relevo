@@ -44,7 +44,7 @@ export default async function RegistrosPage({ params, searchParams }: PageProps<
         ))}
       </div>
       {rows.length ? (
-        <ul className="divide-y rounded-lg border">
+        <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
               <div className="min-w-0">

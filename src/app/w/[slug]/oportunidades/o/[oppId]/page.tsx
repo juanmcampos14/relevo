@@ -146,7 +146,7 @@ export default async function OpportunityPage({ params }: PageProps<"/w/[slug]/o
 
           <Section title="Tareas">
             {tasks?.length ? (
-              <ul className="divide-y rounded-lg border">
+              <ul className="divide-y rounded-xl border bg-card shadow-xs">
                 {tasks.map((t) => (
                   <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
                     <div>

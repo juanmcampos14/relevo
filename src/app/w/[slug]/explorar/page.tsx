@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { PHOTOS } from "@/domain/photos";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
@@ -28,7 +30,12 @@ export default async function ExplorarPage({ params }: PageProps<"/w/[slug]/expl
       <div className="grid gap-3 sm:grid-cols-2">
         {campaigns?.length ? (
           campaigns.map((c) => (
-            <Link key={c.id} href={`/w/${slug}/explorar/c/${c.id}`} className="rounded-lg border p-4 hover:bg-muted/50">
+            <Link key={c.id} href={`/w/${slug}/explorar/c/${c.id}`} className="group overflow-hidden rounded-xl border bg-card shadow-xs transition-shadow hover:shadow-md">
+              <div className="relative h-28">
+                <Image src={`${PHOTOS.oilfieldDusk.src}?w=800&q=70&auto=format&fit=crop`} alt="" fill sizes="(min-width: 640px) 50vw, 100vw" className="object-cover object-[center_62%]" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[oklch(0.18_0.03_248/0.7)] to-transparent" />
+              </div>
+              <div className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="font-medium">{c.name}</div>
                 <Pill>{campaignStatus.label(c.status)}</Pill>
@@ -41,7 +48,8 @@ export default async function ExplorarPage({ params }: PageProps<"/w/[slug]/expl
                   <Pill key={i}>{cv.verticals?.name}</Pill>
                 ))}
               </div>
-              <div className="mt-3 text-sm">{c.campaign_targets[0]?.count ?? 0} objetivos</div>
+              <div className="mt-3 text-sm font-medium text-primary">{c.campaign_targets[0]?.count ?? 0} objetivos →</div>
+              </div>
             </Link>
           ))
         ) : (

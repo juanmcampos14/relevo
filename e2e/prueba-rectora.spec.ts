@@ -18,7 +18,7 @@ test.describe.configure({ mode: "serial" });
 test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   // --- Tano: objetivos ---------------------------------------------------------------
   await login(page, USERS.tano);
-  await expect(page.getByText("inicio operativa")).toBeVisible();
+  await expect(page.getByText(/^Inicio operativo:/)).toBeVisible();
   await page.getByRole("link", { name: "Explorar" }).first().click();
   await page.getByRole("link", { name: /Añelo — Discovery 2026/ }).click();
 
@@ -50,9 +50,12 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   await page.waitForURL(/\/agenda\/[0-9a-f-]{36}$/);
   for (const name of [LOCAL, LOTE]) {
     form = await openDetails(page, "+ Agregar parada");
+    // Esperar a que el formulario esté limpio (el alta anterior lo resetea al terminar).
+    await expect(form.getByLabel("Objetivo")).toHaveValue("");
     await form.getByLabel("Objetivo").selectOption({ label: name });
     await form.getByRole("button", { name: "Agregar", exact: true }).click();
-    await toast(page, "Parada agregada.");
+    // Confirmación por el resultado, no por un aviso que puede ser del alta anterior.
+    await expect(page.locator("ol").getByRole("link", { name, exact: true })).toBeVisible();
   }
   const route = page.getByRole("link", { name: "Abrir recorrido en Maps" });
   await expect(route).toHaveAttribute("href", /google\.com\/maps\/dir\/\?api=1&destination=.+&waypoints=/);
@@ -102,7 +105,7 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
 
   // --- Fran: ve la decisión en su inicio, aprueba y comenta -------------------------
   await login(page, USERS.fran);
-  await expect(page.getByText("inicio ejecutiva")).toBeVisible();
+  await expect(page.getByText(/^Inicio ejecutivo:/)).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(`Pasamos .${OPP}. al dealflow`) })).toBeVisible();
   await page.goto(oppUrl);
   await page.getByLabel("Fundamento (queda registrado)").fill("Vale la pena validar demanda con 3 campamentos.");

@@ -240,6 +240,6 @@ No se escribe código hasta la aprobación de este delta.
 | Citas `[[tipo:uuid]]` validadas contra lo consultado; inventadas → "referencia no verificada" | **probado** | idem |
 | Borradores de acción (tarea, hallazgo pendiente, decisión) aprobados por humano y ejecutados con sus permisos; idempotentes | **implementado; reglas de DB probadas** | `tests/db/ai-ingest.test.ts` |
 | Registro de ejecuciones (modelo, prompt, tokens, costo, error), límite 60/día/usuario, fallbacks por rechazo, caché de prompt | **implementado** | |
-| Llamada real al modelo | **pendiente de probar**: la clave está solo en Vercel Production | |
+| Llamada real al modelo | **probado en local** (2 turnos, 7 consultas, ~USD 0,09 c/u, 16–33 s; borrador aprobado → 1 tarea) | ai_runs |
 | Ingesta Morning Brief: API con token por workspace + importación manual JSON, dedup, rechazos por ítem | **probado** (servicio + endpoint) y **desplegado** | `tests/db/ai-ingest.test.ts`, smoke test en producción (401) |
 | Streaming de respuestas, vínculo automático de `entity_hint`, lectura de Drive/Sheets | **posterior** | |

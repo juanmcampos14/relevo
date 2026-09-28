@@ -231,3 +231,15 @@ No se escribe código hasta la aprobación de este delta.
 | Prueba rectora E2E (Playwright), escritorio + móvil | **pasa** | `npm run e2e` |
 | Recortado (ya autorizado): kanban, timeline UI unificada, export CSV | **posterior** | |
 | RELEVO AI, importador CSV, ingesta Morning Brief, audio | **P1** | la UI los marca "no disponible" |
+
+## 10. Estado P1 (28/09)
+
+| Pieza | Estado | Evidencia |
+|---|---|---|
+| RELEVO AI: chat por workspace con alcance (workspace / campaña / registro), herramientas de solo lectura con RLS del usuario | **implementado; ciclo probado con cliente simulado** | `src/server/ai/agent.test.ts` |
+| Citas `[[tipo:uuid]]` validadas contra lo consultado; inventadas → "referencia no verificada" | **probado** | idem |
+| Borradores de acción (tarea, hallazgo pendiente, decisión) aprobados por humano y ejecutados con sus permisos; idempotentes | **implementado; reglas de DB probadas** | `tests/db/ai-ingest.test.ts` |
+| Registro de ejecuciones (modelo, prompt, tokens, costo, error), límite 60/día/usuario, fallbacks por rechazo, caché de prompt | **implementado** | |
+| Llamada real al modelo | **pendiente de probar**: la clave está solo en Vercel Production | |
+| Ingesta Morning Brief: API con token por workspace + importación manual JSON, dedup, rechazos por ítem | **probado** (servicio + endpoint) y **desplegado** | `tests/db/ai-ingest.test.ts`, smoke test en producción (401) |
+| Streaming de respuestas, vínculo automático de `entity_hint`, lectura de Drive/Sheets | **posterior** | |

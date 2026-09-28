@@ -19,13 +19,17 @@ jobs:
         with:
           version: latest
       - run: supabase start -x studio,imgproxy,vector,logflare,edge-runtime,realtime
+      # Claves de la instancia EFÍMERA de CI (no son secretos de producción).
+      - name: Exportar variables de Supabase local
+        run: |
+          supabase status -o env | tr -d '"' | sed -n \
+            -e 's/^API_URL=/NEXT_PUBLIC_SUPABASE_URL=/p' \
+            -e 's/^PUBLISHABLE_KEY=/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=/p' \
+            -e 's/^SECRET_KEY=/SUPABASE_SECRET_KEY=/p' >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SITE_URL=http://localhost:3000" >> "$GITHUB_ENV"
       - run: npm run lint
       - run: npm run typecheck
       - name: Tests (incluye aislamiento de workspaces / RLS)
         run: npm test
       - name: Build
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
-          NEXT_PUBLIC_SITE_URL: http://localhost:3000

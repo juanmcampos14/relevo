@@ -32,7 +32,7 @@ export async function inviteMember(slug: string, _: ActionState, fd: FormData): 
   // 2) Recién después, el servidor pide a Auth que envíe el email de invitación.
   const admin = createAdminClient();
   const { error: mailError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email, {
-    redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/cuenta`,
+    redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/cuenta`,
   });
   revalidatePath(`/w/${slug}/miembros`);
   if (mailError) {

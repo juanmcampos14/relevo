@@ -15,15 +15,29 @@ export type NewsTopic = { key: string; label: string; query: string; mustMention
 
 export const TOPICS: Record<string, NewsTopic> = {
   vaca_muerta: { key: "vaca_muerta", label: "Vaca Muerta", query: '"Vaca Muerta"', mustMention: ["vaca muerta"] },
+  anelo: { key: "anelo", label: "Añelo", query: "Añelo", mustMention: ["añelo"] },
 };
+
+/** Temas del radar del workspace (orden = prioridad de actualización). */
+export const RADAR_TOPICS = ["vaca_muerta", "anelo"] as const;
+
+/** Temas que nombra la nota (una nota puede ser de Vaca Muerta y de Añelo a la vez). */
+export function topicsOf(item: Pick<NewsItem, "title" | "snippet">) {
+  return RADAR_TOPICS.filter((k) => mentions(item, TOPICS[k].mustMention));
+}
 
 export const normalize = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim();
 
-/** true si el título o el resumen nombran alguno de los términos exigidos. */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * true si el título o el resumen nombran alguno de los términos como PALABRA completa
+ * (sin tildes, "añelo" es "anelo" y no debe coincidir dentro de "canelones").
+ */
 export function mentions(item: Pick<NewsItem, "title" | "snippet">, terms: string[]) {
   const text = normalize(`${item.title} ${item.snippet ?? ""}`);
-  return terms.some((t) => text.includes(normalize(t)));
+  return terms.some((t) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(normalize(t))}($|[^\\p{L}\\p{N}])`, "u").test(text));
 }
 
 export function stripHtml(html: string) {

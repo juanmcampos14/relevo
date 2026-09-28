@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mentions, cleanTitle } from "@/domain/news";
+import { mentions, cleanTitle, topicsOf } from "@/domain/news";
 import { feedUrl, parseFeed } from "./google-news";
 
 const XML = `<?xml version="1.0"?><rss version="2.0"><channel>
@@ -31,6 +31,20 @@ describe("radar de noticias", () => {
   it("el filtro exige que la nota nombre el término (sin importar mayúsculas ni acentos)", () => {
     expect(mentions({ title: "Récord en VACA MUERTA", snippet: null }, ["vaca muerta"])).toBe(true);
     expect(mentions({ title: "El dólar hoy", snippet: "mercados" }, ["vaca muerta"])).toBe(false);
+  });
+
+  it("Añelo: palabra completa, con o sin tilde, sin falsos positivos", () => {
+    expect(mentions({ title: "Nuevo puente entre Añelo y Rincón", snippet: null }, ["añelo"])).toBe(true);
+    expect(mentions({ title: "AÑELO: obras en el canal", snippet: null }, ["añelo"])).toBe(true);
+    expect(mentions({ title: "Anelo crece", snippet: null }, ["añelo"])).toBe(true);
+    expect(mentions({ title: "Receta de canelones", snippet: null }, ["añelo"])).toBe(false);
+    expect(mentions({ title: "Un anhelo cumplido", snippet: null }, ["añelo"])).toBe(false);
+  });
+
+  it("una nota puede ser de los dos temas", () => {
+    expect(topicsOf({ title: "Vaca Muerta: puente clave entre Añelo y Rincón", snippet: null })).toEqual(["vaca_muerta", "anelo"]);
+    expect(topicsOf({ title: "Añelo proyecta un paseo costero", snippet: null })).toEqual(["anelo"]);
+    expect(topicsOf({ title: "El dólar hoy", snippet: null })).toEqual([]);
   });
 
   it("arma la búsqueda en español de Argentina con ventana de días", () => {

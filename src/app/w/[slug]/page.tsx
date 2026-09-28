@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { workspaceCover } from "@/domain/photos";
-import { PhotoCredit } from "@/components/app/brand";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { dealflowStage, findingKind, taskStatus } from "@/domain/catalogs";
@@ -193,7 +192,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
 
   const News = (
     <Section
-      title="Noticias · Vaca Muerta"
+      title="Noticias · Vaca Muerta y Añelo"
       className="lg:col-span-2"
       actions={
         <div className="flex items-center gap-3">
@@ -210,7 +209,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
         </EmptyState>
       )}
       <p className="text-xs text-muted-foreground">
-        Notas que nombran “Vaca Muerta”, vía Google Noticias.{" "}
+        Notas que nombran “Vaca Muerta” o “Añelo”, vía Google Noticias.{" "}
         {news.lastOkAt ? `Actualizado ${ago(news.lastOkAt)}.` : "Todavía no se actualizó."}{" "}
         {news.lastError && <span className="text-destructive">Último intento falló: {news.lastError}.</span>} Una noticia no es evidencia de demanda:
         pasala a hallazgo para revisarla.
@@ -258,7 +257,6 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
                 Ver inicio {viewLabel[other]}
               </button>
             </form>
-            <PhotoCredit photo={cover} className="text-white/60" />
           </div>
         </div>
       </section>

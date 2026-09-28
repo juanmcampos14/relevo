@@ -1,5 +1,6 @@
-// Fotografías libres (Unsplash License: uso comercial gratuito, sin atribución obligatoria;
-// igual se acredita al autor). Verificadas como NO premium el 28/09/2026.
+// Fotografías libres (Unsplash License: uso comercial gratuito, sin atribución obligatoria).
+// Por decisión de producto no se muestra el crédito en pantalla; queda registrado acá.
+// Verificadas como NO premium el 28/09/2026.
 export type Photo = { src: string; alt: string; author: string; authorUrl: string; pageUrl: string };
 
 const utm = "utm_source=relevo_os&utm_medium=referral";

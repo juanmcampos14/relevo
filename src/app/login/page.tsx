@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { Metadata } from "next";
 import { PHOTOS } from "@/domain/photos";
-import { LogoMark, PhotoCredit } from "@/components/app/brand";
+import { LogoMark } from "@/components/app/brand";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Entrar" };
@@ -28,7 +28,6 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <h2 className="max-w-md text-2xl font-semibold tracking-tight lg:text-4xl">
             De la primera visita a la decisión, con cada dato respaldado.
           </h2>
-          <PhotoCredit photo={photo} className="text-white/70" />
         </div>
       </section>
 

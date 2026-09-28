@@ -4,30 +4,44 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { RADAR_TOPICS } from "@/domain/news";
 import { STALE_AFTER_MS, refreshNews } from "./refresh";
 
 /**
- * Noticias del tema + estado de la última actualización. Si están viejas, programa una
- * actualización DESPUÉS de responder (no demora la página). En after() no hay cookies:
- * se usa el cliente de servidor acotado a este workspace, solo para notas públicas.
+ * Noticias del radar (Vaca Muerta + Añelo) y estado de la última actualización. Si algún tema
+ * está vencido, programa su actualización DESPUÉS de responder (no demora la página). En after()
+ * no hay cookies: se usa el cliente de servidor acotado a este workspace, solo para notas públicas;
+ * la reserva atómica de refreshNews evita consultas duplicadas.
  */
-export async function loadNews(db: SupabaseClient<Database>, workspaceId: string, limit: number, topic = "vaca_muerta") {
-  const [{ data: rows }, { data: lastOk }, { data: last }] = await Promise.all([
+export async function loadNews(db: SupabaseClient<Database>, workspaceId: string, limit: number, topics: readonly string[] = RADAR_TOPICS) {
+  const [{ data: rows }, { data: runs }] = await Promise.all([
     db
       .from("news_articles")
-      .select("id, title, url, source_name, published_at, snippet, finding_id")
-      .eq("topic", topic)
+      .select("id, title, url, source_name, published_at, snippet, finding_id, topic")
+      .in("topic", [...topics])
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(limit),
-    db.from("news_fetch_runs").select("created_at").eq("topic", topic).eq("status", "ok").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    db.from("news_fetch_runs").select("status, error, created_at").eq("topic", topic).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("news_fetch_runs").select("topic, status, error, created_at").in("topic", [...topics]).order("created_at", { ascending: false }).limit(20),
   ]);
-  const stale = !lastOk || Date.now() - new Date(lastOk.created_at).getTime() > STALE_AFTER_MS;
-  // La reserva atómica en refreshNews garantiza una sola consulta aunque se programe varias veces.
-  if (stale && process.env.SUPABASE_SECRET_KEY) {
+  const lastOkByTopic = new Map<string, string>();
+  for (const r of runs ?? []) if (r.status === "ok" && !lastOkByTopic.has(r.topic)) lastOkByTopic.set(r.topic, r.created_at);
+  const stale = topics.filter((t) => {
+    const at = lastOkByTopic.get(t);
+    return !at || Date.now() - new Date(at).getTime() > STALE_AFTER_MS;
+  });
+  if (stale.length && process.env.SUPABASE_SECRET_KEY) {
     after(async () => {
-      await refreshNews(createAdminClient(), workspaceId, topic);
+      const admin = createAdminClient();
+      for (const t of stale) await refreshNews(admin, workspaceId, t);
     });
   }
-  return { rows: rows ?? [], lastOkAt: lastOk?.created_at ?? null, lastError: last?.status === "error" ? last.error : null, refreshing: stale };
+  const oks = [...lastOkByTopic.values()].sort();
+  const last = runs?.[0];
+  return {
+    rows: rows ?? [],
+    // La más vieja de las últimas actualizaciones: honesto sobre qué tan fresco está todo.
+    lastOkAt: oks.length === topics.length ? oks[0] : null,
+    lastError: last?.status === "error" ? last.error : null,
+    refreshing: stale.length > 0,
+  };
 }

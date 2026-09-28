@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { newsToFinding } from "@/app/w/[slug]/noticias/actions";
+import { TOPICS, topicsOf } from "@/domain/news";
 
 export type NewsRow = {
   id: string;
@@ -32,6 +33,11 @@ export function NewsList({ slug, rows, canEdit, showSnippet = false }: { slug: s
           </a>
           {showSnippet && n.snippet && <p className="text-sm text-muted-foreground">{n.snippet}</p>}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {topicsOf(n).map((t) => (
+              <span key={t} className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${t === "anelo" ? "bg-accent text-accent-foreground" : "bg-primary/10 text-primary"}`}>
+                {TOPICS[t].label}
+              </span>
+            ))}
             <span>{n.source_name ?? "Medio sin identificar"}</span>
             <span aria-hidden="true">·</span>
             <time dateTime={n.published_at ?? undefined}>{ago(n.published_at)}</time>

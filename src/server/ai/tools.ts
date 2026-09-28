@@ -77,7 +77,7 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
   {
     name: "list_news",
     description:
-      "Noticias recientes que nombran 'Vaca Muerta' (radar del workspace), con medio, fecha y enlace. Son fuentes públicas sin verificar: una noticia no prueba demanda ni un acuerdo.",
+      "Noticias recientes que nombran 'Vaca Muerta' o 'Añelo' (radar del workspace), con medio, fecha y enlace. Son fuentes públicas sin verificar: una noticia no prueba demanda ni un acuerdo.",
     input_schema: strict({
       contains: { type: "string", description: "Filtrar por texto en el título (opcional)" },
       limit: { type: "integer", minimum: 1, maximum: 40 },

@@ -21,8 +21,8 @@ export default async function NoticiasPage({ params, searchParams }: PageProps<"
   return (
     <>
       <PageHeader
-        title="Noticias · Vaca Muerta"
-        subtitle={`Notas de los últimos días que nombran “Vaca Muerta”. ${news.lastOkAt ? `Actualizado ${ago(news.lastOkAt)}.` : ""}`}
+        title="Noticias · Vaca Muerta y Añelo"
+        subtitle={`Notas de los últimos días que nombran “Vaca Muerta” o “Añelo”. ${news.lastOkAt ? `Actualizado ${ago(news.lastOkAt)}.` : ""}`}
         actions={ctx.canEdit ? <RefreshNewsButton action={refreshNewsNow.bind(null, slug)} /> : null}
       />
       <form className="mb-4 max-w-sm">

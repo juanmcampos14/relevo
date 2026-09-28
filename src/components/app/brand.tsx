@@ -1,5 +1,3 @@
-import type { Photo } from "@/domain/photos";
-
 /** Marca: perfil de bardas sobre un horizonte, en terracota. Decorativa junto al nombre. */
 export function LogoMark({ className = "size-7" }: { className?: string }) {
   return (
@@ -8,20 +6,5 @@ export function LogoMark({ className = "size-7" }: { className?: string }) {
       <path d="M4 22 L10 14 L14 18 L19 10 L28 22 Z" fill="oklch(0.98 0.01 80)" opacity="0.95" />
       <rect x="4" y="23.5" width="24" height="2" rx="1" fill="oklch(0.98 0.01 80)" opacity="0.6" />
     </svg>
-  );
-}
-
-export function PhotoCredit({ photo, className = "" }: { photo: Photo; className?: string }) {
-  return (
-    <p className={`text-[11px] ${className}`}>
-      Foto:{" "}
-      <a href={photo.authorUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
-        {photo.author}
-      </a>{" "}
-      en{" "}
-      <a href={photo.pageUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
-        Unsplash
-      </a>
-    </p>
   );
 }

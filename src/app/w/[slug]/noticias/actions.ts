@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { refreshNews } from "@/server/news/refresh";
+import { RADAR_TOPICS } from "@/domain/news";
 import { ingestFindings } from "@/server/ingest";
 import type { ActionState } from "@/server/action-result";
 
@@ -11,11 +12,20 @@ export async function refreshNewsNow(slug: string, _: ActionState): Promise<Acti
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   // Manual: sin exigir antigüedad, pero igual respetando la reserva (no dos a la vez).
-  const r = await refreshNews(await createClient(), ctx.workspace.id, "vaca_muerta", { staleMs: 0 });
+  const db = await createClient();
+  let created = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  for (const topic of RADAR_TOPICS) {
+    const r = await refreshNews(db, ctx.workspace.id, topic, { staleMs: 0 });
+    if (!r.ok) errors.push(r.error);
+    else if (r.skipped) skipped++;
+    else created += r.created;
+  }
   revalidatePath(`/w/${slug}`, "layout");
-  return r.ok
-    ? { ok: true, message: r.skipped ? "Ya se está actualizando (o falló hace poco); probá en unos minutos." : r.created ? `${r.created} noticias nuevas.` : "No hay noticias nuevas." }
-    : { message: `No se pudo actualizar: ${r.error}` };
+  if (errors.length) return { message: `No se pudo actualizar: ${errors[0]}` };
+  if (skipped === RADAR_TOPICS.length) return { ok: true, message: "Ya se está actualizando (o falló hace poco); probá en unos minutos." };
+  return { ok: true, message: created ? `${created} noticias nuevas.` : "No hay noticias nuevas." };
 }
 
 /** La nota entra como hallazgo PENDIENTE de revisión (research externo). Nunca como oportunidad. */

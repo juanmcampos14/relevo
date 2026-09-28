@@ -6,6 +6,7 @@ import { EmptyState, PageHeader } from "@/components/app/bits";
 import { NewsList, ago } from "@/components/app/news-list";
 import { RefreshNewsButton } from "@/components/app/refresh-news-button";
 import { refreshNewsNow } from "./actions";
+import { NewsAutoRefresh } from "@/components/app/news-auto-refresh";
 
 export const metadata: Metadata = { title: "Noticias" };
 
@@ -35,6 +36,7 @@ export default async function NoticiasPage({ params, searchParams }: PageProps<"
           className="h-10 w-full rounded-lg border bg-card px-3 text-sm"
         />
       </form>
+      <NewsAutoRefresh active={news.refreshing} />
       {news.lastError && <p className="mb-4 text-sm text-destructive">Último intento de actualización falló: {news.lastError}</p>}
       {rows.length ? (
         <NewsList slug={slug} rows={rows} canEdit={ctx.canEdit} showSnippet />

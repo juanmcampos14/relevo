@@ -10,6 +10,7 @@ import { setHomeView } from "./home-actions";
 import { loadNews } from "@/server/news/queries";
 import { NewsCards, ago } from "@/components/app/news-list";
 import { RefreshNewsButton } from "@/components/app/refresh-news-button";
+import { NewsAutoRefresh } from "@/components/app/news-auto-refresh";
 import { refreshNewsNow } from "./noticias/actions";
 
 function todayAR() {
@@ -201,11 +202,12 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
         </div>
       }
     >
+      <NewsAutoRefresh active={news.refreshing} />
       {news.rows.length ? (
         <NewsCards slug={slug} rows={news.rows} canEdit={ctx.canEdit} />
       ) : (
         <EmptyState title={news.refreshing ? "Buscando noticias…" : "Sin noticias de los últimos 7 días"}>
-          {news.refreshing ? "La primera carga tarda unos segundos. Recargá la página en un momento." : null}
+          {news.refreshing ? "La primera carga tarda unos segundos; se muestran solas cuando llegan." : null}
         </EmptyState>
       )}
       <p className="text-xs text-muted-foreground">

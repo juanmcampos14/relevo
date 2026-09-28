@@ -11,10 +11,10 @@ type Db = SupabaseClient<Database>;
 
 /** Tipos de referencia citables: [[tipo:uuid]]. */
 export const REF_TYPES = [
-  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task",
+  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task", "news",
 ] as const;
 export type RefType = (typeof REF_TYPES)[number];
-export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task):([0-9a-f-]{36})\]\]/g;
+export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task|news):([0-9a-f-]{36})\]\]/g;
 
 const ref = (type: RefType, id: string) => `${type}:${id}`;
 const clip = (s: string | null | undefined, n = 1500) => (s && s.length > n ? `${s.slice(0, n)}… [recortado]` : s ?? null);
@@ -73,6 +73,15 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
     name: "list_decisions",
     description: "Lista decisiones (pendientes o tomadas) con su pregunta, estado y oportunidad asociada.",
     input_schema: strict({ status: { type: "string", enum: ["requested", "approved", "rejected", "deferred", "todas"] } }),
+  },
+  {
+    name: "list_news",
+    description:
+      "Noticias recientes que nombran 'Vaca Muerta' (radar del workspace), con medio, fecha y enlace. Son fuentes públicas sin verificar: una noticia no prueba demanda ni un acuerdo.",
+    input_schema: strict({
+      contains: { type: "string", description: "Filtrar por texto en el título (opcional)" },
+      limit: { type: "integer", minimum: 1, maximum: 40 },
+    }),
   },
   {
     name: "propose_action",
@@ -273,6 +282,21 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
           note: d.decision_note,
           due_on: d.due_on,
           opportunity: d.opportunity_id ? { ref: ref("opportunity", d.opportunity_id) } : null,
+        }))),
+      };
+    }
+    case "list_news": {
+      let q = db.from("news_articles").select("id, title, source_name, published_at, url, finding_id").order("published_at", { ascending: false, nullsFirst: false }).limit(typeof a.limit === "number" ? Math.min(a.limit, 40) : 15);
+      if (typeof a.contains === "string" && a.contains.trim()) q = q.ilike("title", `%${a.contains.trim().replace(/[%_\\]/g, "\\$&")}%`);
+      const { data } = await q;
+      return {
+        content: track(ctx, (data ?? []).map((n) => ({
+          ref: ref("news", n.id),
+          title: n.title,
+          source: n.source_name,
+          published_at: n.published_at,
+          url: n.url,
+          already_finding: n.finding_id ? { ref: ref("finding", n.finding_id) } : null,
         }))),
       };
     }

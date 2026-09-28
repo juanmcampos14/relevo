@@ -8,6 +8,10 @@ import { dealflowStage, findingKind, taskStatus } from "@/domain/catalogs";
 import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/entities";
 import { EmptyState, Pill, Section, formatDate } from "@/components/app/bits";
 import { setHomeView } from "./home-actions";
+import { loadNews } from "@/server/news/queries";
+import { NewsList, ago } from "@/components/app/news-list";
+import { RefreshNewsButton } from "@/components/app/refresh-news-button";
+import { refreshNewsNow } from "./noticias/actions";
 
 function todayAR() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
@@ -51,6 +55,8 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("briefings").select("id, title, published_at").eq("status", "publicado_en_app").order("published_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("findings").select("id, kind, statement, reviewed_at").eq("review_status", "aprobado").order("reviewed_at", { ascending: false }).limit(5),
   ]);
+
+  const news = await loadNews(supabase, ctx.workspace.id, 6);
 
   const stageCounts = new Map<string, number>();
   (dealflow.data ?? []).forEach((o) => o.stage && stageCounts.set(o.stage, (stageCounts.get(o.stage) ?? 0) + 1));
@@ -185,6 +191,33 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
     </Section>
   );
 
+  const News = (
+    <Section
+      title="Noticias · Vaca Muerta"
+      className="lg:col-span-2"
+      actions={
+        <div className="flex items-center gap-3">
+          {ctx.canEdit && <RefreshNewsButton action={refreshNewsNow.bind(null, slug)} />}
+          <Link href={`${base}/noticias`} className={linkCls}>Ver todas</Link>
+        </div>
+      }
+    >
+      {news.rows.length ? (
+        <NewsList slug={slug} rows={news.rows} canEdit={ctx.canEdit} />
+      ) : (
+        <EmptyState title={news.refreshing ? "Buscando noticias…" : "Sin noticias de los últimos 7 días"}>
+          {news.refreshing ? "La primera carga tarda unos segundos. Recargá la página en un momento." : null}
+        </EmptyState>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Notas que nombran “Vaca Muerta”, vía Google Noticias.{" "}
+        {news.lastOkAt ? `Actualizado ${ago(news.lastOkAt)}.` : "Todavía no se actualizó."}{" "}
+        {news.lastError && <span className="text-destructive">Último intento falló: {news.lastError}.</span>} Una noticia no es evidencia de demanda:
+        pasala a hallazgo para revisarla.
+      </p>
+    </Section>
+  );
+
   const Approved = (
     <Section title="Hallazgos aprobados recientes">
       {recentApproved.data?.length ? (
@@ -233,6 +266,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
         <div className="grid gap-8 lg:grid-cols-2">
           {Review}
           {Tasks}
+          {News}
           {Plans}
           {Actions}
           {Decisions}
@@ -242,6 +276,7 @@ export default async function HomePage({ params }: PageProps<"/w/[slug]">) {
         <div className="grid gap-8 lg:grid-cols-2">
           {Decisions}
           {Pipeline}
+          {News}
           {Briefing}
           {Approved}
           {Review}

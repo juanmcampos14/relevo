@@ -619,6 +619,69 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"news_articles": {
+                  Row: {
+                    "external_id": string,"fetched_at": string,"finding_id": string | null,"id": string,"provider": string,"published_at": string | null,"snippet": string | null,"source_name": string | null,"source_url": string | null,"title": string,"topic": string,"url": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "external_id": string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"provider": string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title": string,"topic": string,"url": string,"workspace_id": string
+                  }
+                  Update: {
+                    "external_id"?: string,"fetched_at"?: string,"finding_id"?: string | null,"id"?: string,"provider"?: string,"published_at"?: string | null,"snippet"?: string | null,"source_name"?: string | null,"source_url"?: string | null,"title"?: string,"topic"?: string,"url"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "news_articles_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "news_articles_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"news_fetch_runs": {
+                  Row: {
+                    "created": number,"created_at": string,"error": string | null,"id": string,"provider": string,"received": number,"status": string,"topic": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created"?: number,"created_at"?: string,"error"?: string | null,"id"?: string,"provider": string,"received"?: number,"status": string,"topic": string,"workspace_id": string
+                  }
+                  Update: {
+                    "created"?: number,"created_at"?: string,"error"?: string | null,"id"?: string,"provider"?: string,"received"?: number,"status"?: string,"topic"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "news_fetch_runs_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"news_refresh_state": {
+                  Row: {
+                    "last_ok_at": string | null,"locked_until": string | null,"topic": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "last_ok_at"?: string | null,"locked_until"?: string | null,"topic": string,"workspace_id": string
+                  }
+                  Update: {
+                    "last_ok_at"?: string | null,"locked_until"?: string | null,"topic"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "news_refresh_state_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"opportunities": {
                   Row: {
                     "campaign_id": string | null,"created_at": string,"created_by": string | null,"id": string,"idempotency_key": string | null,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"route": string,"stage": string | null,"stage_reason": string | null,"status": string,"thesis": string | null,"title": string,"updated_at": string,"workspace_id": string
@@ -941,8 +1004,14 @@ isOneToOne: false
 "can_edit":
 { Args: { "ws": string }; Returns: boolean
                            },
+"claim_news_refresh":
+{ Args: { "p_stale": string,"p_topic": string,"p_ws": string }; Returns: boolean
+                           },
 "decide_opportunity":
 { Args: { "p_decision": string,"p_note": string,"p_verdict": string }; Returns: undefined
+                           },
+"finish_news_refresh":
+{ Args: { "p_ok": boolean,"p_topic": string,"p_ws": string }; Returns: undefined
                            },
 "has_role":
 { Args: { "roles": (string)[],"ws": string }; Returns: boolean

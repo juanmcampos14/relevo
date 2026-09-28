@@ -31,6 +31,7 @@ export async function labelRefs(db: SupabaseClient<Database>, slug: string, refs
   if (ids("campaign").length) add("campaign", db.from("campaigns").select("id, name").in("id", ids("campaign")), (x) => x.name, (x) => `${base}/explorar/c/${x.id}`);
   if (ids("contact").length) add("contact", db.from("contacts").select("id, full_name").in("id", ids("contact")), (x) => x.full_name, () => null);
   if (ids("task").length) add("task", db.from("tasks").select("id, title").in("id", ids("task")), (x) => `tarea: ${x.title}`, () => null);
+  if (ids("news").length) add("news", db.from("news_articles").select("id, title, url").in("id", ids("news")), (x) => x.title, (x) => x.url);
   await Promise.all(jobs);
   return out;
 }

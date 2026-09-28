@@ -3,6 +3,11 @@ import { Fragment, type ReactNode } from "react";
 import type { RefLabel } from "@/server/ai/labels";
 
 const CITE = /\[\[([a-z]+:[0-9a-f-]{36})\]\]/g;
+// La IA ya nombra el registro en el texto: la cita es un chip corto; el nombre completo va en el tooltip.
+const SHORT: Record<string, string> = {
+  company: "empresa", establishment: "lugar", asset: "activo", contact: "contacto", finding: "hallazgo",
+  opportunity: "oportunidad", visit: "visita", decision: "decisión", source: "fuente", campaign: "campaña", task: "tarea",
+};
 
 function inline(text: string, labels: Map<string, RefLabel>, key: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -11,13 +16,14 @@ function inline(text: string, labels: Map<string, RefLabel>, key: string): React
   for (const m of text.matchAll(CITE)) {
     out.push(...bold(text.slice(last, m.index), `${key}-t${n}`));
     const l = labels.get(m[1]);
+    const short = SHORT[m[1].split(":")[0]] ?? "registro";
     out.push(
       l?.href ? (
-        <Link key={`${key}-c${n}`} href={l.href} className="mx-0.5 rounded bg-primary/10 px-1 text-[0.85em] text-primary hover:underline">
-          {l.label}
+        <Link key={`${key}-c${n}`} href={l.href} title={l.label} className="mx-0.5 rounded bg-primary/10 px-1 align-baseline text-[0.75em] text-primary hover:underline">
+          {short}
         </Link>
       ) : (
-        <span key={`${key}-c${n}`} className="mx-0.5 rounded bg-muted px-1 text-[0.85em]">{l?.label ?? "registro"}</span>
+        <span key={`${key}-c${n}`} title={l?.label} className="mx-0.5 rounded bg-muted px-1 text-[0.75em]">{short}</span>
       ),
     );
     last = (m.index ?? 0) + m[0].length;

@@ -5,7 +5,7 @@
 // Uso:
 //   node --env-file=.env.production.local scripts/bootstrap-workspace.mjs \
 //     --name "Daicou" --slug daicou --owner tano@ejemplo.com --owner-name "Tano" \
-//     [--campaign "Añelo — Discovery 2026"] [--verticals "Gastronomía,Fitness,..."]
+//     [--campaign "Añelo — Discovery 2026"] [--verticals "Gastronomía,Fitness,..."] [--no-approve]
 //
 // Requiere NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SECRET_KEY (nunca commitear).
 // El owner recibe un email de invitación de Supabase Auth. No crea datos de negocio.
@@ -21,6 +21,8 @@ const { values: a } = parseArgs({
     campaign: { type: "string" },
     verticals: { type: "string" },
     "site-url": { type: "string" },
+    // El owner no aprueba decisiones del negocio (p. ej. socio técnico).
+    "no-approve": { type: "boolean", default: false },
   },
 });
 if (!a.name || !a.slug || !a.owner) {
@@ -70,10 +72,10 @@ if (!ws) {
 must(
   await db
     .from("memberships")
-    .upsert({ workspace_id: ws.id, user_id: userId, role: "owner", can_approve_decisions: true }, { onConflict: "workspace_id,user_id" }),
+    .upsert({ workspace_id: ws.id, user_id: userId, role: "owner", can_approve_decisions: !a["no-approve"] }, { onConflict: "workspace_id,user_id" }),
   "membresía owner",
 );
-console.log("✓ owner con capacidad de aprobar");
+console.log(a["no-approve"] ? "✓ owner (sin capacidad de aprobar decisiones)" : "✓ owner con capacidad de aprobar");
 
 // 3) Estructura opcional: campaña y verticales (sin datos de negocio).
 if (a.campaign) {

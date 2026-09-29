@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Mic } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
-import { CAPTURE_BUCKET, formatDuration } from "@/domain/capture";
+import { CAPTURE_BUCKET } from "@/domain/capture";
 import { EmptyState, PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { PendingCaptures } from "./pending";
+import { AudioPlayer } from "@/components/app/audio-player";
 
 export const metadata: Metadata = { title: "Capturas" };
 
@@ -77,11 +78,7 @@ export default async function CapturesPage({ params }: PageProps<"/w/[slug]/capt
                           <Image src={url} alt="Foto de la captura" fill unoptimized className="object-cover" sizes="6rem" />
                         </a>
                       ) : (
-                        <div key={m.id} className="flex items-center gap-2">
-                          <Mic className="size-4 text-muted-foreground" aria-hidden="true" />
-                          <audio controls preload="metadata" src={url} className="h-10 max-w-[16rem]" />
-                          {m.duration_ms != null && <span className="text-xs text-muted-foreground">{formatDuration(m.duration_ms)}</span>}
-                        </div>
+                        <div key={m.id} className="w-full"><AudioPlayer src={url} durationMs={m.duration_ms} /></div>
                       );
                     })}
                   </div>

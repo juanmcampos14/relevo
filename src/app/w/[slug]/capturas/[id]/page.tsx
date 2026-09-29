@@ -13,6 +13,7 @@ import { entityHref } from "@/server/entities";
 import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
+import { AudioPlayer } from "@/components/app/audio-player";
 import { decideProposalAction, processCaptureNow } from "../actions";
 
 export const metadata: Metadata = { title: "Captura" };
@@ -102,11 +103,7 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
                   </a>
                 ) : (
                   <div key={m.id} className="w-full space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Mic className="size-4 text-muted-foreground" aria-hidden="true" />
-                      <audio controls preload="metadata" src={url} className="h-10 w-full max-w-sm" />
-                      {m.duration_ms != null && <span className="text-xs text-muted-foreground">{formatDuration(m.duration_ms)}</span>}
-                    </div>
+                    <AudioPlayer src={url} durationMs={m.duration_ms} />
                     <Transcript t={transcriptOf.get(m.id)} url={url} />
                   </div>
                 );

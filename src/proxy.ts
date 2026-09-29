@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /api/ingest se autentica con token propio (no con sesión de usuario).
 // /offline, /sw.js, manifest e íconos: la app instalable y el modo sin señal (sin datos privados).
-const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest", "/offline", "/sw.js", "/manifest.webmanifest", "/icon", "/apple-icon"];
+const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest", "/offline", "/sw.js", "/manifest.webmanifest", "/icon", "/apple-icon", "/api/version"];
 
 // Refresca la sesión en cada request y exige login fuera de las rutas públicas.
 // La autorización real vive en RLS; esto solo evita renderizar páginas sin sesión.

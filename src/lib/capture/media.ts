@@ -23,9 +23,14 @@ export async function compressPhoto(file: File): Promise<{ data: ArrayBuffer; mi
   return { data: await file.arrayBuffer(), mimeType: file.type || "image/jpeg" };
 }
 
+/**
+ * Chrome/Android: WebM/Opus (al detener se le escribe la duración, que el grabador no guarda).
+ * Safari/iPhone no graba WebM y cae en MP4/AAC, que sí trae duración.
+ * (MP4/Opus de Chrome no trae duración ni se puede corregir: los reproductores muestran 0:00.)
+ */
 function pickAudioMime(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
-  return ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"].find((t) => MediaRecorder.isTypeSupported(t));
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find((t) => MediaRecorder.isTypeSupported(t));
 }
 
 export type RecordedAudio = { data: ArrayBuffer; mimeType: string; durationMs: number };
@@ -67,10 +72,19 @@ export function useRecorder(onDone: (audio: RecordedAudio) => void) {
         if (!r) return;
         window.clearInterval(r.timer);
         r.lock?.release().catch(() => {});
-        const blob = new Blob(r.chunks, { type: mr.mimeType || mimeType || "audio/mp4" });
+        const durationMs = Date.now() - r.started;
+        let blob = new Blob(r.chunks, { type: mr.mimeType || mimeType || "audio/mp4" });
+        if (blob.type.startsWith("audio/webm")) {
+          try {
+            const { default: fixWebmDuration } = await import("fix-webm-duration");
+            blob = await fixWebmDuration(blob, durationMs, { logger: false });
+          } catch {
+            // Sin duración escrita el audio igual se guarda y se transcribe.
+          }
+        }
         setState("idle");
         setElapsed(0);
-        if (blob.size) doneRef.current({ data: await blob.arrayBuffer(), mimeType: blob.type, durationMs: Date.now() - r.started });
+        if (blob.size) doneRef.current({ data: await blob.arrayBuffer(), mimeType: blob.type, durationMs });
       };
       rec.current = { mr, chunks, started, timer, lock };
       mr.start(1000);

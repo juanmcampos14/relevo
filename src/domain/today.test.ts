@@ -29,10 +29,12 @@ describe("fechas de la misión", () => {
   });
 
   it("antes, durante y después del viaje", () => {
-    expect(missionDay("2026-10-10", "2026-10-16", "2026-10-26")).toBe("Empieza en 6 días");
-    expect(missionDay("2026-10-15", "2026-10-16", "2026-10-26")).toBe("Empieza mañana");
-    expect(missionDay("2026-10-18", "2026-10-16", "2026-10-26")).toBe("Día 3 de 11");
-    expect(missionDay("2026-10-27", "2026-10-16", "2026-10-26")).toBe("Finalizada");
+    const label = (t: string) => missionDay(t, "2026-10-16", "2026-10-26")?.label;
+    expect(label("2026-09-29")).toBe("Faltan 17 días");
+    expect(label("2026-10-15")).toBe("Falta 1 día");
+    expect(label("2026-10-16")).toBe("Día 1 de 11");
+    expect(label("2026-10-26")).toBe("Día 11 de 11");
+    expect(missionDay("2026-10-27", "2026-10-16", "2026-10-26")).toEqual({ phase: "despues", label: "Misión finalizada · toca sintetizar" });
     expect(missionDay("2026-10-18", null, null)).toBeNull();
   });
 });

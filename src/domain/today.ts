@@ -32,13 +32,13 @@ export function addDays(isoDate: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "Día 3 de 7", "Empieza en 5 días" o null si la misión no tiene fechas. */
-export function missionDay(today: string, starts: string | null, ends: string | null): string | null {
+/** Contexto temporal de la misión para HOY: antes, durante y después. Null si no tiene fechas. */
+export function missionDay(today: string, starts: string | null, ends: string | null): { label: string; phase: "antes" | "durante" | "despues" } | null {
   if (!starts) return null;
   const days = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
   const toStart = days(today, starts);
-  if (toStart > 0) return toStart === 1 ? "Empieza mañana" : `Empieza en ${toStart} días`;
-  if (ends && days(ends, today) > 0) return "Finalizada";
+  if (toStart > 0) return { phase: "antes", label: toStart === 1 ? "Falta 1 día" : `Faltan ${toStart} días` };
+  if (ends && days(ends, today) > 0) return { phase: "despues", label: "Misión finalizada · toca sintetizar" };
   const n = -toStart + 1;
-  return ends ? `Día ${n} de ${days(starts, ends) + 1}` : `Día ${n}`;
+  return { phase: "durante", label: ends ? `Día ${n} de ${days(starts, ends) + 1}` : `Día ${n}` };
 }

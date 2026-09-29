@@ -47,10 +47,10 @@ begin
     (ws, u_fran, 'admin', true),
     (ws, u_visor, 'viewer', false);
 
-  insert into public.campaigns (id, workspace_id, name, zone, objective, status, owner_id, created_by)
+  insert into public.campaigns (id, workspace_id, name, zone, objective, status, starts_on, ends_on, owner_id, created_by)
   values (camp, ws, 'Añelo — Discovery 2026', 'Añelo / Vaca Muerta, Neuquén',
           'Originar e investigar oportunidades alrededor del crecimiento de Añelo, en cualquier vertical.',
-          'activa', u_tano, u_tano);
+          'activa', '2026-10-16', '2026-10-26', u_tano, u_tano);
 
   insert into public.verticals (workspace_id, name, created_by)
   select ws, v, u_tano

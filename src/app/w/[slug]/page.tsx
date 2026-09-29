@@ -289,8 +289,11 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
             <h1 className="text-2xl font-semibold tracking-tight">Hola, {profile?.display_name || ctx.user.email}</h1>
             {mission && (
               <p className="text-sm text-white/85">
-                {mission.name}
-                {day && ` · ${day}`}
+                <Link href={`${base}/explorar/c/${mission.id}`} className="underline-offset-2 hover:underline">{mission.name}</Link>
+                {day && ` · ${day.label}`}
+                {day?.phase === "despues" && (
+                  <Link href={`${base}/oportunidades/briefings`} className="ml-2 font-medium text-white underline underline-offset-2">Sintetizar</Link>
+                )}
               </p>
             )}
           </div>

@@ -96,3 +96,21 @@ AN-0023 Hotel Leonardo Da Vinci (+ CT-005, ACT-003 y su fuente) · AN-0054 Mobil
 - Pruebas: `tests/db/crm-import.test.ts` (ciclo completo con RLS), `src/domain/crm-import/*.test.ts` (mapeo, diff, duplicados), `e2e/importar-crm.spec.ts` (interfaz). El piloto AN-0023 / AN-0054 / AN-0029 se corrió con el export real en local.
 
 **Hallazgo en el Sheet:** en EMPRESAS y RED | CONTACTOS el `ID` es una fórmula `="AN-"&TEXT(ROW()-4,…)`: depende de la posición de la fila. Insertar o borrar filas corre los IDs (así se pisó AN-0065). EMPRESAS tiene "ID anterior" como valor fijo y el importador usa ese; CONTACTOS no, así que sus IDs son inestables. Recomendación: pegar los IDs como valores en ambas pestañas.
+
+## 9. Aceptación del incremento B en producción (29/09, 15:34–15:48)
+
+Piloto controlado con el export actual del Sheet, limitado a AN-0023, AN-0054 y AN-0029, ejecutado desde la interfaz de producción con la cuenta de Juan.
+
+| Paso | Resultado |
+|---|---|
+| Staging | 11 filas nuevas (3 empresas, 4 contactos —CT-005 y CT-011 son canales institucionales, CT-023/024 del delta—, 1 fuente, 3 actividades). Nada escrito antes de aprobar. |
+| SRC-NEW-LDV | Reconocida como fuente de AN-0023 y de CT-005; existe **una sola vez** en RELEVO. |
+| Aprobación y escritura | 11 filas escritas; tres fichas con empresa, personas/canales, actividades, evidencia, próxima acción, procedencia (pestaña y fila) e historial. |
+| Reimportar el mismo archivo | 11 "sin cambios", 0 duplicados. |
+| Conflicto controlado (Notas de YPF) | Editado en RELEVO y distinto en el archivo → "Conflicto" con base, RELEVO y Sheet; no deja aprobar sin elegir; se eligió el Sheet y quedó registrado en el lote y en el historial. |
+| Vuelta al Sheet real | Propuso "Notas → vacío" como cambio solo del Sheet; aprobado; YPF volvió al estado original. |
+| Integridad final | 3 empresas · 3 objetivos · 2 establecimientos · 4 contactos · 3 actividades · 3 fuentes · 2 evidencias · 11 referencias de procedencia · 4 lotes aplicados. |
+
+**Anomalías encontradas y corregidas durante el piloto:** (1) el detalle del estado de verificación ("expositor AOG 2026 + operación Neuquén") se perdía y la fuente citada en texto libre no se registraba → ahora son evidencia y fuente "citada por el CRM", completadas por la reimportación sin duplicar; (2) fechas del CRM mostradas un día antes (UTC) → mediodía de Argentina; dos evidencias del piloto corregidas; (3) falsos "editado en RELEVO" (nota de responsables compartidos, fecha de carga por defecto); (4) un .xlsx re-guardado fuera de Google Sheets (rutas internas absolutas) se rechazaba → se normaliza antes de leer; (5) el aviso de IDs por fórmula contaba filas vacías de plantilla; (6) la ficha no enlazaba al lote y su decisión → "Ver el lote y sus decisiones".
+
+**Pendiente del lado del Sheet:** sigue compartido con "cualquiera con el enlace".

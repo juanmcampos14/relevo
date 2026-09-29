@@ -1,6 +1,8 @@
 import "server-only";
 
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
+import { posix } from "node:path";
 import { fold, type RawRow } from "@/domain/crm-import/map";
 
 // Pestañas que se importan y el encabezado que las identifica (docs/03-migracion-crm-sheets.md §2).
@@ -48,12 +50,45 @@ function cellText(v: Cell): { text: string | null; link?: string; formula?: bool
 
 export class WorkbookError extends Error {}
 
+/**
+ * Algunas herramientas re-guardan el .xlsx con rutas internas absolutas ("/xl/tables/table1.xml") y
+ * comentarios en carpetas propias. Es válido en el formato pero exceljs no lo lee: se reescriben las
+ * rutas como relativas y se descartan los comentarios de celda (el importador no los usa).
+ */
+export async function normalizePackage(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  for (const path of Object.keys(zip.files)) {
+    const file = zip.file(path);
+    if (!file) continue; // carpeta
+    if (/(^|\/)_rels\/[^/]+\.rels$/.test(path)) {
+      // Carpeta de la parte dueña de las relaciones: xl/worksheets/_rels/sheet1.xml.rels → xl/worksheets
+      const sourceDir = path.replace(/_rels\/[^/]+\.rels$/, "").replace(/\/$/, "");
+      const xml = await file.async("string");
+      zip.file(
+        path,
+        xml.replace(/<Relationship\b[^>]*>/g, (tag) => {
+          if (/relationships\/(comments|vmlDrawing)"/.test(tag)) return "";
+          if (/TargetMode="External"/.test(tag)) return tag;
+          return tag.replace(/Target="\/([^"]+)"/, (_, abs: string) => `Target="${posix.relative(sourceDir || ".", abs)}"`);
+        }),
+      );
+    } else if (/^xl\/worksheets\/[^/]+\.xml$/.test(path)) {
+      zip.file(path, (await file.async("string")).replace(/<legacyDrawing\b[^>]*\/>/g, ""));
+    }
+  }
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkbook> {
   const wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(buffer);
   } catch {
-    throw new WorkbookError("El archivo no es un .xlsx válido. Exportalo desde Google Sheets con Archivo → Descargar → Microsoft Excel.");
+    try {
+      await wb.xlsx.load(await normalizePackage(buffer));
+    } catch {
+      throw new WorkbookError("El archivo no es un .xlsx válido. Exportalo desde Google Sheets con Archivo → Descargar → Microsoft Excel.");
+    }
   }
   const rows = {} as Record<SheetKey, RawRow[]>;
   const formulaIds: string[] = [];

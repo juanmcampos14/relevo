@@ -83,15 +83,18 @@ export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkb
     ws.eachRow({ includeEmpty: false }, (r, n) => {
       if (n <= headerRow) return;
       const values: Record<string, string | null> = {};
+      let rowIdFormula = false;
       (r.values as Cell[]).forEach((c, i) => {
         const h = hdr[i];
         if (!h) return;
         const { text, link, formula } = cellText(c);
         values[h] = text;
         if (link) values[`${h}#link`] = link;
-        if (h === "ID" && formula) idIsFormula = true;
+        if (h === "ID" && formula) rowIdFormula = true;
       });
-      if (!values["ID"] && !values["ID anterior"]) return; // filas vacías o de fórmulas sin dato
+      if (!values["ID"] && !values["ID anterior"]) return; // filas vacías o de plantilla (fórmula sin dato)
+      // Solo cuenta si el registro tiene datos: las filas vacías de plantilla pueden tener la fórmula precargada.
+      if (rowIdFormula) idIsFormula = true;
       out.push({ sheet: ws.name, row: n, values });
     });
     if (idIsFormula && key !== "companies") formulaIds.push(ws.name);

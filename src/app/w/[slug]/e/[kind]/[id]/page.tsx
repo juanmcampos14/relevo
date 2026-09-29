@@ -110,7 +110,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
     supabase.from("companies").select("id, trade_name, legal_name").order("trade_name"),
     supabase.from("verticals").select("id, name").eq("status", "activa").order("name"),
     supabase.from("audit_log").select("id, action, changes, created_at, actor_id").eq("entity_id", id).order("id", { ascending: false }).limit(20),
-    supabase.from("external_refs").select("source_system, external_id, sheet, row_number, first_imported_at, last_imported_at").eq("entity_id", id),
+    supabase.from("external_refs").select("source_system, external_id, sheet, row_number, first_imported_at, last_imported_at, last_batch_id").eq("entity_id", id),
     supabase.from("findings").select(findingSelect).eq(fk, id).order("created_at", { ascending: false }),
   ]);
 
@@ -474,6 +474,11 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                         Importado {formatDate(r.first_imported_at, true)}
                         {Date.parse(r.last_imported_at) - Date.parse(r.first_imported_at) > 60_000 ? ` · última reimportación ${formatDate(r.last_imported_at, true)}` : ""}
                       </span>
+                      {r.last_batch_id && (
+                        <Link href={`${base}/integraciones/importar/${r.last_batch_id}`} className="text-xs text-primary hover:underline">
+                          Ver el lote y sus decisiones
+                        </Link>
+                      )}
                     </dd>
                   </div>
                 ))

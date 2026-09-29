@@ -63,6 +63,11 @@ export function FindingCard({
         {f.origin !== "manual" && <Pill>{findingOrigin.label(f.origin)}</Pill>}
       </div>
       <p className="text-sm font-medium">{f.statement}</p>
+      {!compact && (
+        <Link href={`/w/${slug}/hallazgos/${f.id}`} className="inline-flex h-9 items-center text-sm font-medium text-primary hover:underline">
+          Qué sabemos y qué falta →
+        </Link>
+      )}
       {!compact && f.evidence && <p className="border-l-2 pl-3 text-sm text-muted-foreground italic">“{f.evidence}”</p>}
       {!compact && f.analysis && <p className="text-sm"><span className="text-muted-foreground">Análisis: </span>{f.analysis}</p>}
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">

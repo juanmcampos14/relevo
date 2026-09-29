@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { assessFinding } from "@/server/findings/assess";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import type { ActionState } from "@/server/action-result";
@@ -36,5 +38,12 @@ export async function decideProposalAction(slug: string, proposalId: string, _: 
   const supabase = await createClient();
   const res = await decideProposal(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, proposalId, decision: { action, edits } });
   revalidatePath(`/w/${slug}`, "layout");
+  if (res.ok && res.affectedFindings?.length) {
+    // Cambió la evidencia de un finding: su estado (qué sabemos / qué falta) se vuelve a evaluar sin hacer esperar.
+    const ids = [...new Set(res.affectedFindings)];
+    after(async () => {
+      for (const findingId of ids) await assessFinding(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, findingId });
+    });
+  }
   return res.ok ? { ok: true, message: res.message } : { message: res.message };
 }

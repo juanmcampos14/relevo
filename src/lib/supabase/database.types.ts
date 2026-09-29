@@ -668,6 +668,37 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"finding_assessments": {
+                  Row: {
+                    "ai_run_id": string | null,"contradicts": number,"created_at": string,"created_by": string | null,"dimensions": NonNullable<Json>,"evidence_ids": (string)[],"finding_id": string,"gaps": (string)[],"id": string,"independent_cases": number,"summary": string | null,"supports": number,"workspace_id": string
+                  }
+                  Insert: {
+                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id": string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id": string
+                  }
+                  Update: {
+                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id"?: string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "finding_assessments_ai_run_id_fkey"
+      columns: ["ai_run_id"]
+isOneToOne: false
+      referencedRelation: "ai_runs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "finding_assessments_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "finding_assessments_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"finding_evidence": {
                   Row: {
                     "created_at": string,"created_by": string | null,"evidence_id": string,"finding_id": string,"note": string | null,"stance": string,"workspace_id": string
@@ -976,13 +1007,13 @@ isOneToOne: false
                   ]
                 },"proposals": {
                   Row: {
-                    "ai_run_id": string | null,"capture_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"final_payload": Json | null,"id": string,"kind": string,"matches": NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote": string | null,"result_id": string | null,"result_type": string | null,"status": string,"workspace_id": string
+                    "ai_run_id": string | null,"assessment_id": string | null,"capture_id": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"final_payload": Json | null,"finding_id": string | null,"id": string,"kind": string,"matches": NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote": string | null,"result_id": string | null,"result_type": string | null,"status": string,"workspace_id": string
                   }
                   Insert: {
-                    "ai_run_id"?: string | null,"capture_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"id"?: string,"kind": string,"matches"?: NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id": string
+                    "ai_run_id"?: string | null,"assessment_id"?: string | null,"capture_id"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"finding_id"?: string | null,"id"?: string,"kind": string,"matches"?: NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "ai_run_id"?: string | null,"capture_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"id"?: string,"kind"?: string,"matches"?: NonNullable<Json>,"payload"?: NonNullable<Json>,"position"?: number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id"?: string
+                    "ai_run_id"?: string | null,"assessment_id"?: string | null,"capture_id"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"finding_id"?: string | null,"id"?: string,"kind"?: string,"matches"?: NonNullable<Json>,"payload"?: NonNullable<Json>,"position"?: number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -991,6 +1022,18 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "ai_runs"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "proposals_assessment_fk"
+      columns: ["workspace_id","assessment_id"]
+isOneToOne: false
+      referencedRelation: "finding_assessments"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "proposals_finding_fk"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "proposals_workspace_id_capture_id_fkey"
       columns: ["workspace_id","capture_id"]

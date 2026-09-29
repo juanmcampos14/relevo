@@ -2,17 +2,23 @@
 // explicar y auditar: primero lo vencido, después lo que tiene hora hoy, lo que bloquea a
 // otros (mi voto) y el material de campo sin procesar.
 
-export type PriorityKind = "accion_vencida" | "visita_hoy" | "voto" | "capturas" | "revision" | "accion_hoy";
+export type PriorityKind = "accion_vencida" | "visita_hoy" | "contradiccion" | "voto" | "validar" | "segundo_caso" | "accion_hoy" | "capturas" | "revision";
 
-export type PriorityItem = { kind: PriorityKind; title: string; detail?: string; href: string; due?: string | null };
+/** why: la razón en una frase ("esto es lo más importante porque…"). */
+export type PriorityItem = { kind: PriorityKind; title: string; detail?: string; why?: string; href: string; due?: string | null };
 
+// Lo vencido y lo que tiene hora hoy primero; después lo que más reduce incertidumbre
+// (una contradicción abierta, una validación por decidir, un segundo caso); después el resto.
 const RANK: Record<PriorityKind, number> = {
   accion_vencida: 0,
   visita_hoy: 1,
-  voto: 2,
-  accion_hoy: 3,
-  capturas: 4,
-  revision: 5,
+  contradiccion: 2,
+  voto: 3,
+  validar: 4,
+  segundo_caso: 5,
+  accion_hoy: 6,
+  capturas: 7,
+  revision: 8,
 };
 
 // Fran decide: su voto va primero; el resto del orden se mantiene.

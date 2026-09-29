@@ -80,3 +80,15 @@ Prioridades determinísticas en P0. Brújula: **"¿qué debería hacer ahora y p
 5. **Revisar** (Capturas → captura): aceptar, editar o rechazar cada propuesta; vincular con una empresa o persona existente en lugar de crearla. Lo dependiente se decide en orden (empresa → persona → evidencia).
 6. **Promover** (`src/server/capture/promote.ts`): cada aceptación crea el objeto con el mismo id de la propuesta (reintentar no duplica). La evidencia guarda la captura, la cita y quién la declaró; lo observado en persona queda "verificado en campo", lo declarado "sin verificar". Aceptar un finding es la promoción humana (queda aprobado) y se vincula a la evidencia aceptada. La frescura usa `settings.freshness_days` por tipo (30 por defecto).
 7. **Trazar**: finding → evidencia (a favor / en contra) → captura original (nota, fotos, ubicación); la ficha de empresa muestra "Captura de campo" si nació de una.
+
+## 12. Estado de un finding y próxima validación (incremento D, implementado 01/10)
+
+**Pregunta:** ¿qué sabemos, qué no sabemos y qué conviene validar ahora? Sin puntaje visible.
+
+- **Sin IA** (`src/domain/readiness.ts`): evidencia a favor / en contra / contexto, **casos independientes** (empresas distintas; si no hay empresa, persona, captura o fuente), verificada, desactualizada. De ahí salen faltantes deterministas: contradicción sin resolver, evidencia insuficiente, falta triangulación, evidencia desactualizada.
+- **Con IA** (`src/server/findings/assess.ts`): 12 dimensiones —problema, actor afectado, frecuencia, impacto, usuario, comprador, decisor, solución actual, alternativas, condición de cambio, presupuesto, piloto— con estado *sabido / creído / contradicho / falta*, citando evidencia real. Que alguien lo declaró es "sabido" (como declaración); lo que se generaliza es "creído". Se controla: ids inexistentes fuera; "sabido" sin evidencia pasa a "creído"; "contradicho" sin evidencia en contra, también. De las dimensiones faltantes salen falta recurrencia / comprador / economía / solución actual.
+- **Estado explicable**: faltantes con nombre y porqué (`GAPS`), en orden de prioridad.
+- **Qué hacer ahora**: hasta 3 validaciones propuestas (`proposals` con `finding_id`), ordenadas por faltante; "Agendar" crea una tarea "Validación" vinculada al finding y su empresa; "Descartar" no deja nada. Nada se promueve a oportunidad.
+- **Se re-evalúa solo** cuando se promueve un finding o le llega evidencia (desde una captura o vinculada a mano: "segundo caso"). El análisis queda marcado como desactualizado si cambió la evidencia.
+- **HOY** consume esto con "por qué": contradicción abierta → validación por decidir → buscar segundo caso, después de lo vencido y de las visitas de hoy (agrupadas en una sola prioridad); bloque "Qué validar ahora".
+- **Trazabilidad**: cada afirmación del estado cita evidencia [n]; cada evidencia enlaza a su captura (y al segundo del audio); la tarjeta del finding enlaza a su estado.

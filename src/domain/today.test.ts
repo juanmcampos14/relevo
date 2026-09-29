@@ -18,6 +18,11 @@ describe("HOY: mis 3 prioridades", () => {
     expect(pickPriorities(items, "ejecutiva")[0].kind).toBe("voto");
   });
 
+  it("D: una contradicción abierta va antes que decidir una validación o buscar un segundo caso", () => {
+    const d = [item("segundo_caso"), item("validar"), item("capturas"), item("contradiccion")];
+    expect(pickPriorities(d, "operativa").map((i) => i.kind)).toEqual(["contradiccion", "validar", "segundo_caso"]);
+  });
+
   it("con menos de 3 elementos devuelve los que hay", () => {
     expect(pickPriorities([item("capturas")], "operativa")).toHaveLength(1);
   });

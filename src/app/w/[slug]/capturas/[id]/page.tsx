@@ -16,6 +16,8 @@ import { AutoRefresh } from "@/components/app/auto-refresh";
 import { decideProposalAction, processCaptureNow } from "../actions";
 
 export const metadata: Metadata = { title: "Captura" };
+// Procesar y re-evaluar findings (IA) corren en Server Actions de esta página.
+export const maxDuration = 120;
 
 type Proposal = {
   id: string;
@@ -178,7 +180,7 @@ function resultLink(p: Proposal, slug: string): ReactNode {
   if (!p.result_id) return null;
   const base = `/w/${slug}`;
   const href =
-    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "finding" ? `${base}/oportunidades?h=${p.result_id}#h-${p.result_id}` : null;
+    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : null;
   return href ? <Link href={href} className="text-sm text-primary hover:underline">Abrir</Link> : null;
 }
 

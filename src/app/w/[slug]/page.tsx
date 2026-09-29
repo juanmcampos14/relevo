@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { dealflowStage, taskStatus } from "@/domain/catalogs";
 import { addDays, missionDay, pickPriorities, type PriorityItem } from "@/domain/today";
+import { GAPS, type Gap } from "@/domain/readiness";
 import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/entities";
 import { Section, formatDate } from "@/components/app/bits";
 import { PhonePendingNote } from "@/components/app/capture/capture-dock";
@@ -73,7 +74,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   const other = view === "operativa" ? "ejecutiva" : "operativa";
 
   const [tasks, targets, plansToday, captures, drafts, findings, decisions, changed, news, proposalsPending] = await Promise.all([
-    supabase.from("tasks").select("id, title, status, due_on, opportunity_id").eq("assignee_id", ctx.user.id).neq("status", "done").or(`due_on.lte.${soon},due_on.is.null`).order("due_on", { nullsFirst: false }).limit(8),
+    supabase.from("tasks").select("id, title, status, due_on, opportunity_id, finding_id, findings(statement)").eq("assignee_id", ctx.user.id).neq("status", "done").or(`due_on.lte.${soon},due_on.is.null`).order("due_on", { nullsFirst: false }).limit(8),
     supabase
       .from("campaign_targets")
       .select(`id, next_action, next_action_due, owner_id, ${targetEntitySelect}`)
@@ -90,20 +91,46 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("decisions").select("id, question, due_on, opportunity_id, opportunities(title)").eq("status", "requested").order("due_on", { nullsFirst: false }).limit(5),
     supabase.from("opportunities").select("id, title, status, stage, next_action, next_action_due, updated_at").gte("updated_at", weekAgo).order("updated_at", { ascending: false }).limit(4),
     loadNews(supabase, ctx.workspace.id, 3),
-    supabase.from("proposals").select("capture_id").eq("status", "propuesta"),
+    supabase.from("proposals").select("capture_id").eq("status", "propuesta").not("capture_id", "is", null),
   ]);
+  // D: último estado de cada finding + validaciones propuestas sin decidir.
+  const [{ data: assessments }, { data: validations }] = await Promise.all([
+    supabase.from("finding_assessments").select("finding_id, gaps, independent_cases, contradicts, created_at, findings!inner(statement, review_status)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
+    supabase.from("proposals").select("finding_id, payload, position").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
+  ]);
+  const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
+  for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
+  const topValidation = new Map<string, { title: string; why: string; gap: Gap }>();
+  for (const v of validations ?? []) if (v.finding_id && !topValidation.has(v.finding_id)) topValidation.set(v.finding_id, v.payload as { title: string; why: string; gap: Gap });
+  const openValidationFor = new Set((tasks.data ?? []).filter((t) => t.finding_id).map((t) => t.finding_id!));
+  const quote = (s: string) => `«${s.length > 70 ? `${s.slice(0, 70)}…` : s}»`;
+  const learning: PriorityItem[] = [...latestByFinding.values()].flatMap((a): PriorityItem[] => {
+    const href = `${base}/hallazgos/${a.finding_id}`;
+    const stmt = a.findings.statement;
+    const gaps = a.gaps as Gap[];
+    if (gaps.includes("contradiccion_sin_resolver")) {
+      return [{ kind: "contradiccion", title: `Resolver la contradicción en ${quote(stmt)}`, why: GAPS.contradiccion_sin_resolver.why, href }];
+    }
+    const v = topValidation.get(a.finding_id);
+    if (v) return [{ kind: "validar", title: v.title, detail: `Para validar ${quote(stmt)}`, why: v.why, href }];
+    if (gaps.includes("falta_triangulacion") && !openValidationFor.has(a.finding_id)) {
+      return [{ kind: "segundo_caso", title: `Buscar un segundo caso para ${quote(stmt)}`, why: GAPS.falta_triangulacion.why, href }];
+    }
+    return [];
+  });
   const proposalCount = proposalsPending.data?.length ?? 0;
   const capturesToReview = new Set((proposalsPending.data ?? []).map((p) => p.capture_id)).size;
 
   // --- Acciones: mis follow-ups + próximas acciones de objetivos, vencidas o en 7 días ---
-  type Action = { id: string; title: string; entity?: string; due: string | null; href: string };
+  type Action = { id: string; title: string; entity?: string; due: string | null; href: string; why?: string };
   const actions: Action[] = [
     ...(tasks.data ?? []).map((t) => ({
       id: `t-${t.id}`,
       title: t.title,
-      entity: taskStatus.label(t.status),
+      entity: t.findings ? `valida ${quote(t.findings.statement)}` : taskStatus.label(t.status),
       due: t.due_on,
-      href: t.opportunity_id ? `${base}/oportunidades/o/${t.opportunity_id}` : `${base}/oportunidades`,
+      href: t.finding_id ? `${base}/hallazgos/${t.finding_id}` : t.opportunity_id ? `${base}/oportunidades/o/${t.opportunity_id}` : `${base}/oportunidades`,
+      why: t.findings ? "Es una validación: reduce la incertidumbre de un finding." : undefined,
     })),
     ...(targets.data ?? []).flatMap((a) => {
       const e = resolveTargetEntity(a);
@@ -125,14 +152,25 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       kind: a.due && a.due < today ? ("accion_vencida" as const) : ("accion_hoy" as const),
       title: a.title,
       detail: [a.entity, a.due ? (a.due < today ? `vencida ${formatDate(a.due)}` : formatDate(a.due)) : null].filter(Boolean).join(" · "),
+      why: a.why ?? (a.due && a.due < today ? "Está vencida." : undefined),
       href: a.href,
       due: a.due,
     })).filter((p) => p.kind === "accion_vencida" || p.due === today),
-    ...(plansToday.data ?? []).map((p) => ({ kind: "visita_hoy" as const, title: p.title, detail: `${p.visit_stops.length} paradas hoy`, href: `${base}/agenda/${p.id}` })),
+    // Todas las jornadas de hoy son una sola prioridad: no deben tapar lo demás.
+    ...((plansToday.data ?? []).length
+      ? [{
+          kind: "visita_hoy" as const,
+          title: plansToday.data!.length === 1 ? plansToday.data![0].title : `${plansToday.data!.length} jornadas de visitas hoy`,
+          detail: `${plansToday.data!.reduce((n, p) => n + p.visit_stops.length, 0)} paradas`,
+          why: "Tiene hora hoy.",
+          href: plansToday.data!.length === 1 ? `${base}/agenda/${plansToday.data![0].id}` : `${base}/agenda`,
+        }]
+      : []),
+    ...learning,
     ...(ctx.canApprove ? (decisions.data ?? []).slice(0, 2).map((d) => ({ kind: "voto" as const, title: d.question, detail: "espera tu decisión", href: d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`, due: d.due_on })) : []),
-    ...(pendingCaptures ? [{ kind: "capturas" as const, title: `Procesar ${pendingCaptures === 1 ? "1 captura" : `${pendingCaptures} capturas`} de campo`, href: `${base}/capturas` }] : []),
+    ...(pendingCaptures ? [{ kind: "capturas" as const, title: `Procesar ${pendingCaptures === 1 ? "1 captura" : `${pendingCaptures} capturas`} de campo`, why: "Es material de campo que todavía no se convirtió en evidencia.", href: `${base}/capturas` }] : []),
     ...(proposalCount
-      ? [{ kind: "revision" as const, title: `Revisar lo que RELEVO propone de ${capturesToReview === 1 ? "1 captura" : `${capturesToReview} capturas`}`, detail: `${proposalCount} propuestas: empresas, personas, evidencia, acciones`, href: `${base}/capturas` }]
+      ? [{ kind: "revision" as const, title: `Revisar lo que RELEVO propone de ${capturesToReview === 1 ? "1 captura" : `${capturesToReview} capturas`}`, detail: `${proposalCount} propuestas: empresas, personas, evidencia, acciones`, why: "Hasta que las revises, lo que viste en campo no suma evidencia.", href: `${base}/capturas` }]
       : []),
     ...(toReview - proposalCount ? [{ kind: "revision" as const, title: `Revisar ${toReview - proposalCount} ${toReview - proposalCount === 1 ? "propuesta" : "propuestas"}`, detail: "hallazgos y borradores de RELEVO AI", href: `${base}/oportunidades` }] : []),
   ];
@@ -150,6 +188,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium">{p.title}</span>
                   {p.detail && <span className={cn("block text-xs text-muted-foreground", p.kind === "accion_vencida" && "text-destructive")}>{p.detail}</span>}
+                  {p.why && <span className="block text-xs text-muted-foreground"><span className="font-medium">Por qué:</span> {p.why}</span>}
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               </Link>
@@ -242,6 +281,31 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     </Section>
   );
 
+  const findingsToValidate = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).length).slice(0, 4);
+  const Validate = (
+    <Section title="Qué validar ahora" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hallazgos</Link>}>
+      {findingsToValidate.length ? (
+        <List>
+          {findingsToValidate.map((a) => {
+            const gap = (a.gaps as Gap[])[0];
+            const v = topValidation.get(a.finding_id);
+            return (
+              <Row
+                key={a.finding_id}
+                href={`${base}/hallazgos/${a.finding_id}`}
+                title={a.findings.statement}
+                tone={gap === "contradiccion_sin_resolver" ? "danger" : undefined}
+                meta={`${GAPS[gap].label} · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}${a.contradicts ? ` · ${a.contradicts} en contra` : ""}${v ? ` · sugerido: ${v.title}` : ""}`}
+              />
+            );
+          })}
+        </List>
+      ) : (
+        <NextStep text="Sin hipótesis abiertas todavía. Surgen de lo que capturás en campo." href={`${base}/capturas`} cta="Ver capturas" />
+      )}
+    </Section>
+  );
+
   const Changes = (
     <Section title="Cambios en oportunidades (7 días)" actions={<Link href={`${base}/oportunidades/dealflow`} className={linkCls}>Pipeline</Link>}>
       {changed.data?.length ? (
@@ -321,6 +385,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
           <>
             {Priorities}
             {Visits}
+            {Validate}
             {Actions}
             {Inbox}
             {Decisions}
@@ -331,6 +396,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
           <>
             {Priorities}
             {Decisions}
+            {Validate}
             {Changes}
             {Inbox}
             {Actions}

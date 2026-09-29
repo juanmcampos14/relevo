@@ -18,7 +18,8 @@ type Proposal = {
 };
 
 export type Decision = { action: "aceptar" | "rechazar"; edits?: Record<string, unknown> };
-export type PromoteResult = { ok: true; message: string; resultId?: string } | { ok: false; message: string };
+/** affectedFindings: findings cuya evidencia cambió (su estado se vuelve a evaluar). */
+export type PromoteResult = { ok: true; message: string; resultId?: string; affectedFindings?: string[] } | { ok: false; message: string };
 
 const decided = (p?: Proposal) => !!p && (p.status === "aceptada" || p.status === "editada");
 
@@ -28,7 +29,8 @@ const decided = (p?: Proposal) => !!p && (p.status === "aceptada" || p.status ==
  * la evidencia de lo que dijo alguien) exige que esa otra ya esté decidida.
  */
 export async function decideProposal(db: Db, opts: { workspaceId: string; settings: unknown; userId: string; proposalId: string; decision: Decision }): Promise<PromoteResult> {
-  const { data: prop } = await db.from("proposals").select("id, capture_id, kind, status, payload, quote, result_id").eq("id", opts.proposalId).maybeSingle();
+  // (captura) o (finding): las de captura crean objetos; las de finding, validaciones.
+  const { data: prop } = await db.from("proposals").select("id, capture_id, finding_id, kind, status, payload, quote, result_id").eq("id", opts.proposalId).maybeSingle();
   if (!prop) return { ok: false, message: "Propuesta no encontrada." };
   if (prop.status !== "propuesta") return { ok: false, message: "Esa propuesta ya se decidió." };
   const now = new Date().toISOString();
@@ -36,13 +38,15 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   if (opts.decision.action === "rechazar") {
     const { error } = await db.from("proposals").update({ status: "rechazada", decided_by: opts.userId, decided_at: now }).eq("id", prop.id).eq("status", "propuesta");
     if (error) return { ok: false, message: error.message };
-    await closeIfDone(db, prop.capture_id);
+    if (prop.capture_id) await closeIfDone(db, prop.capture_id);
     return { ok: true, message: "Propuesta rechazada: no se guardó nada." };
   }
+  if (!prop.capture_id) return acceptValidation(db, opts, prop as { id: string; finding_id: string; kind: string; payload: Record<string, unknown> }, now);
+  const captureId = prop.capture_id;
 
   const [{ data: capture }, { data: siblings }] = await Promise.all([
-    db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id").eq("id", prop.capture_id).single(),
-    db.from("proposals").select("id, kind, status, payload, quote, result_id").eq("capture_id", prop.capture_id),
+    db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id").eq("id", captureId).single(),
+    db.from("proposals").select("id, kind, status, payload, quote, result_id").eq("capture_id", captureId),
   ]);
   if (!capture) return { ok: false, message: "Captura no encontrada." };
   const all = (siblings ?? []) as unknown as Proposal[];
@@ -60,6 +64,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   let resultType: "company" | "contact" | "evidence" | "finding" | "task";
   let resultId: string = prop.id;
   let message: string;
+  let affectedFindings: string[] = [];
 
   try {
     switch (prop.kind) {
@@ -158,6 +163,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           );
           if (e2) throw e2;
         }
+        affectedFindings = related.map((r) => r.finding_id);
         message = related.some((r) => r.stance === "contradicts") ? "Evidencia guardada (contradice un finding existente)." : "Evidencia guardada.";
         break;
       }
@@ -192,6 +198,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           const { error: e2 } = await db.from("finding_evidence").upsert(links, { onConflict: "finding_id,evidence_id", ignoreDuplicates: true });
           if (e2) throw e2;
         }
+        affectedFindings = [prop.id];
         message = `Finding promovido con ${links.length} evidencia${links.length === 1 ? "" : "s"} vinculada${links.length === 1 ? "" : "s"}.`;
         break;
       }
@@ -241,8 +248,51 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
     .eq("id", prop.id)
     .eq("status", "propuesta");
   if (error) return { ok: false, message: error.message };
-  await closeIfDone(db, prop.capture_id);
-  return { ok: true, message: message!, resultId };
+  await closeIfDone(db, captureId);
+  return { ok: true, message: message!, resultId, affectedFindings };
+}
+
+/**
+ * Validación propuesta a partir del estado de un finding: aceptarla crea una tarea vinculada al
+ * finding (y a su empresa en la misión), con el mismo id de la propuesta.
+ */
+async function acceptValidation(
+  db: Db,
+  opts: { workspaceId: string; userId: string; decision: Decision },
+  prop: { id: string; finding_id: string; kind: string; payload: Record<string, unknown> },
+  now: string,
+): Promise<PromoteResult> {
+  if (prop.kind !== "next_action") return { ok: false, message: "Tipo de propuesta no soportado." };
+  const p = { ...prop.payload, ...(opts.decision.edits ?? {}) };
+  const edited = Object.keys(opts.decision.edits ?? {}).length > 0;
+  const { data: finding } = await db.from("findings").select("statement, company_id, campaign_id").eq("id", prop.finding_id).single();
+  let targetId: string | null = null;
+  if (finding?.company_id && finding.campaign_id) {
+    const { data } = await db.from("campaign_targets").select("id").eq("campaign_id", finding.campaign_id).eq("company_id", finding.company_id).maybeSingle();
+    targetId = data?.id ?? null;
+  }
+  const { error } = await db.from("tasks").upsert(
+    {
+      id: prop.id,
+      workspace_id: opts.workspaceId,
+      title: String(p.title),
+      description: [p.why, p.who ? `Con: ${p.who}` : null, finding ? `Valida: ${finding.statement}` : null].filter(Boolean).join("\n"),
+      due_on: (p.due as string | null) || null,
+      assignee_id: opts.userId,
+      finding_id: prop.finding_id,
+      target_id: targetId,
+      kind: "Validación",
+    },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
+  if (error) return { ok: false, message: `No se pudo guardar: ${error.message}` };
+  const { error: e2 } = await db
+    .from("proposals")
+    .update({ status: edited ? "editada" : "aceptada", final_payload: edited ? (p as NonNullable<Json>) : null, result_type: "task", result_id: prop.id, decided_by: opts.userId, decided_at: now })
+    .eq("id", prop.id)
+    .eq("status", "propuesta");
+  if (e2) return { ok: false, message: e2.message };
+  return { ok: true, message: "Validación agendada como próxima acción.", resultId: prop.id };
 }
 
 /** Los findings exigen fuente: la captura se registra una vez como fuente "observación directa". */

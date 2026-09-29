@@ -472,7 +472,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                       {r.sheet ? ` · ${r.sheet}${r.row_number ? `, fila ${r.row_number}` : ""}` : ""}
                       <span className="block text-xs text-muted-foreground">
                         Importado {formatDate(r.first_imported_at, true)}
-                        {r.last_imported_at !== r.first_imported_at ? ` · última reimportación ${formatDate(r.last_imported_at, true)}` : ""}
+                        {Date.parse(r.last_imported_at) - Date.parse(r.first_imported_at) > 60_000 ? ` · última reimportación ${formatDate(r.last_imported_at, true)}` : ""}
                       </span>
                     </dd>
                   </div>

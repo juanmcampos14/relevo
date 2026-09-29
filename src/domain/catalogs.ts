@@ -134,6 +134,7 @@ export const sourceKind = catalog({
   observacion: "Observación directa",
   drive: "Archivo en Drive",
   research_externo: "Research externo",
+  crm: "CRM (Sheets)",
 });
 
 export const contactPermission = catalog({

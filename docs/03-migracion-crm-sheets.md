@@ -86,3 +86,13 @@ Migración de datos existentes en RELEVO: ver docs/04-modelo-canonico.md §10.
 ## 7. Piloto (aprobado)
 
 AN-0023 Hotel Leonardo Da Vinci (+ CT-005, ACT-003 y su fuente) · AN-0054 Mobilbox (AOG) · AN-0029 YPF (comprador corporativo). Criterio: `Sheets → RELEVO → relaciones → procedencia → dedupe/revisión → visualización → modificación → reimportación` sin duplicados ni pérdida de contexto. Casos V12.4 que se prueban además: importar dos veces el mismo archivo, archivo malformado rechazado sin corrupción y export del estado.
+
+## 8. Estado (30/09): implementado
+
+- **Integraciones → CRM de Google Sheets:** subir el `.xlsx` (opcional: solo algunas empresas) → lote en revisión → aprobar/rechazar por fila (propuestas y conflictos se deciden explícitamente) → "Escribir N aprobadas en RELEVO".
+- Crea empresa + objetivo en la misión (etapa, prioridad, responsable, próxima acción) + categoría + establecimiento si hay dirección; persona o canal institucional vinculado; follow-up vinculado a objetivo y persona; fuente + evidencia ("Hecho que sustenta") sobre la empresa.
+- Procedencia en `external_refs` (ID del CRM, pestaña, fila, lote) y fila original guardada en staging. La ficha muestra "De dónde salió".
+- Reimportar: sin cambios no toca nada; cambios solo del Sheet se proponen; cambio en ambos lados = conflicto por campo; lo editado en RELEVO no se pisa. Archivo malformado se rechaza entero.
+- Pruebas: `tests/db/crm-import.test.ts` (ciclo completo con RLS), `src/domain/crm-import/*.test.ts` (mapeo, diff, duplicados), `e2e/importar-crm.spec.ts` (interfaz). El piloto AN-0023 / AN-0054 / AN-0029 se corrió con el export real en local.
+
+**Hallazgo en el Sheet:** en EMPRESAS y RED | CONTACTOS el `ID` es una fórmula `="AN-"&TEXT(ROW()-4,…)`: depende de la posición de la fila. Insertar o borrar filas corre los IDs (así se pisó AN-0065). EMPRESAS tiene "ID anterior" como valor fijo y el importador usa ese; CONTACTOS no, así que sus IDs son inestables. Recomendación: pegar los IDs como valores en ambas pestañas.

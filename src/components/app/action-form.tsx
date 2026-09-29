@@ -78,10 +78,25 @@ export function FieldError({ name }: { name: string }) {
   return <p className="text-sm text-destructive">{errors[name]}</p>;
 }
 
-export function SubmitButton({ children, className, variant }: { children: ReactNode; className?: string; variant?: "default" | "outline" | "secondary" | "destructive" }) {
+export function SubmitButton({
+  children,
+  className,
+  variant,
+  name,
+  value,
+  disabled = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "default" | "outline" | "secondary" | "destructive";
+  /** Con name/value, el formulario sabe qué botón se tocó (p. ej. Aprobar / Rechazar). */
+  name?: string;
+  value?: string;
+  disabled?: boolean;
+}) {
   const pending = useContext(PendingContext);
   return (
-    <Button type="submit" disabled={pending} className={cn("h-10", className)} variant={variant}>
+    <Button type="submit" name={name} value={value} disabled={pending || disabled} className={cn("h-10", className)} variant={variant}>
       {pending ? "Guardando…" : children}
     </Button>
   );

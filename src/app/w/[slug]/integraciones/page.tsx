@@ -4,10 +4,12 @@ import { getWorkspaceContext } from "@/server/context";
 import { publicEnv } from "@/lib/env";
 import { MAX_ITEMS } from "@/domain/ingest";
 import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
-import { ActionForm, SubmitButton } from "@/components/app/action-form";
-import { TextAreaField } from "@/components/app/fields";
+import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
+import { TextAreaField, TextField } from "@/components/app/fields";
 import { TokenForm } from "@/components/app/token-form";
 import { createIngestToken, importBatch, revokeIngestToken } from "./actions";
+import { uploadCrm } from "./importar/actions";
+import Link from "next/link";
 
 export const metadata: Metadata = { title: "Integraciones" };
 
@@ -38,6 +40,7 @@ export default async function IntegracionesPage({ params }: PageProps<"/w/[slug]
     ? await supabase.from("ingest_tokens").select("id, name, token_hint, created_at, last_used_at, revoked_at").order("created_at", { ascending: false })
     : { data: [] };
   const endpoint = `${publicEnv.NEXT_PUBLIC_SITE_URL}/api/ingest/findings`;
+  const { data: batches } = await supabase.from("import_batches").select("id, file_name, status, summary, created_at").order("created_at", { ascending: false }).limit(10);
 
   return (
     <div className="max-w-3xl space-y-10">
@@ -45,6 +48,42 @@ export default async function IntegracionesPage({ params }: PageProps<"/w/[slug]
         title="Integraciones"
         subtitle="Research externo (Morning Brief) → hallazgos pendientes de revisión, con fuente, URL, fecha y evidencia. Nunca crea oportunidades."
       />
+
+      <Section title="CRM de Google Sheets">
+        <p className="text-sm text-muted-foreground">
+          Exportá el Sheet (Archivo → Descargar → Microsoft Excel .xlsx) y subilo. RELEVO arma una propuesta por fila —nueva, cambios del
+          Sheet, conflicto o sin cambios— y no escribe nada hasta que la revisás y aprobás. Reimportar no duplica ni pisa lo editado en RELEVO.
+        </p>
+        {ctx.canEdit && (
+          <ActionForm action={uploadCrm.bind(null, slug)}>
+            <div className="space-y-1">
+              <label htmlFor="crm-file" className="text-sm font-medium">Archivo .xlsx</label>
+              <input id="crm-file" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="block w-full text-sm file:mr-3 file:h-10 file:rounded-md file:border file:bg-card file:px-3" />
+              <FieldError name="file" />
+            </div>
+            <TextField name="ids" label="Solo estas empresas (opcional)" placeholder="AN-0023, AN-0054, AN-0029" hint="Para un piloto: se incluyen sus contactos, actividades y fuentes." />
+            <SubmitButton>Analizar archivo</SubmitButton>
+          </ActionForm>
+        )}
+        {batches?.length ? (
+          <ul className="divide-y rounded-xl border bg-card shadow-xs">
+            {batches.map((b) => {
+              const s = b.summary as Record<string, unknown>;
+              return (
+                <li key={b.id}>
+                  <Link href={`/w/${slug}/integraciones/importar/${b.id}`} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm hover:bg-muted/50">
+                    <span>
+                      <span className="font-medium">{b.file_name}</span>{" "}
+                      <span className="text-muted-foreground">· {formatDate(b.created_at, true)}{Array.isArray(s.filtro) ? ` · ${(s.filtro as string[]).join(", ")}` : ""}</span>
+                    </span>
+                    <Pill>{b.status === "en_revision" ? "En revisión" : b.status === "aplicado" ? "Aplicado" : "Descartado"}</Pill>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </Section>
 
       <Section title="Importar un lote a mano">
         <p className="text-sm text-muted-foreground">

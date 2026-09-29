@@ -405,13 +405,13 @@ isOneToOne: false
                   ]
                 },"companies": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"public_phone": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
+                    "activity": string | null,"created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"public_phone": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -467,13 +467,13 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"phone": string | null,"preferred_channel": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {

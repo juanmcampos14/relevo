@@ -376,3 +376,14 @@ function CaptureSheet({ open, onOpenChange, workspaceId, campaignId, aiAllowed, 
     </Sheet>
   );
 }
+
+/** Para HOY: cuántas capturas siguen solo en este teléfono. */
+export function PhonePendingNote() {
+  const items = useOutbox();
+  if (!items.length) return null;
+  return (
+    <span className="font-medium text-amber-700 dark:text-amber-400">
+      {items.length === 1 ? "1 sigue en este teléfono sin subir" : `${items.length} siguen en este teléfono sin subir`}
+    </span>
+  );
+}

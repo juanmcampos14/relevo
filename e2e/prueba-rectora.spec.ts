@@ -18,7 +18,8 @@ test.describe.configure({ mode: "serial" });
 test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   // --- Tano: objetivos ---------------------------------------------------------------
   await login(page, USERS.tano);
-  await expect(page.getByText(/^Inicio operativo:/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ver vista ejecutivo" })).toBeVisible();
+  await expect(page.getByText("Mis 3 prioridades de hoy")).toBeVisible();
   await page.getByRole("link", { name: "Explorar" }).first().click();
   await page.getByRole("link", { name: /Añelo — Discovery 2026/ }).click();
 
@@ -105,8 +106,9 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
 
   // --- Fran: ve la decisión en su inicio, aprueba y comenta -------------------------
   await login(page, USERS.fran);
-  await expect(page.getByText(/^Inicio ejecutivo:/)).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(`Pasamos .${OPP}. al dealflow`) })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ver vista operativo" })).toBeVisible();
+  // En HOY de Fran, su voto pendiente es la prioridad 1 y figura en "Decisiones que esperan tu voto".
+  await expect(page.getByRole("link", { name: new RegExp(`Pasamos .${OPP}. al dealflow`) })).toHaveCount(2);
   await page.goto(oppUrl);
   await page.getByLabel("Fundamento (queda registrado)").fill("Vale la pena validar demanda con 3 campamentos.");
   await page.getByRole("button", { name: "Aprobar y pasar a dealflow" }).click();

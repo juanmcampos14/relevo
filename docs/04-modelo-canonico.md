@@ -102,3 +102,17 @@ Prioridades determinísticas en P0. Brújula: **"¿qué debería hacer ahora y p
 - **Se re-evalúa solo** cuando se promueve un finding o le llega evidencia (desde una captura o vinculada a mano: "segundo caso"). El análisis queda marcado como desactualizado si cambió la evidencia.
 - **HOY** consume esto con "por qué": contradicción abierta → validación por decidir → buscar segundo caso, después de lo vencido y de las visitas de hoy (agrupadas en una sola prioridad); bloque "Qué validar ahora".
 - **Trazabilidad**: cada afirmación del estado cita evidencia [n]; cada evidencia enlaza a su captura (y al segundo del audio); la tarjeta del finding enlaza a su estado.
+
+## 13. Qué cambia con cada evidencia y qué conviene aprender (incremento E, implementado 29/09)
+
+**Pregunta:** ¿qué cambió en lo que sabemos, y cuál validación reduce más la incertidumbre que importa para decidir? Sin puntaje visible.
+
+- **Observé ≠ una fuente afirma ≠ verifiqué**: la extracción distingue *observado*, *declarado por una persona* y *declarado por un documento* (cartel, aviso). Solo lo observado queda "verificado en campo"; lo declarado guarda quién lo declaró (`evidence.declared_by`) y se lee "35 m² — declarado por el aviso, observado en campo".
+- **Activo propuesto y revisión agrupada**: una captura sobre un local/lote/galpón propone el activo con sus datos adentro; "Aceptar todo" acepta sujeto → personas → datos. El dato sigue atómico; la revisión, no.
+- **E1 — efecto de la evidencia nueva** (`evidenceEffect`, `src/server/findings/effects.ts`): en la captura, "Qué cambió con esta captura" (y "si aceptás…"): primer caso, segundo caso ("deja de ser un caso aislado"), otro caso, mismo caso (refuerza, no triangula), contradice, contexto, o "no existe todavía un finding relacionado".
+- **E2 — no duplicar findings**: la IA recibe los findings existentes y puede proponer vincular; además hay similitud de texto. En la revisión: "vincular a …" (por defecto) o "crear uno nuevo".
+- **E3 — memoria de evolución** (`findingTimeline`, `trendSince`): en el finding, "Cómo llegó hasta acá" y "desde ayer se fortaleció / se debilitó / está en disputa".
+- **E4 — valor de información** (`valueOfInformation`): entre todos los findings, primero resolver contradicciones, después comprador/economía cuando ya hay 2+ casos, después triangular un caso único, después profundizar. Cada prioridad explica **por qué** y **qué falta aprender**, y usa la validación ya agendada o propuesta.
+- **HOY**: "Qué hacer ahora" (visitas de hoy, votos pendientes y las validaciones de mayor valor), "Qué cambió desde ayer", "Hipótesis abiertas"; aparte, **Higiene del sistema** (capturas sin procesar, propuestas por revisar, errores, pendientes vencidos). El mantenimiento no desplaza a las validaciones.
+
+**Hablar con RELEVO (siguiente capa, no construida):** la conversación por voz será otra interfaz sobre este mismo motor —evidencia, relaciones, findings, contradicciones, faltantes, validaciones—. Lo dicho entra como una captura (audio → transcripción → propuestas → revisión humana) y las respuestas salen de las mismas funciones (`evidenceEffect`, `valueOfInformation`, estado del finding). No hay un segundo cerebro.

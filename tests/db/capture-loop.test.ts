@@ -63,7 +63,7 @@ beforeAll(async () => {
       { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [{ finding_id: existingFinding, stance: "contradicts" }] },
       { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observado", declared_by: null, stated_by: null, about: "company" as const, related_findings: [] },
     ],
-    finding_candidates: [{ statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] }],
+    finding_candidates: [{ statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", existing_finding_id: null, kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] }],
     next_actions: [{ title: "Hablar con Laura (Compras) sobre frecuencia, gasto y proceso de compra", why: "Validar el costo del traslado", contact: "p2", due: null }],
   };
 });

@@ -1,14 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { CalendarClock, ChevronRight } from "lucide-react";
 import { cn } from "cn";
 import { workspaceCover } from "@/domain/photos";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { dealflowStage, taskStatus } from "@/domain/catalogs";
-import { addDays, missionDay, pickPriorities, type PriorityItem } from "@/domain/today";
-import { GAPS, type Gap } from "@/domain/readiness";
+import { addDays, missionDay } from "@/domain/today";
+import { GAPS, valueOfInformation, type Dimension, type Gap } from "@/domain/readiness";
+import { changesSince } from "@/server/findings/effects";
 import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/entities";
 import { Section, formatDate } from "@/components/app/bits";
 import { PhonePendingNote } from "@/components/app/capture/capture-dock";
@@ -85,39 +86,40 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       .order("next_action_due")
       .limit(8),
     supabase.from("visit_plans").select("id, title, visit_stops(id, status, target_time)").eq("planned_on", today).order("created_at"),
-    supabase.from("captures").select("id", { count: "exact", head: true }).in("status", ["guardado", "error"]),
+    supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "guardado"),
     supabase.from("ai_action_drafts").select("id", { count: "exact", head: true }).eq("status", "propuesta"),
     supabase.from("findings").select("id", { count: "exact", head: true }).eq("review_status", "pendiente_revision"),
-    supabase.from("decisions").select("id, question, due_on, opportunity_id, opportunities(title)").eq("status", "requested").order("due_on", { nullsFirst: false }).limit(5),
+    supabase.from("decisions").select("id, question, due_on, opportunity_id, opportunities(title)").eq("status", "requested").order("due_on", { nullsFirst: false }).order("created_at", { ascending: false }).limit(5),
     supabase.from("opportunities").select("id, title, status, stage, next_action, next_action_due, updated_at").gte("updated_at", weekAgo).order("updated_at", { ascending: false }).limit(4),
     loadNews(supabase, ctx.workspace.id, 3),
     supabase.from("proposals").select("capture_id").eq("status", "propuesta").not("capture_id", "is", null),
   ]);
-  // D: último estado de cada finding + validaciones propuestas sin decidir.
-  const [{ data: assessments }, { data: validations }] = await Promise.all([
-    supabase.from("finding_assessments").select("finding_id, gaps, independent_cases, contradicts, created_at, findings!inner(statement, review_status)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
+  // D/E: último estado de cada finding, validaciones propuestas y agendadas, errores y qué cambió desde ayer.
+  const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
+  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes] = await Promise.all([
+    supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
     supabase.from("proposals").select("finding_id, payload, position").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
+    supabase.from("tasks").select("finding_id, title, due_on").not("finding_id", "is", null).neq("status", "done").order("due_on", { nullsFirst: false }),
+    supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "error"),
+    changesSince(supabase, yesterday, today),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
-  const topValidation = new Map<string, { title: string; why: string; gap: Gap }>();
-  for (const v of validations ?? []) if (v.finding_id && !topValidation.has(v.finding_id)) topValidation.set(v.finding_id, v.payload as { title: string; why: string; gap: Gap });
-  const openValidationFor = new Set((tasks.data ?? []).filter((t) => t.finding_id).map((t) => t.finding_id!));
   const quote = (s: string) => `«${s.length > 70 ? `${s.slice(0, 70)}…` : s}»`;
-  const learning: PriorityItem[] = [...latestByFinding.values()].flatMap((a): PriorityItem[] => {
-    const href = `${base}/hallazgos/${a.finding_id}`;
-    const stmt = a.findings.statement;
-    const gaps = a.gaps as Gap[];
-    if (gaps.includes("contradiccion_sin_resolver")) {
-      return [{ kind: "contradiccion", title: `Resolver la contradicción en ${quote(stmt)}`, why: GAPS.contradiccion_sin_resolver.why, href }];
-    }
-    const v = topValidation.get(a.finding_id);
-    if (v) return [{ kind: "validar", title: v.title, detail: `Para validar ${quote(stmt)}`, why: v.why, href }];
-    if (gaps.includes("falta_triangulacion") && !openValidationFor.has(a.finding_id)) {
-      return [{ kind: "segundo_caso", title: `Buscar un segundo caso para ${quote(stmt)}`, why: GAPS.falta_triangulacion.why, href }];
-    }
-    return [];
-  });
+  // E4: qué validación reduce más la incertidumbre que importa para decidir (sin puntaje visible).
+  const research = valueOfInformation(
+    [...latestByFinding.values()].map((a) => ({
+      findingId: a.finding_id,
+      statement: a.findings.statement,
+      gaps: a.gaps as Gap[],
+      dimensions: a.dimensions as unknown as Dimension[],
+      supports: a.supports,
+      contradicts: a.contradicts,
+      independentCases: a.independent_cases,
+      proposed: (validations ?? []).filter((v) => v.finding_id === a.finding_id).map((v) => v.payload as { title: string; why: string; gap: Gap }),
+      scheduled: (validationTasks ?? []).filter((t) => t.finding_id === a.finding_id).map((t) => ({ title: t.title, due: t.due_on })),
+    })),
+  );
   const proposalCount = proposalsPending.data?.length ?? 0;
   const capturesToReview = new Set((proposalsPending.data ?? []).map((p) => p.capture_id)).size;
 
@@ -145,58 +147,92 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   ].sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
 
   const pendingCaptures = captures.count ?? 0;
-  const toReview = (drafts.count ?? 0) + (findings.count ?? 0) + proposalCount;
 
-  const priorityItems: PriorityItem[] = [
-    ...actions.map((a) => ({
-      kind: a.due && a.due < today ? ("accion_vencida" as const) : ("accion_hoy" as const),
-      title: a.title,
-      detail: [a.entity, a.due ? (a.due < today ? `vencida ${formatDate(a.due)}` : formatDate(a.due)) : null].filter(Boolean).join(" · "),
-      why: a.why ?? (a.due && a.due < today ? "Está vencida." : undefined),
-      href: a.href,
-      due: a.due,
-    })).filter((p) => p.kind === "accion_vencida" || p.due === today),
-    // Todas las jornadas de hoy son una sola prioridad: no deben tapar lo demás.
-    ...((plansToday.data ?? []).length
-      ? [{
-          kind: "visita_hoy" as const,
-          title: plansToday.data!.length === 1 ? plansToday.data![0].title : `${plansToday.data!.length} jornadas de visitas hoy`,
-          detail: `${plansToday.data!.reduce((n, p) => n + p.visit_stops.length, 0)} paradas`,
-          why: "Tiene hora hoy.",
-          href: plansToday.data!.length === 1 ? `${base}/agenda/${plansToday.data![0].id}` : `${base}/agenda`,
-        }]
-      : []),
-    ...learning,
-    ...(ctx.canApprove ? (decisions.data ?? []).slice(0, 2).map((d) => ({ kind: "voto" as const, title: d.question, detail: "espera tu decisión", href: d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`, due: d.due_on })) : []),
-    ...(pendingCaptures ? [{ kind: "capturas" as const, title: `Procesar ${pendingCaptures === 1 ? "1 captura" : `${pendingCaptures} capturas`} de campo`, why: "Es material de campo que todavía no se convirtió en evidencia.", href: `${base}/capturas` }] : []),
-    ...(proposalCount
-      ? [{ kind: "revision" as const, title: `Revisar lo que RELEVO propone de ${capturesToReview === 1 ? "1 captura" : `${capturesToReview} capturas`}`, detail: `${proposalCount} propuestas: empresas, personas, evidencia, acciones`, why: "Hasta que las revises, lo que viste en campo no suma evidencia.", href: `${base}/capturas` }]
-      : []),
-    ...(toReview - proposalCount ? [{ kind: "revision" as const, title: `Revisar ${toReview - proposalCount} ${toReview - proposalCount === 1 ? "propuesta" : "propuestas"}`, detail: "hallazgos y borradores de RELEVO AI", href: `${base}/oportunidades` }] : []),
-  ];
-  const priorities = pickPriorities(priorityItems, view);
-
+  const overdueAdmin = actions.filter((a) => a.due && a.due < today && !a.why);
+  const visitsToday = plansToday.data ?? [];
+  // Una decisión que espera tu voto también es "qué hacer ahora": destraba o cierra una hipótesis.
+  const myVotes = ctx.canApprove ? (decisions.data ?? []).slice(0, 2) : [];
+  const researchSlots = Math.max(1, 3 - (visitsToday.length ? 1 : 0) - myVotes.length);
   // --- Bloques ---
+  // Prioridades de investigación: qué hacer ahora y por qué. La higiene del sistema va aparte.
   const Priorities = (
-    <Section title="Mis 3 prioridades de hoy">
-      {priorities.length ? (
+    <Section title="Qué hacer ahora">
+      {visitsToday.length || research.length || myVotes.length ? (
         <ol className="space-y-2">
-          {priorities.map((p, i) => (
-            <li key={`${p.kind}-${i}`}>
-              <Link href={p.href} className="flex min-h-14 items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">{i + 1}</span>
+          {visitsToday.length > 0 && (
+            <li>
+              <Link href={visitsToday.length === 1 ? `${base}/agenda/${visitsToday[0].id}` : `${base}/agenda`} className="flex min-h-14 items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">
+                <CalendarClock className="size-6 shrink-0 text-primary" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-medium">{p.title}</span>
-                  {p.detail && <span className={cn("block text-xs text-muted-foreground", p.kind === "accion_vencida" && "text-destructive")}>{p.detail}</span>}
-                  {p.why && <span className="block text-xs text-muted-foreground"><span className="font-medium">Por qué:</span> {p.why}</span>}
+                  <span className="block font-medium">{visitsToday.length === 1 ? visitsToday[0].title : `${visitsToday.length} jornadas de visitas hoy`}</span>
+                  <span className="block text-xs text-muted-foreground">{visitsToday.reduce((n, p) => n + p.visit_stops.length, 0)} paradas · tiene hora hoy</span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            </li>
+          )}
+          {myVotes.map((d) => (
+            <li key={d.id}>
+              <Link href={d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`} className="flex min-h-14 gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">
+                <span className="min-w-0 flex-1 space-y-0.5">
+                  <span className="block font-medium">{d.question}</span>
+                  <span className="block text-xs text-muted-foreground"><span className="font-medium">Por qué:</span> espera tu voto{d.due_on ? ` (vence ${formatDate(d.due_on)})` : ""}; sin decisión no avanza.</span>
+                </span>
+                <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+          {research.slice(0, researchSlots).map((r, i) => (
+            <li key={r.findingId}>
+              <Link href={`${base}/hallazgos/${r.findingId}`} className="flex min-h-14 gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">{i + 1}</span>
+                <span className="min-w-0 flex-1 space-y-0.5">
+                  <span className="block font-medium">{r.action}</span>
+                  {r.scheduled && <span className="block text-xs font-medium text-primary">Validación agendada</span>}
+                  <span className="block text-xs text-muted-foreground"><span className="font-medium">Por qué:</span> {r.why}</span>
+                  {r.toLearn.length > 0 && <span className="block text-xs text-muted-foreground"><span className="font-medium">Qué falta aprender:</span> {r.toLearn.join(", ").toLowerCase()}.</span>}
+                  <span className="block text-xs text-muted-foreground">Hipótesis: {quote(r.statement)}</span>
+                </span>
+                <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               </Link>
             </li>
           ))}
         </ol>
       ) : (
-        <NextStep text="Nada urgente para hoy." href={`${base}/agenda`} cta="Planificar visitas" />
+        <NextStep text="Todavía no hay hipótesis que validar: surgen de lo que capturás en campo." href={`${base}/capturas`} cta="Ver capturas" />
+      )}
+    </Section>
+  );
+
+  const Changes24 = changes.effects.length || changes.newFindings.length ? (
+    <Section title="Qué cambió desde ayer">
+      <List>
+        {changes.effects.map((e) => (
+          <Row key={e.findingId} href={`${base}/hallazgos/${e.findingId}`} title={e.text} tone={e.kinds.includes("contradice") ? "danger" : undefined} />
+        ))}
+        {changes.newFindings.map((f) => (
+          <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={`Nueva hipótesis: ${quote(f.statement)}`} />
+        ))}
+      </List>
+    </Section>
+  ) : null;
+
+  // Higiene del sistema: necesario, pero no desplaza a las validaciones de mayor valor.
+  const hygiene = [
+    capturesToReview ? { href: `${base}/capturas`, title: `${capturesToReview} ${capturesToReview === 1 ? "captura con propuestas" : "capturas con propuestas"} por revisar`, meta: `${proposalCount} propuestas` } : null,
+    pendingCaptures ? { href: `${base}/capturas`, title: `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}`, meta: "Material de campo que todavía no es evidencia" } : null,
+    captureErrors ? { href: `${base}/capturas`, title: `${captureErrors} ${captureErrors === 1 ? "captura con error" : "capturas con error"}`, meta: "Reintentar el procesamiento", danger: true } : null,
+    (findings.count ?? 0) + (drafts.count ?? 0) ? { href: `${base}/oportunidades`, title: `${(findings.count ?? 0) + (drafts.count ?? 0)} hallazgos o borradores por revisar`, meta: `${findings.count ?? 0} hallazgos · ${drafts.count ?? 0} borradores de RELEVO AI` } : null,
+    overdueAdmin.length ? { href: overdueAdmin[0].href, title: `${overdueAdmin.length} ${overdueAdmin.length === 1 ? "pendiente vencido" : "pendientes vencidos"}`, meta: overdueAdmin.slice(0, 2).map((a) => a.title).join(" · "), danger: true } : null,
+  ].filter((x): x is { href: string; title: string; meta: string; danger?: boolean } => !!x);
+  const Hygiene = (
+    <Section title="Higiene del sistema">
+      {hygiene.length ? (
+        <List>
+          {hygiene.map((h) => <Row key={h.title} href={h.href} title={h.title} meta={h.meta} tone={h.danger ? "danger" : undefined} />)}
+        </List>
+      ) : (
+        <p className="text-sm text-muted-foreground">Todo al día. <PhonePendingNote /></p>
       )}
     </Section>
   );
@@ -238,29 +274,6 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     </Section>
   );
 
-  const Inbox = (
-    <Section title="Por procesar y revisar">
-      <List>
-        <Row
-          href={`${base}/capturas`}
-          title={
-            capturesToReview
-              ? `${capturesToReview} ${capturesToReview === 1 ? "captura con propuestas" : "capturas con propuestas"} por revisar`
-              : pendingCaptures
-                ? `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}`
-                : "Capturas al día"
-          }
-          meta={<><PhonePendingNote /> {capturesToReview ? `${proposalCount} propuestas para aceptar, editar o rechazar.` : pendingCaptures ? `${pendingCaptures} sin procesar.` : "Todo lo capturado está subido y revisado."}</>}
-        />
-        <Row
-          href={`${base}/oportunidades`}
-          title={toReview ? `${toReview} ${toReview === 1 ? "propuesta por revisar" : "propuestas por revisar"}` : "Nada por revisar"}
-          meta={`${findings.count ?? 0} hallazgos pendientes · ${drafts.count ?? 0} borradores de RELEVO AI`}
-        />
-      </List>
-    </Section>
-  );
-
   const Decisions = (
     <Section title={ctx.canApprove ? "Decisiones que esperan tu voto" : "Decisiones pendientes"} actions={<Link href={`${base}/oportunidades/decisiones`} className={linkCls}>Todas</Link>}>
       {decisions.data?.length ? (
@@ -283,12 +296,12 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
 
   const findingsToValidate = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).length).slice(0, 4);
   const Validate = (
-    <Section title="Qué validar ahora" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hallazgos</Link>}>
+    <Section title="Hipótesis abiertas" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hallazgos</Link>}>
       {findingsToValidate.length ? (
         <List>
           {findingsToValidate.map((a) => {
             const gap = (a.gaps as Gap[])[0];
-            const v = topValidation.get(a.finding_id);
+            const v = (validations ?? []).find((x) => x.finding_id === a.finding_id)?.payload as { title: string } | undefined;
             return (
               <Row
                 key={a.finding_id}
@@ -384,10 +397,11 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
         {view === "operativa" ? (
           <>
             {Priorities}
+            {Changes24}
             {Visits}
             {Validate}
+            {Hygiene}
             {Actions}
-            {Inbox}
             {Decisions}
             {Changes}
             {Pulse}
@@ -395,10 +409,11 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
         ) : (
           <>
             {Priorities}
+            {Changes24}
             {Decisions}
             {Validate}
             {Changes}
-            {Inbox}
+            {Hygiene}
             {Actions}
             {Visits}
             {Pulse}

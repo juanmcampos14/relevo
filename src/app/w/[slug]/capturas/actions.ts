@@ -34,7 +34,9 @@ export async function decideProposalAction(slug: string, proposalId: string, _: 
     if ((original[k] ?? null) !== value) edits[k] = value;
   }
   const link = String(fd.get("link_to") ?? "");
-  if (link && link !== "nuevo") edits.link_to = link;
+  if (link && link !== "nuevo" && link !== original.link_to) edits.link_to = link;
+  // Eligió crear uno nuevo aunque la IA lo haya vinculado a uno existente.
+  if (link === "nuevo" && original.link_to) edits.link_to = null;
   const supabase = await createClient();
   const group = String(fd.get("group") ?? "");
   if (fd.get("decision") === "todo" && (group === "company" || group === "asset")) {

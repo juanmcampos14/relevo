@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { Building2, Check, CheckCircle2, CircleSlash, Landmark, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, UserRound, X } from "lucide-react";
+import { Building2, Check, CheckCircle2, CircleSlash, Landmark, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, ShieldAlert, TrendingUp, UserRound, X } from "lucide-react";
 import { cn } from "cn";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
@@ -15,6 +15,7 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { AudioPlayer } from "@/components/app/audio-player";
 import { decideProposalAction, processCaptureNow } from "../actions";
+import { captureEffects, type CaptureEffects } from "@/server/findings/effects";
 
 export const metadata: Metadata = { title: "Captura" };
 // Procesar y re-evaluar findings (IA) corren en Server Actions de esta página.
@@ -81,6 +82,8 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
   const findingText = new Map((findings ?? []).map((f) => [f.id, f.statement]));
   const byKey = new Map(proposals.filter((p) => p.payload.key).map((p) => [String(p.payload.key), p]));
   const pending = proposals.filter((p) => p.status === "propuesta").length;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+  const effects = proposals.length ? await captureEffects(supabase, id, today) : null;
   const canProcess = ctx.canEdit && c.ai_consent && (c.status === "guardado" || c.status === "error");
 
   return (
@@ -121,6 +124,8 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
           )}
         </div>
       </Section>
+
+      {effects && <EffectsSection effects={effects} base={base} />}
 
       <Section title="Lo que propone RELEVO">
         {c.status === "procesando" && <p className="rounded-xl border border-dashed p-4 text-sm">Procesando… la página se actualiza sola.</p>}
@@ -294,12 +299,12 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
         </a>
       )}
 
-      {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "asset" || p.kind === "person") && (
+      {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "asset" || p.kind === "person" || p.kind === "finding") && (
         <fieldset className="space-y-1 rounded-lg border p-3 text-sm">
           <legend className="px-1 font-medium">¿Ya existe?</legend>
-          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : p.kind === "asset" ? "un activo nuevo" : "una persona nueva"}</label>
+          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked={!v.link_to} className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : p.kind === "asset" ? "un activo nuevo" : p.kind === "finding" ? "un finding nuevo" : "una persona nueva"}</label>
           {p.matches.map((m) => (
-            <label key={m.id} className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value={m.id} className="size-4 accent-primary" />Es “{m.name}” ({m.reason})</label>
+            <label key={m.id} className="flex min-h-10 items-start gap-2 py-1"><input type="radio" name="link_to" value={m.id} defaultChecked={v.link_to === m.id} className="mt-0.5 size-4 accent-primary" /><span>{p.kind === "finding" ? "Es la misma hipótesis que" : "Es"} “{m.name}” <span className="text-muted-foreground">({m.reason}{p.kind === "finding" ? "; la evidencia se suma ahí" : ""})</span></span></label>
           ))}
         </fieldset>
       )}
@@ -437,5 +442,38 @@ function Transcript({ t, url }: { t?: { status: string; text: string | null; utt
         <p className="mt-2 whitespace-pre-wrap">{t.text || "(sin habla reconocible)"}</p>
       )}
     </details>
+  );
+}
+
+/** E1 — qué cambió (o cambiaría) en lo que sabemos con esta captura. */
+function EffectsSection({ effects, base }: { effects: CaptureEffects; base: string }) {
+  const { applied, predicted, newFindings, noRelation } = effects;
+  if (!applied.length && !predicted.length && !newFindings.length && !noRelation) return null;
+  const line = (e: CaptureEffects["applied"][number], future: boolean) => (
+    <li key={`${future}-${e.findingId}`} className="flex gap-2 p-3 text-sm">
+      {e.kinds.includes("contradice") ? <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" /> : <TrendingUp className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />}
+      <span>
+        {future && <span className="font-medium">Si aceptás: </span>}
+        {e.text} <Link href={`${base}/hallazgos/${e.findingId}`} className="text-primary hover:underline">Ver estado</Link>
+      </span>
+    </li>
+  );
+  return (
+    <Section title="Qué cambió con esta captura">
+      <ul className="divide-y rounded-xl border bg-card shadow-xs">
+        {applied.map((e) => line(e, false))}
+        {predicted.filter((p) => !applied.some((a) => a.findingId === p.findingId && a.text === p.text)).map((e) => line(e, true))}
+        {newFindings.map((f) => (
+          <li key={f.statement} className="flex gap-2 p-3 text-sm">
+            <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <span>
+              {f.accepted ? "Nueva hipótesis abierta: " : "Propone una hipótesis nueva (no se encontró una existente): "}«{f.statement}»
+              {f.id && <> <Link href={`${base}/hallazgos/${f.id}`} className="text-primary hover:underline">Ver estado</Link></>}
+            </span>
+          </li>
+        ))}
+        {noRelation && <li className="p-3 text-sm text-muted-foreground">Todavía no existe un finding relacionado con lo que capturaste: queda como evidencia en su empresa o activo.</li>}
+      </ul>
+    </Section>
   );
 }

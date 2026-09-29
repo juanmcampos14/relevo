@@ -9,7 +9,7 @@ import { getWorkspaceContext } from "@/server/context";
 import { evidenceOrigin, findingKind, reviewStatus, taskStatus } from "@/domain/catalogs";
 import { formatDuration } from "@/domain/capture";
 import { isStale } from "@/domain/evidence";
-import { GAPS, dimensionLabel, isAssessmentStale, metrics, type Dimension, type EvidenceLink, type Gap } from "@/domain/readiness";
+import { GAPS, dimensionLabel, findingTimeline, isAssessmentStale, metrics, trendSince, type Dimension, type EvidenceLink, type Gap } from "@/domain/readiness";
 import { entityHref, companyName } from "@/server/entities";
 import { PageHeader, Pill, Section, VerificationBadge, formatDate } from "@/components/app/bits";
 import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
@@ -50,14 +50,15 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
     .maybeSingle();
   if (!f) notFound();
 
-  const [{ data: assessment }, { data: proposals }, { data: tasks }, { data: candidates }] = await Promise.all([
-    supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases").eq("finding_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }] = await Promise.all([
+    supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("proposals").select("id, status, payload, result_id").eq("finding_id", id).order("created_at", { ascending: false }).order("position"),
-    supabase.from("tasks").select("id, title, status, due_on, description").eq("finding_id", id).order("created_at", { ascending: false }),
+    supabase.from("tasks").select("id, title, status, due_on, description, created_at, completed_at").eq("finding_id", id).order("created_at", { ascending: false }),
     supabase.from("evidence").select("id, statement, companies(trade_name, legal_name), observed_at").order("created_at", { ascending: false }).limit(60),
   ]);
 
-  const rows = f.finding_evidence.filter((x) => x.evidence).map((x) => ({ stance: x.stance as EvidenceLink["stance"], note: x.note, e: x.evidence! }));
+  const assessment = history?.[0] ?? null;
+  const rows = f.finding_evidence.filter((x) => x.evidence).map((x) => ({ stance: x.stance as EvidenceLink["stance"], note: x.note, linkedAt: x.created_at, e: x.evidence! }));
   const links: EvidenceLink[] = rows.map(({ stance, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id }));
   const m = metrics(links, today);
   const linkedIds = new Set(links.map((l) => l.id));
@@ -68,6 +69,17 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
   const pending = (proposals ?? []).filter((p) => p.status === "propuesta");
   const byStatus = (s: Dimension["status"]) => dims.filter((d) => d.status === s);
   const captureOfSource = f.sources?.reference?.startsWith("captura:") ? f.sources.reference.slice(8) : null;
+  // E3 — cómo llegó hasta acá y qué cambió desde ayer.
+  const timeline = findingTimeline({
+    createdAt: f.created_at,
+    origin: captureOfSource ? "captura de campo" : f.sources?.title ?? null,
+    links: rows.map(({ stance, linkedAt, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id, linkedAt, statement: e.statement })),
+    assessments: (history ?? []).map((a) => ({ at: a.created_at, gaps: a.gaps })),
+    validations: (tasks ?? []).map((t) => ({ title: t.title, createdAt: t.created_at, completedAt: t.completed_at })),
+  });
+  const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
+  const sinceYesterday = timeline.filter((e) => e.at >= yesterday && e.kind !== "apertura");
+  const trend = trendSince(timeline, yesterday);
   // Si el análisis se está haciendo en segundo plano (evidencia nueva), la página se refresca sola unos minutos.
   const lastChange = [f.created_at, ...f.finding_evidence.map((x) => x.created_at)].sort().at(-1)!;
   const recentlyChanged = (!assessment || stale) && minutesSince(lastChange) < 3;
@@ -106,6 +118,12 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
             {m.stale > 0 && <span className="text-orange-700"> · {m.stale} desactualizada{m.stale === 1 ? "" : "s"}</span>}
           </p>
           {assessment?.summary && <p className="text-sm">{assessment.summary}</p>}
+          {sinceYesterday.length > 0 && (
+            <p className="rounded-lg bg-muted/60 p-2 text-sm">
+              <span className="font-medium">Desde ayer {trend === "se_fortalecio" ? "se fortaleció" : trend === "se_debilito" ? "se debilitó" : trend === "en_disputa" ? "está en disputa" : "hubo cambios"}:</span>{" "}
+              {sinceYesterday.map((e) => e.text).join(" ")}
+            </p>
+          )}
           {gaps.length > 0 && (
             <ul className="space-y-1.5">
               {gaps.map((g) => (
@@ -254,6 +272,18 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
             </ActionForm>
           </details>
         )}
+      </Section>
+
+      <Section title="Cómo llegó hasta acá">
+        <ol className="space-y-2 border-l-2 pl-4">
+          {timeline.map((e, i) => (
+            <li key={i} className="relative text-sm">
+              <span className={cn("absolute top-1.5 -left-[1.4rem] size-2.5 rounded-full", e.kind === "contradiccion" ? "bg-destructive" : e.kind === "caso" || e.kind === "faltante_resuelto" ? "bg-emerald-600" : "bg-muted-foreground/50")} aria-hidden="true" />
+              <span className="block text-xs text-muted-foreground">{formatDate(e.at, true)}</span>
+              {e.text}
+            </li>
+          ))}
+        </ol>
       </Section>
 
       <Section title="De dónde salió">

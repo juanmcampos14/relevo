@@ -215,6 +215,20 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
       }
       case "finding": {
         resultType = "finding";
+        const link = (keys: unknown, stance: "supports" | "contradicts", findingId: string) =>
+          ((keys as string[] | undefined) ?? []).map(evidenceByKey).filter(decided).map((e) => ({ workspace_id: ws, finding_id: findingId, evidence_id: e!.result_id!, stance }));
+        if (typeof p.link_to === "string" && p.link_to) {
+          // Misma hipótesis que un finding existente: se suma la evidencia ahí, sin duplicar.
+          const links = [...link(p.supports, "supports", p.link_to), ...link(p.contradicts, "contradicts", p.link_to)];
+          if (links.length) {
+            const { error: e2 } = await db.from("finding_evidence").upsert(links, { onConflict: "finding_id,evidence_id", ignoreDuplicates: true });
+            if (e2) throw e2;
+          }
+          resultId = p.link_to;
+          affectedFindings = [p.link_to];
+          message = `Se sumaron ${links.length} evidencia${links.length === 1 ? "" : "s"} al finding existente (no se creó otro).`;
+          break;
+        }
         if (p.about_company) {
           const blocked = need(company, "la empresa");
           if (blocked) return { ok: false, message: blocked };
@@ -237,9 +251,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
         if (error) throw error;
         // Aceptarlo acá ES la promoción humana: queda aprobado por quien lo aceptó.
         await db.from("findings").update({ review_status: "aprobado", review_note: "Promovido desde una captura" }).eq("id", prop.id).eq("review_status", "pendiente_revision");
-        const link = (keys: unknown, stance: "supports" | "contradicts") =>
-          ((keys as string[] | undefined) ?? []).map(evidenceByKey).filter(decided).map((e) => ({ workspace_id: ws, finding_id: prop.id, evidence_id: e!.result_id!, stance }));
-        const links = [...link(p.supports, "supports"), ...link(p.contradicts, "contradicts")];
+        const links = [...link(p.supports, "supports", prop.id), ...link(p.contradicts, "contradicts", prop.id)];
         if (links.length) {
           const { error: e2 } = await db.from("finding_evidence").upsert(links, { onConflict: "finding_id,evidence_id", ignoreDuplicates: true });
           if (e2) throw e2;

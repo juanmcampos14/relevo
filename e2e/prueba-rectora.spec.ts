@@ -19,7 +19,7 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   // --- Tano: objetivos ---------------------------------------------------------------
   await login(page, USERS.tano);
   await expect(page.getByRole("button", { name: "Ver vista ejecutivo" })).toBeVisible();
-  await expect(page.getByText("Mis 3 prioridades de hoy")).toBeVisible();
+  await expect(page.getByText("Qué hacer ahora")).toBeVisible();
   await page.getByRole("link", { name: "Explorar" }).first().click();
   await page.getByRole("link", { name: /Añelo — Discovery 2026/ }).click();
 

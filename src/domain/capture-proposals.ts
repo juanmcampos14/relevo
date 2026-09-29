@@ -5,7 +5,25 @@
 import { findCandidates, normalizeName } from "./crm-import/dedupe";
 
 export type ProposalKind = "company" | "asset" | "person" | "evidence" | "finding" | "next_action";
-export type Match = { type: "company" | "contact"; id: string; name: string; reason: string };
+export type Match = { type: "company" | "contact" | "finding"; id: string; name: string; reason: string };
+
+const STOP = new Set("de del la las el los en y o a un una unos unas que por para con sin se su sus al lo es son hay posible posibles mas muy".split(" "));
+function keyTokens(s: string) {
+  return new Set(s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/[^a-z0-9ñ ]+/g, " ").split(/\s+/).filter((t) => t.length > 2 && !STOP.has(t)));
+}
+/** Findings parecidos por palabras clave (sin IA): protege contra duplicados que la IA no marque. */
+export function similarFindings(statement: string, findings: { id: string; statement: string }[], threshold = 0.4): { id: string; statement: string; score: number }[] {
+  const a = keyTokens(statement);
+  return findings
+    .map((f) => {
+      const b = keyTokens(f.statement);
+      const inter = [...a].filter((t) => b.has(t)).length;
+      const union = new Set([...a, ...b]).size;
+      return { id: f.id, statement: f.statement, score: union ? inter / union : 0 };
+    })
+    .filter((x) => x.score >= threshold)
+    .sort((x, y) => y.score - x.score);
+}
 export type ProposalDraft = { kind: ProposalKind; position: number; payload: Record<string, unknown>; quote: string | null; matches: Match[] };
 
 type ExtractionLike = {
@@ -24,7 +42,7 @@ type ExtractionLike = {
     about: "company" | "asset" | "none";
     related_findings: { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[];
   }[];
-  finding_candidates: { statement: string; kind: string; rationale: string; supports: string[]; contradicts: string[] }[];
+  finding_candidates: { statement: string; kind: string; rationale: string; supports: string[]; contradicts: string[]; existing_finding_id?: string | null }[];
   next_actions: { title: string; why: string; contact: string | null; due: string | null }[];
 };
 
@@ -122,14 +140,22 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
 
   for (const f of ex.finding_candidates) {
     if (!f.statement.trim()) continue;
-    push("finding", {
+    // Misma hipótesis que un finding existente: se propone sumar la evidencia ahí (no duplicar).
+    const same = f.existing_finding_id && findingIds.has(f.existing_finding_id) ? f.existing_finding_id : null;
+    const byText = similarFindings(f.statement, ctx.findings);
+    const matches: Match[] = [
+      ...(same ? [{ type: "finding" as const, id: same, name: ctx.findings.find((x) => x.id === same)!.statement, reason: "la IA lo identifica como la misma hipótesis" }] : []),
+      ...byText.filter((x) => x.id !== same).slice(0, 2).map((x) => ({ type: "finding" as const, id: x.id, name: x.statement, reason: "redacción parecida" })),
+    ];
+    out.push({ kind: "finding", position: out.length, quote: null, matches, payload: {
+      link_to: same,
       statement: f.statement.trim(),
       kind: f.kind,
       rationale: f.rationale,
       supports: f.supports.filter((k) => evidenceKeys.has(k)),
       contradicts: f.contradicts.filter((k) => evidenceKeys.has(k)),
       about_company: !!ex.company,
-    }, null);
+    } });
   }
 
   for (const a of ex.next_actions) {

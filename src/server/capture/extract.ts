@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v2";
+export const EXTRACT_PROMPT_VERSION = "captura-v3";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -72,6 +72,7 @@ export const ExtractionSchema = z.object({
   finding_candidates: z.array(
     z.object({
       statement: z.string().describe("Hipótesis o aprendizaje posible, formulado con cautela (\"Posible…\")."),
+      existing_finding_id: z.string().nullable().describe("Si es la MISMA hipótesis que un finding existente (aunque esté redactada distinto), su id: la evidencia se suma a ese en lugar de crear otro. Si no, null."),
       kind: z.enum(FINDING_KINDS),
       rationale: z.string().describe("Por qué surge y qué faltaría para sostenerlo."),
       supports: z.array(z.string()).describe("Claves de evidencia (e1…) a favor."),
@@ -101,7 +102,7 @@ Reglas:
 - Para no duplicar: usá existing_id solo si la empresa o persona de la lista es claramente la misma. Ante la duda, null.
 - Una persona sin nombre ("el encargado", "Compras") es institutional: true.
 - Revisá los findings existentes: si un dato los apoya, los contradice o les da contexto, indicalo en related_findings. Buscá activamente la contraevidencia.
-- Los finding_candidates son opcionales y cautelosos: solo si hay un problema o patrón que valga la pena investigar, citando las claves de evidencia que lo sostienen o lo contradicen.
+- Los finding_candidates son opcionales y cautelosos: solo si hay un problema o patrón que valga la pena investigar, citando las claves de evidencia que lo sostienen o lo contradicen. Antes de proponer uno nuevo, revisá los findings existentes: si es la misma hipótesis con otras palabras, indicá existing_finding_id (duplicar un finding rompe el conteo de casos).
 - Las próximas acciones son concretas, accionables y derivadas de la captura.
 - Escribí en español rioplatense, breve.`;
 

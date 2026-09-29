@@ -11,6 +11,7 @@ import { formatDuration, isEmptyCapture, type OutboxMedia } from "@/domain/captu
 import { outboxStore, putOutbox, refreshOutbox, requestPersistence } from "@/lib/capture/outbox";
 import { syncOutbox } from "@/lib/capture/sync";
 import { compressPhoto, locate, useRecorder, type GeoState } from "@/lib/capture/media";
+import { CAPTURE_CONFIG_KEY } from "@/lib/capture/config";
 
 type Ctx = { open: () => void; slug: string; sync: (force?: boolean) => Promise<number> };
 const CaptureContext = createContext<Ctx | null>(null);
@@ -70,6 +71,18 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
         .catch(() => 0),
     [router],
   );
+
+  // El teléfono recuerda con qué workspace capturar si mañana abre RELEVO sin señal.
+  useEffect(() => {
+    try {
+      localStorage.setItem(CAPTURE_CONFIG_KEY, JSON.stringify({ slug, workspaceId, campaignId, aiAllowed, canEdit }));
+    } catch {
+      // Navegación privada: sin modo offline, el resto funciona.
+    }
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, [slug, workspaceId, campaignId, aiAllowed, canEdit]);
 
   useEffect(() => {
     if (!canEdit) return;

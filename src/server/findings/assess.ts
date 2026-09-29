@@ -25,7 +25,7 @@ const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60;
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
 
-const AssessmentSchema = z.object({
+export const AssessmentSchema = z.object({
   summary: z.string().describe("En 1-2 oraciones: en qué estado está esta hipótesis y qué la frena."),
   dimensions: z.array(
     z.object({

@@ -14,6 +14,7 @@ import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { AudioPlayer } from "@/components/app/audio-player";
+import { APP_VERSION } from "@/lib/build";
 import { decideProposalAction, processCaptureNow } from "../actions";
 import { captureEffects, type CaptureEffects } from "@/server/findings/effects";
 
@@ -190,6 +191,7 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
           );
         })}
       </Section>
+      <p className="text-center text-xs text-muted-foreground">RELEVO versión {APP_VERSION}</p>
     </div>
   );
 }

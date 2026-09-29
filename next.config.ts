@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Versión del deploy para avisar a páginas abiertas desde antes (ver VersionWatcher).
-  env: { NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev" },
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
+    NEXT_PUBLIC_APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
+  },
   experimental: {
     // El .xlsx del CRM se sube por Server Action (hoy ~0,6 MB). Vercel corta en 4,5 MB.
     serverActions: { bodySizeLimit: "4mb" },

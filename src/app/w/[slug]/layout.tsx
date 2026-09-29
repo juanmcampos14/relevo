@@ -5,6 +5,7 @@ import { getWorkspaceContext } from "@/server/context";
 import { BottomNav, SideNav } from "@/components/app/nav";
 import { role as roleCatalog } from "@/domain/catalogs";
 import { LogoMark } from "@/components/app/brand";
+import { APP_VERSION } from "@/lib/build";
 import { CaptureProvider, PendingCapturesBadge } from "@/components/app/capture/capture-dock";
 
 export default async function WorkspaceLayout({ children, params }: LayoutProps<"/w/[slug]">) {
@@ -46,6 +47,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
             <form action="/auth/signout" method="post">
               <button className="hover:underline">Salir</button>
             </form>
+            <p className="text-xs opacity-60">versión {APP_VERSION}</p>
           </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">

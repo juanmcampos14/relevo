@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v3";
+export const EXTRACT_PROMPT_VERSION = "captura-v4";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -20,7 +20,7 @@ export const ExtractionSchema = z.object({
   company: z
     .object({
       name: z.string(),
-      existing_id: z.string().nullable().describe("id de la lista de empresas existentes SOLO si es claramente la misma; si no, null."),
+      existing_id: z.string().nullable().describe("id de la lista de empresas existentes SOLO si es claramente la misma."),
       locality: z.string().nullable(),
       activity: z.string().nullable(),
       quote: z.string().nullable(),
@@ -42,7 +42,7 @@ export const ExtractionSchema = z.object({
   people: z.array(
     z.object({
       key: z.string().describe("Clave local: p1, p2…"),
-      name: z.string().nullable().describe("Nombre si se dijo; null si solo se sabe el rol."),
+      name: z.string().nullable().describe("Nombre si se dijo; vacío si solo se sabe el rol."),
       role: z.string().nullable(),
       institutional: z.boolean().describe("true si es un área o cargo sin persona identificada (\"Compras\", \"el encargado\" sin nombre)."),
       existing_id: z.string().nullable().describe("id de la lista de contactos existentes SOLO si es claramente la misma persona."),
@@ -72,7 +72,7 @@ export const ExtractionSchema = z.object({
   finding_candidates: z.array(
     z.object({
       statement: z.string().describe("Hipótesis o aprendizaje posible, formulado con cautela (\"Posible…\")."),
-      existing_finding_id: z.string().nullable().describe("Si es la MISMA hipótesis que un finding existente (aunque esté redactada distinto), su id: la evidencia se suma a ese en lugar de crear otro. Si no, null."),
+      existing_finding_id: z.string().nullable().describe("Si es la MISMA hipótesis que un finding existente (aunque esté redactada distinto), su id: la evidencia se suma a ese en lugar de crear otro. "),
       kind: z.enum(FINDING_KINDS),
       rationale: z.string().describe("Por qué surge y qué faltaría para sostenerlo."),
       supports: z.array(z.string()).describe("Claves de evidencia (e1…) a favor."),
@@ -84,11 +84,47 @@ export const ExtractionSchema = z.object({
       title: z.string().describe("Acción concreta con verbo: \"Hablar con Laura (Compras) sobre frecuencia y gasto\"."),
       why: z.string(),
       contact: z.string().nullable().describe("Clave de la persona involucrada, si hay."),
-      due: z.string().nullable().describe("Fecha AAAA-MM-DD solo si la nota la menciona; si no, null."),
+      due: z.string().nullable().describe("Fecha AAAA-MM-DD solo si la nota la menciona."),
     }),
   ),
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
+
+// Límite de la API: la gramática compilada de structured outputs tiene un tope, y cada texto
+// "o null" la agranda mucho (captura-v3 lo superó: 400 "compiled grammar is too large").
+// Hacia Claude, los textos opcionales viajan como texto ("" = no aplica); al volver se
+// normalizan a null, así el resto de RELEVO sigue viendo ExtractionSchema. El margen que
+// queda es chico: antes de sumar campos, correr el contrato real (extract.contract.local.test.ts).
+function wire(t: z.ZodType): z.ZodType {
+  if (t instanceof z.ZodNullable && t.unwrap() instanceof z.ZodString) {
+    return z.string().describe(`${t.description ?? (t.unwrap() as z.ZodType).description ?? ""} Texto vacío si no aplica.`.trim());
+  }
+  if (t instanceof z.ZodNullable && t.unwrap() instanceof z.ZodObject) return z.nullable(wire(t.unwrap() as z.ZodType)).describe(t.description ?? "");
+  if (t instanceof z.ZodObject) {
+    const o = z.object(Object.fromEntries(Object.entries(t.shape).map(([k, v]) => [k, wire(v as z.ZodType)])));
+    return t.description ? o.describe(t.description) : o;
+  }
+  if (t instanceof z.ZodArray) {
+    const a = z.array(wire(t.element as z.ZodType));
+    return t.description ? a.describe(t.description) : a;
+  }
+  return t;
+}
+export const WireSchema = wire(ExtractionSchema) as z.ZodObject;
+
+/** Vuelve del formato de la API al de RELEVO: "" → null donde ExtractionSchema admite null. */
+export function fromWire(value: unknown, t: z.ZodType = ExtractionSchema): unknown {
+  if (t instanceof z.ZodNullable) {
+    if (value === null || value === undefined) return null;
+    if (t.unwrap() instanceof z.ZodString) return typeof value === "string" && value.trim() === "" ? null : value;
+    return fromWire(value, t.unwrap() as z.ZodType);
+  }
+  if (t instanceof z.ZodObject && value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(t.shape).map(([k, v]) => [k, fromWire((value as Record<string, unknown>)[k], v as z.ZodType)]));
+  }
+  if (t instanceof z.ZodArray && Array.isArray(value)) return value.map((x) => fromWire(x, t.element as z.ZodType));
+  return value;
+}
 
 export const SYSTEM = `Estructurás capturas de campo de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta (Argentina). Una captura es material crudo: una nota escrita o dictada, fotos y la ubicación.
 
@@ -97,13 +133,14 @@ Tu trabajo es PROPONER, no decidir: todo lo que devolvés lo revisa una persona 
 Reglas:
 - Distinguí siempre tres cosas: lo OBSERVADO por quien capturó ("se observó un cartel de alquiler"), lo DECLARADO por una persona, y lo DECLARADO por un documento, cartel o aviso ("el aviso dice 35 m²"). Ver un cartel verifica que el cartel existe, no lo que el cartel dice: los datos que figuran en el cartel son declarados_por_documento. Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
 - No inventes nombres, cifras, fechas ni empresas. Si algo es aproximado en la nota ("unas 35"), conservá la aproximación.
-- Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota o de la transcripción. Si no hay fragmento textual (p. ej. algo visto en una foto), usá null.
+- Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota o de la transcripción. Si no hay fragmento textual (p. ej. algo visto en una foto), dejalo vacío.
 - La nota puede incluir la transcripción automática de un audio: puede tener errores de reconocimiento. No "corrijas" nombres, marcas ni cifras dudosas; si algo parece mal transcripto, dejalo como está y no lo uses como dato firme.
-- Para no duplicar: usá existing_id solo si la empresa o persona de la lista es claramente la misma. Ante la duda, null.
+- Para no duplicar: usá existing_id solo si la empresa o persona de la lista es claramente la misma. Ante la duda, dejalo vacío.
 - Una persona sin nombre ("el encargado", "Compras") es institutional: true.
 - Revisá los findings existentes: si un dato los apoya, los contradice o les da contexto, indicalo en related_findings. Buscá activamente la contraevidencia.
 - Los finding_candidates son opcionales y cautelosos: solo si hay un problema o patrón que valga la pena investigar, citando las claves de evidencia que lo sostienen o lo contradicen. Antes de proponer uno nuevo, revisá los findings existentes: si es la misma hipótesis con otras palabras, indicá existing_finding_id (duplicar un finding rompe el conteo de casos).
 - Las próximas acciones son concretas, accionables y derivadas de la captura.
+- Si un campo de texto no aplica, dejalo vacío ("").
 - Escribí en español rioplatense, breve.`;
 
 export type ExtractionContext = {
@@ -147,7 +184,7 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       thinking: { type: "adaptive" },
-      output_config: { effort: "medium", format: betaZodOutputFormat(ExtractionSchema) },
+      output_config: { effort: "medium", format: betaZodOutputFormat(WireSchema) },
       system: SYSTEM,
       messages: [
         {
@@ -173,8 +210,11 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
     if (response.stop_reason === "max_tokens" || !response.parsed_output) {
       return { ok: false, status: "error", error: "La respuesta llegó incompleta.", durationMs: Date.now() - started };
     }
-    return { ok: true, extraction: response.parsed_output, usage, durationMs: Date.now() - started };
+    const parsed = ExtractionSchema.safeParse(fromWire(response.parsed_output));
+    if (!parsed.success) return { ok: false, status: "error", error: "La respuesta no tiene el formato esperado.", durationMs: Date.now() - started };
+    return { ok: true, extraction: parsed.data, usage, durationMs: Date.now() - started };
   } catch (e) {
+    if (e instanceof Anthropic.APIError) console.error("extractCapture", e.status, e.message);
     const message =
       e instanceof Anthropic.RateLimitError
         ? "Límite de uso del proveedor de IA: reintentá en unos minutos."

@@ -120,7 +120,8 @@ async function currentTask(db: Db, ref: Ref, ctx: StageContext): Promise<Record<
     due_on: data.due_on,
     status: data.status,
     owner_name: data.assignee_id && data.assignee_id === lastOwner ? ref.last_values.owner_name : data.assignee_id,
-    result: data.description,
+    // La nota de responsables compartidos la agrega el importador: no cuenta como edición en RELEVO.
+    result: (data.description ?? "").split("\n").filter((l) => !l.startsWith("Responsables en el CRM: ")).join("\n") || null,
   };
 }
 
@@ -133,7 +134,8 @@ async function currentSource(db: Db, ref: Ref): Promise<Record<string, unknown> 
     url: data.url,
     publisher: base.publisher,
     published_on: data.published_at,
-    captured_on: data.captured_at ? String(data.captured_at).slice(0, 10) : null,
+    // Sin "Fecha consulta" en el Sheet, la base completa la fecha de carga: no es una edición.
+    captured_on: base.captured_on == null ? null : data.captured_at ? String(data.captured_at).slice(0, 10) : null,
     quality: data.quality,
     supports: base.supports,
     limitations: data.notes,

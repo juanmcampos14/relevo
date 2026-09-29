@@ -134,10 +134,13 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
       <RowGroup title="Rechazadas o bloqueadas" rows={rejected} slug={slug} editable={false} />
       {unchanged.length > 0 && (
         <Section title={`Sin cambios (${unchanged.length})`}>
-          <p className="text-sm text-muted-foreground">
-            {unchanged.map((r) => r.external_id).join(" · ")}
-            {unchanged.some((r) => r.conflicts.relevoEdited) && " — algunas se editaron en RELEVO y se mantienen como están."}
-          </p>
+          <p className="text-sm text-muted-foreground">{unchanged.map((r) => r.external_id).join(" · ")}</p>
+          {unchanged.some((r) => r.conflicts.relevoEdited) && (
+            <p className="text-sm text-muted-foreground">
+              El Sheet no cambió, pero en RELEVO difieren (se editaron o se aceptó una propuesta al importar) y se mantienen como están:{" "}
+              {unchanged.filter((r) => r.conflicts.relevoEdited).map((r) => r.external_id).join(" · ")}.
+            </p>
+          )}
         </Section>
       )}
     </div>

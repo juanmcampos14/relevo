@@ -110,7 +110,7 @@ describe("importador del CRM", () => {
     const { data: modular } = await db.from("companies").select("id, verification_status, sources(kind, title)").eq("trade_name", "Modular Prueba").single();
     expect(modular).toMatchObject({ verification_status: "publicly_verified", sources: { kind: "crm", title: `AOG Patagonia 2026 / sitio oficial ${RUN}` } });
     const { data: mev } = await db.from("evidence").select("statement, origin_kind, verification_status, observed_at").eq("company_id", modular!.id);
-    expect(mev).toEqual([{ statement: "expositor AOG 2026 + operación Neuquén", origin_kind: "aog", verification_status: "publicly_verified", observed_at: "2026-09-29T00:00:00+00:00" }]);
+    expect(mev).toEqual([{ statement: "expositor AOG 2026 + operación Neuquén", origin_kind: "aog", verification_status: "publicly_verified", observed_at: "2026-09-29T15:00:00+00:00" }]);
 
     const { data: hotel } = await db.from("companies").select("id, trade_name, activity, verification_status, source_id, sources(title)").eq("trade_name", "Hotel Prueba").single();
     expect(hotel).toMatchObject({ activity: "Hotel + viandas", verification_status: "partially_verified", sources: { title: "Hotel Prueba, ficha pública" } });
@@ -138,6 +138,10 @@ describe("importador del CRM", () => {
     const again = await stageImport(db, ws, workbook(), { fileName: "crm.xlsx", sha256: "a" });
     const rows = await rowsOf(again);
     expect(new Set(rows.map((x) => x.action))).toEqual(new Set(["sin_cambios"]));
+    const edited = rows.filter((x) => (x.conflicts as { relevoEdited?: boolean }).relevoEdited).map((x) => x.external_id);
+    // Difieren del Sheet solo las filas donde se aceptó una propuesta (web movida, canal institucional);
+    // ni la nota de responsables compartidos ni la fecha de carga por defecto cuentan como edición.
+    expect(edited.sort()).toEqual(["AN-9041", "CT-9005"]);
     const closed = await applyBatch(db, ws, again);
     expect(closed).toMatchObject({ applied: 0, unchanged: 7, errors: [] });
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });

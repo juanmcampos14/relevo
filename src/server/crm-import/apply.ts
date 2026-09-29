@@ -71,6 +71,12 @@ async function crmSourceId(db: Db, workspaceId: string): Promise<string> {
   return created.id;
 }
 
+/** Nota que agrega el importador cuando el CRM tiene varios responsables (no es un dato del Sheet). */
+export const SHARED_OWNERS_PREFIX = "Responsables en el CRM: ";
+
+/** Fecha del CRM (AAAA-MM-DD) como mediodía de Argentina: evita que se muestre el día anterior. */
+const arNoon = (date: string) => `${date}T12:00:00-03:00`;
+
 /** Fuente que el CRM cita en texto libre: se registra una vez (tipo "crm") y se reutiliza. */
 async function citedSourceId(db: Db, workspaceId: string, text: string, externalId: string): Promise<string> {
   const { data } = await db.from("sources").select("id").eq("kind", "crm").eq("title", text).maybeSingle();
@@ -162,8 +168,8 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
         evidence_type: "dato",
         origin_kind: /aog/i.test(`${v.evidence_note} ${ref}`) ? "aog" : "crm_import",
         verification_status: (v.verification_status as string) ?? "unverified",
-        observed_at: observed,
-        revalidate_after: revalidateAfter(observed, "dato"),
+        observed_at: arNoon(observed),
+        revalidate_after: revalidateAfter(arNoon(observed), "dato"),
         source_id: source,
         company_id: companyId,
       });
@@ -295,7 +301,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
         const owners = resolveOwners(v.owner_name as string | null, ctx.members);
         const company = refOf("company", v.company_ref);
         const contact = refOf("contact", v.contact_ref);
-        const description = [v.result, owners.ids.length + owners.unknown.length > 1 ? `Responsables en el CRM: ${v.owner_name}` : null].filter(Boolean).join("\n") || null;
+        const description = [v.result, owners.ids.length + owners.unknown.length > 1 ? `${SHARED_OWNERS_PREFIX}${v.owner_name}` : null].filter(Boolean).join("\n") || null;
         const taskId = entityId ?? ids.task!;
         const cols = {
           title: v.title as string,
@@ -342,8 +348,8 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
         evidence_type: "publicacion",
         origin_kind: /gobierno|registro|oficial/i.test(String(v.publisher ?? "")) ? "public_registry" : "website",
         verification_status: status,
-        observed_at: observed,
-        revalidate_after: revalidateAfter(observed, "publicacion"),
+        observed_at: arNoon(observed),
+        revalidate_after: revalidateAfter(arNoon(observed), "publicacion"),
         next_verification_step: (v.limitations as string | null) ?? null,
         source_id: ids.source!,
         company_id: company.entity_id,

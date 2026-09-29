@@ -60,7 +60,7 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
 
   const sync = useCallback(
     (force = false) =>
-      syncOutbox({ force })
+      syncOutbox({ force, slug })
         .then((n) => {
           if (n > 0) {
             toast.success(n === 1 ? "Captura subida" : `${n} capturas subidas`);
@@ -69,7 +69,7 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
           return n;
         })
         .catch(() => 0),
-    [router],
+    [router, slug],
   );
 
   // El teléfono recuerda con qué workspace capturar si mañana abre RELEVO sin señal.

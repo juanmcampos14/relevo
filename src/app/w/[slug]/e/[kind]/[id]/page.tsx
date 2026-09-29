@@ -113,6 +113,8 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
     supabase.from("external_refs").select("source_system, external_id, sheet, row_number, first_imported_at, last_imported_at, last_batch_id").eq("entity_id", id),
     supabase.from("findings").select(findingSelect).eq(fk, id).order("created_at", { ascending: false }),
   ]);
+  // Si nació de una captura: la propuesta aceptada que la creó (IA propone → humano promueve).
+  const { data: fromCapture } = await supabase.from("proposals").select("capture_id, status, decided_by, decided_at").eq("result_id", id).in("status", ["aceptada", "editada"]).limit(1).maybeSingle();
 
   const targetIds = (targets ?? []).map((t) => t.id);
   const contactIds = (links ?? []).flatMap((l) => (l.contacts ? [l.contacts.id] : []));
@@ -281,7 +283,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                               <span>· {e.sources.title}</span>
                             )
                           ) : null}
-                          {e.capture_id && <Link href={`${base}/capturas#c-${e.capture_id}`} className="text-primary hover:underline">· captura original</Link>}
+                          {e.capture_id && <Link href={`${base}/capturas/${e.capture_id}`} className="text-primary hover:underline">· captura original</Link>}
                           {e.visit_id && <Link href={`${base}/agenda/visita/${e.visit_id}`} className="text-primary hover:underline">· visita</Link>}
                           {!e.sources && !e.capture_id && !e.visit_id && <span>· sin fuente</span>}
                           <span>· {formatDate(e.observed_at ?? e.created_at)}{e.created_by ? ` · cargó ${nameOf(e.created_by)}` : ""}</span>
@@ -463,6 +465,15 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
         <aside className="space-y-8">
           <Section title="De dónde salió">
             <dl className="space-y-2 text-sm">
+              {fromCapture && (
+                <div>
+                  <dt className="text-muted-foreground">Captura de campo</dt>
+                  <dd>
+                    <Link href={`${base}/capturas/${fromCapture.capture_id}`} className="text-primary hover:underline">Ver la captura original</Link>
+                    <span className="block text-xs text-muted-foreground">Propuesta por RELEVO, {fromCapture.status === "editada" ? "editada y " : ""}aceptada {formatDate(fromCapture.decided_at, true)}</span>
+                  </dd>
+                </div>
+              )}
               {(refs ?? []).length ? (
                 (refs ?? []).map((r) => (
                   <div key={`${r.source_system}-${r.external_id}`}>
@@ -482,7 +493,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                     </dd>
                   </div>
                 ))
-              ) : (
+              ) : fromCapture ? null : (
                 <div>
                   <dt className="text-muted-foreground">Origen</dt>
                   <dd>Cargado en RELEVO</dd>

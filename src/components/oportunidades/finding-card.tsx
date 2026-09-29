@@ -22,9 +22,16 @@ export type FindingRow = {
   created_at: string;
   created_by: string | null;
   visit_id: string | null;
-  sources: { id: string; title: string; url: string | null; is_demo: boolean } | null;
+  sources: { id: string; title: string; url: string | null; is_demo: boolean; reference?: string | null } | null;
   entity?: { kind: EntityKind; id: string; name: string } | null;
+  finding_evidence?: { stance: string; evidence: { id: string; statement: string; quote: string | null; verification_status: string; capture_id: string | null } | null }[];
 };
+
+const STANCE = {
+  supports: { label: "A favor", tone: "text-emerald-800 dark:text-emerald-300" },
+  contradicts: { label: "En contra", tone: "text-destructive" },
+  contextual: { label: "Contexto", tone: "text-muted-foreground" },
+} as const;
 
 export function FindingCard({
   f,
@@ -63,6 +70,8 @@ export function FindingCard({
           Fuente:{" "}
           {f.sources?.url ? (
             <a href={f.sources.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{f.sources.title}</a>
+          ) : f.sources?.reference?.startsWith("captura:") ? (
+            <Link href={`/w/${slug}/capturas/${f.sources.reference.slice(8)}`} className="text-primary hover:underline">{f.sources.title}</Link>
           ) : f.visit_id && f.sources ? (
             <Link href={`/w/${slug}/agenda/visita/${f.visit_id}`} className="text-primary hover:underline">{f.sources.title}</Link>
           ) : (
@@ -76,6 +85,32 @@ export function FindingCard({
         {f.reviewed_at && <span>revisado {formatDate(f.reviewed_at)} por {names.get(f.reviewed_by ?? "") ?? "—"}</span>}
       </div>
       {f.review_note && <p className="text-xs">Nota de revisión: {f.review_note}</p>}
+
+      {!compact && (f.finding_evidence?.length ?? 0) > 0 && (
+        <div className="space-y-1.5 border-t pt-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Evidencia · {f.finding_evidence!.filter((x) => x.stance === "supports").length} a favor · {f.finding_evidence!.filter((x) => x.stance === "contradicts").length} en contra
+          </p>
+          <ul className="space-y-1">
+            {[...f.finding_evidence!]
+              .sort((a, b) => (a.stance === "contradicts" ? -1 : 0) - (b.stance === "contradicts" ? -1 : 0))
+              .map((x) =>
+                x.evidence ? (
+                  <li key={x.evidence.id} className="text-xs">
+                    <span className={`font-medium ${STANCE[x.stance as keyof typeof STANCE]?.tone ?? ""}`}>{STANCE[x.stance as keyof typeof STANCE]?.label ?? x.stance}:</span>{" "}
+                    {x.evidence.statement}
+                    {x.evidence.capture_id && (
+                      <>
+                        {" "}
+                        <Link href={`/w/${slug}/capturas/${x.evidence.capture_id}`} className="text-primary hover:underline">captura original</Link>
+                      </>
+                    )}
+                  </li>
+                ) : null,
+              )}
+          </ul>
+        </div>
+      )}
 
       {canEdit && pending && (
         <ActionForm action={reviewFinding.bind(null, slug, f.id)} className="flex flex-wrap items-end gap-2 space-y-0 border-t pt-3">

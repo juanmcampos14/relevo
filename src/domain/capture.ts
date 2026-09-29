@@ -102,10 +102,10 @@ export function formatDuration(ms: number): string {
 
 export type CaptureApi = {
   upload(path: string, data: ArrayBuffer, contentType: string): Promise<{ error: { message?: string; statusCode?: string | number } | null }>;
-  createCapture(payload: ReturnType<typeof captureRpcPayload>): Promise<{ error: { message?: string; code?: string } | null }>;
+  createCapture(payload: ReturnType<typeof captureRpcPayload>): Promise<{ error: { message?: string; code?: string } | null; id?: string | null }>;
 };
 
-export type SyncResult = { ok: true } | { ok: false; retry: boolean; message: string };
+export type SyncResult = { ok: true; id: string | null } | { ok: false; retry: boolean; message: string };
 
 /**
  * Sube una captura: primero los archivos (ruta fija, un duplicado cuenta como éxito),
@@ -118,9 +118,9 @@ export async function syncOne(item: OutboxItem, api: CaptureApi): Promise<SyncRe
       const { error } = await api.upload(mediaPath(item.workspaceId, item.clientId, m), m.data, baseMime(m.mimeType));
       if (error && !isAlreadyUploaded(error)) return failure(error);
     }
-    const { error } = await api.createCapture(captureRpcPayload(item));
+    const { error, id } = await api.createCapture(captureRpcPayload(item));
     if (error) return failure(error);
-    return { ok: true };
+    return { ok: true, id: id ?? null };
   } catch (e) {
     return failure(e);
   }

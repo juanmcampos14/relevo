@@ -69,4 +69,14 @@ Prioridades determinísticas en P0. Brújula: **"¿qué debería hacer ahora y p
 | Verificación `confirmado / declarado_por_contacto / fuente_publica_sin_verificar / hipotesis / demo` | `publicly_verified` (`field_verified` si viene de una visita) / `partially_verified` / `partially_verified` / `unverified` / `unverified` + `is_demo` |
 | Estados del objetivo (`identificado … descartado`) | Etapas del CRM |
 | Morning Brief y "pasar noticia a hallazgo" crean findings pendientes | Crean **propuestas de evidencia** (incremento D). Hasta entonces se mantienen como están |
-| `ai_action_drafts` (borradores del chat) | Se unifican en `proposals` (incremento C) |
+| `ai_action_drafts` (borradores del chat) | Se unifican en `proposals` más adelante (hoy `proposals` cubre las capturas) |
+
+## 11. Captura → propuestas → revisión (incremento C, implementado 30/09)
+
+1. **Capturar** (texto, foto, ubicación; audio se guarda y se procesa cuando esté la transcripción). Con "Procesar con IA" y el consentimiento del workspace, el teléfono pide el procesamiento apenas la captura sube.
+2. **Procesar** (`src/server/capture/process.ts`): una llamada a Claude (`claude-opus-5-5`, salida estructurada) con la nota, las fotos y las listas de empresas, contactos y findings existentes. Una sola corrida por captura; costo y tokens en `ai_runs`; límite diario por persona.
+3. **Validar sin confiar en la IA** (`src/domain/capture-proposals.ts`): se descartan ids inexistentes, las citas deben aparecer textuales en la nota, los duplicados se buscan con las reglas del importador.
+4. **Proponer** (`proposals`): empresa, personas (o canal institucional), evidencia (observada vs. declarada; relación con findings existentes a favor / en contra / contexto), posibles findings (con su evidencia a favor y en contra) y próximas acciones. Nada se escribe todavía.
+5. **Revisar** (Capturas → captura): aceptar, editar o rechazar cada propuesta; vincular con una empresa o persona existente en lugar de crearla. Lo dependiente se decide en orden (empresa → persona → evidencia).
+6. **Promover** (`src/server/capture/promote.ts`): cada aceptación crea el objeto con el mismo id de la propuesta (reintentar no duplica). La evidencia guarda la captura, la cita y quién la declaró; lo observado en persona queda "verificado en campo", lo declarado "sin verificar". Aceptar un finding es la promoción humana (queda aprobado) y se vincula a la evidencia aceptada. La frescura usa `settings.freshness_days` por tipo (30 por defecto).
+7. **Trazar**: finding → evidencia (a favor / en contra) → captura original (nota, fotos, ubicación); la ficha de empresa muestra "Captura de campo" si nació de una.

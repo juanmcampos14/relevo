@@ -3,10 +3,16 @@ import { freshnessDays, type evidenceType } from "./catalogs";
 
 type EvidenceType = (typeof evidenceType.values)[number];
 
+/** Días de frescura por tipo: los del workspace (settings.freshness_days) pisan el default de 30. */
+export function freshnessFor(settings: unknown): Partial<Record<EvidenceType, number>> {
+  const raw = (settings as { freshness_days?: Record<string, unknown> } | null)?.freshness_days ?? {};
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === "number" && v > 0 && v <= 3650)) as Partial<Record<EvidenceType, number>>;
+}
+
 /** Fecha (AAAA-MM-DD) a partir de la cual conviene revalidar, según el tipo de evidencia. */
-export function revalidateAfter(observedAt: string, type: EvidenceType): string {
+export function revalidateAfter(observedAt: string, type: EvidenceType, overrides: Partial<Record<EvidenceType, number>> = {}): string {
   const d = new Date(observedAt);
-  d.setUTCDate(d.getUTCDate() + freshnessDays[type]);
+  d.setUTCDate(d.getUTCDate() + (overrides[type] ?? freshnessDays[type]));
   return d.toISOString().slice(0, 10);
 }
 

@@ -72,7 +72,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   const view: "operativa" | "ejecutiva" = stored === "ejecutiva" || stored === "operativa" ? stored : ctx.role === "admin" ? "ejecutiva" : "operativa";
   const other = view === "operativa" ? "ejecutiva" : "operativa";
 
-  const [tasks, targets, plansToday, captures, drafts, findings, decisions, changed, news] = await Promise.all([
+  const [tasks, targets, plansToday, captures, drafts, findings, decisions, changed, news, proposalsPending] = await Promise.all([
     supabase.from("tasks").select("id, title, status, due_on, opportunity_id").eq("assignee_id", ctx.user.id).neq("status", "done").or(`due_on.lte.${soon},due_on.is.null`).order("due_on", { nullsFirst: false }).limit(8),
     supabase
       .from("campaign_targets")
@@ -84,13 +84,16 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       .order("next_action_due")
       .limit(8),
     supabase.from("visit_plans").select("id, title, visit_stops(id, status, target_time)").eq("planned_on", today).order("created_at"),
-    supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "guardado"),
+    supabase.from("captures").select("id", { count: "exact", head: true }).in("status", ["guardado", "error"]),
     supabase.from("ai_action_drafts").select("id", { count: "exact", head: true }).eq("status", "propuesta"),
     supabase.from("findings").select("id", { count: "exact", head: true }).eq("review_status", "pendiente_revision"),
     supabase.from("decisions").select("id, question, due_on, opportunity_id, opportunities(title)").eq("status", "requested").order("due_on", { nullsFirst: false }).limit(5),
     supabase.from("opportunities").select("id, title, status, stage, next_action, next_action_due, updated_at").gte("updated_at", weekAgo).order("updated_at", { ascending: false }).limit(4),
     loadNews(supabase, ctx.workspace.id, 3),
+    supabase.from("proposals").select("capture_id").eq("status", "propuesta"),
   ]);
+  const proposalCount = proposalsPending.data?.length ?? 0;
+  const capturesToReview = new Set((proposalsPending.data ?? []).map((p) => p.capture_id)).size;
 
   // --- Acciones: mis follow-ups + próximas acciones de objetivos, vencidas o en 7 días ---
   type Action = { id: string; title: string; entity?: string; due: string | null; href: string };
@@ -115,7 +118,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   ].sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"));
 
   const pendingCaptures = captures.count ?? 0;
-  const toReview = (drafts.count ?? 0) + (findings.count ?? 0);
+  const toReview = (drafts.count ?? 0) + (findings.count ?? 0) + proposalCount;
 
   const priorityItems: PriorityItem[] = [
     ...actions.map((a) => ({
@@ -128,7 +131,10 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     ...(plansToday.data ?? []).map((p) => ({ kind: "visita_hoy" as const, title: p.title, detail: `${p.visit_stops.length} paradas hoy`, href: `${base}/agenda/${p.id}` })),
     ...(ctx.canApprove ? (decisions.data ?? []).slice(0, 2).map((d) => ({ kind: "voto" as const, title: d.question, detail: "espera tu decisión", href: d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`, due: d.due_on })) : []),
     ...(pendingCaptures ? [{ kind: "capturas" as const, title: `Procesar ${pendingCaptures === 1 ? "1 captura" : `${pendingCaptures} capturas`} de campo`, href: `${base}/capturas` }] : []),
-    ...(toReview ? [{ kind: "revision" as const, title: `Revisar ${toReview} ${toReview === 1 ? "propuesta" : "propuestas"}`, detail: "hallazgos y borradores de RELEVO AI", href: `${base}/oportunidades` }] : []),
+    ...(proposalCount
+      ? [{ kind: "revision" as const, title: `Revisar lo que RELEVO propone de ${capturesToReview === 1 ? "1 captura" : `${capturesToReview} capturas`}`, detail: `${proposalCount} propuestas: empresas, personas, evidencia, acciones`, href: `${base}/capturas` }]
+      : []),
+    ...(toReview - proposalCount ? [{ kind: "revision" as const, title: `Revisar ${toReview - proposalCount} ${toReview - proposalCount === 1 ? "propuesta" : "propuestas"}`, detail: "hallazgos y borradores de RELEVO AI", href: `${base}/oportunidades` }] : []),
   ];
   const priorities = pickPriorities(priorityItems, view);
 
@@ -198,8 +204,14 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       <List>
         <Row
           href={`${base}/capturas`}
-          title={pendingCaptures ? `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}` : "Capturas al día"}
-          meta={<><PhonePendingNote /> {pendingCaptures ? "" : "Todo lo capturado está subido."}</>}
+          title={
+            capturesToReview
+              ? `${capturesToReview} ${capturesToReview === 1 ? "captura con propuestas" : "capturas con propuestas"} por revisar`
+              : pendingCaptures
+                ? `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}`
+                : "Capturas al día"
+          }
+          meta={<><PhonePendingNote /> {capturesToReview ? `${proposalCount} propuestas para aceptar, editar o rechazar.` : pendingCaptures ? `${pendingCaptures} sin procesar.` : "Todo lo capturado está subido y revisado."}</>}
         />
         <Row
           href={`${base}/oportunidades`}

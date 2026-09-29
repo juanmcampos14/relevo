@@ -337,16 +337,28 @@ isOneToOne: false
                   ]
                 },"captures": {
                   Row: {
-                    "ai_consent": boolean,"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
+                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "ai_consent"?: boolean,"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "ai_consent"?: boolean,"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "captures_ai_run_id_fkey"
+      columns: ["ai_run_id"]
+isOneToOne: false
+      referencedRelation: "ai_runs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "captures_source_fk"
+      columns: ["workspace_id","source_id"]
+isOneToOne: false
+      referencedRelation: "sources"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "captures_workspace_id_campaign_id_fkey"
       columns: ["workspace_id","campaign_id"]
 isOneToOne: false
@@ -961,6 +973,37 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"proposals": {
+                  Row: {
+                    "ai_run_id": string | null,"capture_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"final_payload": Json | null,"id": string,"kind": string,"matches": NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote": string | null,"result_id": string | null,"result_type": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "ai_run_id"?: string | null,"capture_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"id"?: string,"kind": string,"matches"?: NonNullable<Json>,"payload": NonNullable<Json>,"position": number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "ai_run_id"?: string | null,"capture_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"final_payload"?: Json | null,"id"?: string,"kind"?: string,"matches"?: NonNullable<Json>,"payload"?: NonNullable<Json>,"position"?: number,"quote"?: string | null,"result_id"?: string | null,"result_type"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "proposals_ai_run_id_fkey"
+      columns: ["ai_run_id"]
+isOneToOne: false
+      referencedRelation: "ai_runs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "proposals_workspace_id_capture_id_fkey"
+      columns: ["workspace_id","capture_id"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "proposals_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"sources": {
                   Row: {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { MapPin, Mic } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
@@ -25,7 +26,7 @@ export default async function CapturesPage({ params }: PageProps<"/w/[slug]/capt
 
   const { data: captures } = await supabase
     .from("captures")
-    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, capture_media(id, kind, storage_path, duration_ms)")
+    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, ai_summary, capture_media(id, kind, storage_path, duration_ms), proposals(status)")
     .order("captured_at", { ascending: false })
     .limit(50);
   const rows = captures ?? [];
@@ -56,8 +57,15 @@ export default async function CapturesPage({ params }: PageProps<"/w/[slug]/capt
                   <time dateTime={c.captured_at}>{formatDate(c.captured_at, true)}</time>
                   <Pill className={c.status === "error" ? "border-destructive/40 text-destructive" : undefined}>{statusLabel[c.status] ?? c.status}</Pill>
                   {!c.ai_consent && <Pill>Sin IA</Pill>}
+                  {c.proposals.some((p) => p.status === "propuesta") && (
+                    <Pill className="border-sky-500/40 text-sky-800 dark:text-sky-300">{c.proposals.filter((p) => p.status === "propuesta").length} por decidir</Pill>
+                  )}
+                  <Link href={`/w/${slug}/capturas/${c.id}`} className="ml-auto inline-flex h-9 items-center text-sm font-medium text-primary hover:underline">
+                    {c.proposals.some((p) => p.status === "propuesta") ? "Revisar" : "Ver"}
+                  </Link>
                 </div>
-                {c.body && <p className="text-sm whitespace-pre-wrap">{c.body}</p>}
+                {c.body && <p className="line-clamp-4 text-sm whitespace-pre-wrap">{c.body}</p>}
+                {c.ai_summary && <p className="text-xs text-muted-foreground">RELEVO: {c.ai_summary}</p>}
                 {c.status === "error" && c.status_error && <p className="text-sm text-destructive">{c.status_error}</p>}
                 {c.capture_media.length > 0 && (
                   <div className="flex flex-wrap gap-2">

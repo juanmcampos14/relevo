@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { isStale, knowledgeGroup, revalidateAfter } from "./evidence";
+import { freshnessFor, isStale, knowledgeGroup, revalidateAfter } from "./evidence";
 
 describe("evidencia", () => {
   it("revalidar a los 30 días (default P0)", () => {
     expect(revalidateAfter("2026-09-29T15:00:00Z", "capacidad")).toBe("2026-10-29");
+  });
+
+  it("frescura configurable por tipo en el workspace (30 es solo el default)", () => {
+    const o = freshnessFor({ freshness_days: { precio: 7, propiedad: 180, contacto: "x", dato: -1 } });
+    expect(o).toEqual({ precio: 7, propiedad: 180 });
+    expect(revalidateAfter("2026-10-01T15:00:00Z", "precio", o)).toBe("2026-10-08");
+    expect(revalidateAfter("2026-10-01T15:00:00Z", "dato", o)).toBe("2026-10-31");
   });
 
   it("desactualizada por fecha o por decisión humana", () => {

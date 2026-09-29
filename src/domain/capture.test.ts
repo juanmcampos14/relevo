@@ -54,13 +54,13 @@ describe("captura: reglas puras", () => {
 describe("syncOne", () => {
   it("sube primero los archivos y después crea la captura", async () => {
     const { api, calls } = fakeApi();
-    expect(await syncOne(item, api)).toEqual({ ok: true });
+    expect(await syncOne(item, api)).toEqual({ ok: true, id: null });
     expect(calls).toEqual(["upload w1/c1/m1.jpg image/jpeg", "upload w1/c1/m2.webm audio/webm", "create c1 2"]);
   });
 
   it("un archivo que ya estaba subido (reintento) cuenta como éxito", async () => {
     const { api } = fakeApi({ upload: async () => ({ error: { statusCode: "409", message: "The resource already exists" } }) });
-    expect(await syncOne(item, api)).toEqual({ ok: true });
+    expect(await syncOne(item, api)).toEqual({ ok: true, id: null });
   });
 
   it("sin señal: reintentar y no crear la captura a medias", async () => {

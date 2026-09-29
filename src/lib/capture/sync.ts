@@ -15,8 +15,8 @@ function api(): CaptureApi {
       return { error: error as { message?: string; statusCode?: string } | null };
     },
     createCapture: async (payload) => {
-      const { error } = await supabase.rpc("create_capture", { p: payload });
-      return { error };
+      const { data, error } = await supabase.rpc("create_capture", { p: payload });
+      return { error, id: (data as string | null) ?? null };
     },
   };
 }
@@ -26,7 +26,7 @@ function api(): CaptureApi {
  * con Web Locks cuando existe (igual, el alta es idempotente: no hay duplicados).
  * `force` ignora la espera entre reintentos (botón "Reintentar"). Devuelve cuántas subió.
  */
-export function syncOutbox({ force = false } = {}): Promise<number> {
+export function syncOutbox({ force = false, slug }: { force?: boolean; slug?: string } = {}): Promise<number> {
   if (running) return running;
   const work = async () => {
     const items = await refreshOutbox();
@@ -37,6 +37,10 @@ export function syncOutbox({ force = false } = {}): Promise<number> {
       await putOutbox({ ...item, state: "subiendo" });
       const res = await syncOne(item, api());
       if (res.ok) {
+        // Con "Procesar con IA": se pide el procesamiento apenas llega (el servidor no lo repite si ya corrió).
+        if (item.aiConsent && res.id && slug) {
+          fetch(`/w/${slug}/capturas/${res.id}/procesar`, { method: "POST", keepalive: true }).catch(() => {});
+        }
         await deleteOutbox(item.clientId);
         nextTry.delete(item.clientId);
         done++;

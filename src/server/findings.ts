@@ -7,8 +7,9 @@ import { companyName } from "./entities";
 
 export const findingSelect = `id, kind, statement, evidence, analysis, origin, verification_status, review_status, review_note,
   reviewed_by, reviewed_at, created_at, created_by, visit_id, campaign_id,
-  sources(id, title, url, is_demo),
-  companies(id, trade_name, legal_name), establishments(id, name), assets(id, title)`;
+  sources(id, title, url, is_demo, reference),
+  companies(id, trade_name, legal_name), establishments(id, name), assets(id, title),
+  finding_evidence(stance, evidence(id, statement, quote, verification_status, capture_id))`;
 
 type Raw = Omit<FindingRow, "entity"> & {
   companies: { id: string; trade_name: string | null; legal_name: string | null } | null;

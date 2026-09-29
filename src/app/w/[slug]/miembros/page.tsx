@@ -5,7 +5,7 @@ import { role as roleCatalog } from "@/domain/catalogs";
 import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { CheckboxField, SelectField, TextField } from "@/components/app/fields";
-import { inviteMember, revokeInvitation, setApprovalCapability } from "./actions";
+import { inviteMember, revokeInvitation, setAiProcessingConsent, setApprovalCapability } from "./actions";
 
 export const metadata: Metadata = { title: "Miembros" };
 
@@ -21,6 +21,7 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/miemb
   const profile = new Map((profiles ?? []).map((p) => [p.user_id, p]));
   const isOwner = ctx.role === "owner";
   const canInvite = ctx.role === "owner" || ctx.role === "admin";
+  const aiConsent = (ctx.workspace.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent === true;
 
   return (
     <>
@@ -78,6 +79,21 @@ export default async function MembersPage({ params }: PageProps<"/w/[slug]/miemb
           </details>
         </Section>
       )}
+      <Section title="Procesamiento con IA">
+        <p className="mb-3 max-w-prose text-sm text-muted-foreground">
+          Con esto habilitado, las capturas marcadas con &quot;Procesar con IA&quot; se envían a los proveedores (transcripción y
+          Anthropic) para proponer hechos que después se revisan. Sin habilitar, audios y fotos se guardan pero no salen del workspace.
+          Pedí permiso antes de grabar a una persona.
+        </p>
+        {isOwner ? (
+          <ActionForm action={setAiProcessingConsent.bind(null, slug)} className="flex flex-wrap items-center gap-3 space-y-0">
+            <CheckboxField name="ai_processing_consent" label="Habilitar procesamiento con IA en este workspace" defaultChecked={aiConsent} />
+            <SubmitButton variant="outline" className="h-8">Guardar</SubmitButton>
+          </ActionForm>
+        ) : (
+          <Pill>{aiConsent ? "Habilitado" : "Deshabilitado"} · lo cambia el owner</Pill>
+        )}
+      </Section>
     </>
   );
 }

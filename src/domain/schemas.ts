@@ -91,9 +91,6 @@ function refinePlace(v: PlaceInput, ctx: z.RefinementCtx) {
   if ((v.latitude == null) !== (v.longitude == null)) {
     ctx.addIssue({ code: "custom", path: ["latitude"], message: "Latitud y longitud van juntas" });
   }
-  if (v.latitude != null && !v.address_verified) {
-    ctx.addIssue({ code: "custom", path: ["latitude"], message: "Solo se guardan coordenadas de direcciones verificadas" });
-  }
 }
 
 /** Convierte los campos de formulario al formato de la base. */
@@ -110,8 +107,11 @@ export function toPlaceRow(v: PlaceInput & { locality: string | null; province: 
     address_status: status,
     location_source_id: status === "verificada" ? v.location_source_id : null,
     location_verified_at: status === "verificada" ? new Date().toISOString() : null,
-    latitude: status === "verificada" ? v.latitude : null,
-    longitude: status === "verificada" ? v.longitude : null,
+    // Coordenadas sin dirección verificada se aceptan, marcadas como no verificadas (V13 §12).
+    latitude: v.latitude,
+    longitude: v.longitude,
+    location_status: v.latitude == null ? null : status === "verificada" ? ("verified" as const) : ("unverified" as const),
+    location_source: v.latitude == null ? null : "manual",
   };
 }
 

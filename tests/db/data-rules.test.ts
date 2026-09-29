@@ -63,7 +63,7 @@ describe("verificación y fuentes", () => {
 });
 
 describe("ubicación y assets", () => {
-  it("coordenadas solo con dirección verificada y con fuente de ubicación", async () => {
+  it("coordenadas sin dirección verificada, pero siempre con su estado de ubicación (V13 §12)", async () => {
     await expect(
       run(
         `insert into establishments (workspace_id, name, address_text, address_status, latitude, longitude)
@@ -73,14 +73,21 @@ describe("ubicación y assets", () => {
     ).rejects.toThrow(/check/);
     await expect(
       run(
+        `insert into establishments (workspace_id, name, address_text, address_status, latitude, longitude, location_status)
+         values ($1, 'Local', 'Ruta 7 km 1', 'no_verificada', -38.35, -68.79, 'unverified')`,
+        [ws],
+      ),
+    ).resolves.toBeTruthy();
+    await expect(
+      run(
         `insert into establishments (workspace_id, name, address_text, address_status) values ($1, 'Local', 'Ruta 7 km 1', 'verificada')`,
         [ws],
       ),
     ).rejects.toThrow(/check/);
     await expect(
       run(
-        `insert into establishments (workspace_id, name, address_text, address_status, location_source_id, latitude, longitude)
-         values ($1, 'Local', 'Ruta 7 km 1', 'verificada', $2, -38.35, -68.79)`,
+        `insert into establishments (workspace_id, name, address_text, address_status, location_source_id, latitude, longitude, location_status, location_verified_at)
+         values ($1, 'Local', 'Ruta 7 km 1', 'verificada', $2, -38.35, -68.79, 'verified', now())`,
         [ws, sourceId],
       ),
     ).resolves.toBeTruthy();

@@ -66,3 +66,15 @@ export async function revokeInvitation(slug: string, invitationId: string): Prom
   await supabase.from("workspace_invitations").update({ status: "revoked" }).eq("id", invitationId);
   revalidatePath(`/w/${slug}/miembros`);
 }
+
+/** `ai_processing_consent`: sin esto, las capturas se guardan pero no salen hacia proveedores de IA. */
+export async function setAiProcessingConsent(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  const supabase = await createClient();
+  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), ai_processing_consent: fd.get("ai_processing_consent") === "on" };
+  const { data, error } = await supabase.from("workspaces").update({ settings }).eq("id", ctx.workspace.id).select("id");
+  if (error) return { message: dbErrorMessage(error) };
+  if (!data?.length) return { message: "Solo el owner puede cambiar esta configuración." };
+  revalidatePath(`/w/${slug}`, "layout");
+  return { ok: true, message: settings.ai_processing_consent ? "Procesamiento con IA habilitado." : "Procesamiento con IA deshabilitado." };
+}

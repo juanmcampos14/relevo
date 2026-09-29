@@ -107,13 +107,13 @@ isOneToOne: false
                   ]
                 },"assets": {
                   Row: {
-                    "address_status": string,"address_text": string | null,"country": string | null,"created_at": string,"created_by": string | null,"establishment_id": string | null,"id": string,"is_demo": boolean,"kind": string,"latitude": number | null,"locality": string | null,"location_source_id": string | null,"location_verified_at": string | null,"longitude": number | null,"notes": string | null,"operation": string,"owner_company_id": string | null,"price_amount": number | null,"price_currency": string | null,"price_observed_on": string | null,"price_source_id": string | null,"province": string | null,"source_id": string | null,"surface_m2": number | null,"title": string,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "address_status": string,"address_text": string | null,"country": string | null,"created_at": string,"created_by": string | null,"establishment_id": string | null,"id": string,"is_demo": boolean,"kind": string,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"longitude": number | null,"notes": string | null,"operation": string,"owner_company_id": string | null,"price_amount": number | null,"price_currency": string | null,"price_observed_on": string | null,"price_source_id": string | null,"province": string | null,"source_id": string | null,"surface_m2": number | null,"title": string,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "address_status"?: string,"address_text"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"establishment_id"?: string | null,"id"?: string,"is_demo"?: boolean,"kind": string,"latitude"?: number | null,"locality"?: string | null,"location_source_id"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"notes"?: string | null,"operation"?: string,"owner_company_id"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title": string,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "address_status"?: string,"address_text"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"establishment_id"?: string | null,"id"?: string,"is_demo"?: boolean,"kind": string,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"notes"?: string | null,"operation"?: string,"owner_company_id"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title": string,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "address_status"?: string,"address_text"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"establishment_id"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"latitude"?: number | null,"locality"?: string | null,"location_source_id"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"notes"?: string | null,"operation"?: string,"owner_company_id"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title"?: string,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "address_status"?: string,"address_text"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"establishment_id"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"notes"?: string | null,"operation"?: string,"owner_company_id"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title"?: string,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -267,6 +267,56 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "campaigns_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"capture_media": {
+                  Row: {
+                    "capture_id": string,"created_at": string,"duration_ms": number | null,"id": string,"kind": string,"mime_type": string,"size_bytes": number | null,"storage_path": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "capture_id": string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind": string,"mime_type": string,"size_bytes"?: number | null,"storage_path": string,"workspace_id": string
+                  }
+                  Update: {
+                    "capture_id"?: string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind"?: string,"mime_type"?: string,"size_bytes"?: number | null,"storage_path"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "capture_media_workspace_id_capture_id_fkey"
+      columns: ["workspace_id","capture_id"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "capture_media_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"captures": {
+                  Row: {
+                    "ai_consent": boolean,"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "ai_consent"?: boolean,"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "ai_consent"?: boolean,"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "captures_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "captures_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
       referencedRelation: "workspaces"
@@ -479,13 +529,13 @@ isOneToOne: false
                   ]
                 },"establishments": {
                   Row: {
-                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_source_id": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_source_id"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name": string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name": string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_source_id"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name"?: string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name"?: string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1007,6 +1057,9 @@ isOneToOne: false
 "claim_news_refresh":
 { Args: { "p_stale": string,"p_topic": string,"p_ws": string }; Returns: boolean
                            },
+"create_capture":
+{ Args: { "p": Json }; Returns: string
+                           },
 "decide_opportunity":
 { Args: { "p_decision": string,"p_note": string,"p_verdict": string }; Returns: undefined
                            },
@@ -1019,6 +1072,9 @@ isOneToOne: false
 "is_dealflow_stage":
 { Args: { "v": string }; Returns: boolean
                            },
+"is_location_status":
+{ Args: { "s": string }; Returns: boolean
+                           },
 "is_member":
 { Args: { "ws": string }; Returns: boolean
                            },
@@ -1030,6 +1086,9 @@ isOneToOne: false
                            },
 "shares_workspace_with":
 { Args: { "other": string }; Returns: boolean
+                           },
+"storage_workspace":
+{ Args: { "object_name": string }; Returns: string
                            }
           }
           Enums: {

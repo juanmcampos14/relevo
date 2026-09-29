@@ -4,6 +4,16 @@
 
 > RELEVO modela **Realidad → Evidencia → Aprendizaje → Decisión → Acción**. No es `Company → Contact → Deal`.
 
+## North star (01/10/2026)
+
+RELEVO no es un CRM que acumula información: es un **motor de aprendizaje y decisión en territorio**.
+`mundo real → captura → evidencia → comprensión → validación → decisión → acción`
+
+- **C** responde: *"Entendí lo que acabás de capturar."*
+- **D** responde: *"Entiendo cómo esta evidencia se relaciona con todo lo que ya sabemos: qué fortalece, qué contradice, qué sigue siendo hipótesis, qué falta saber y cuál es la próxima validación que más valor aporta."*
+
+Toda funcionalidad nueva se evalúa contra cinco preguntas: **¿qué sabemos? ¿qué creemos? ¿qué se contradice? ¿qué nos falta saber para decidir? ¿qué conviene hacer ahora y por qué?** Si no mejora alguna, no es prioridad. Reglas fijas: **IA propone → humano decide**; ninguna señal, hipótesis o finding pasa a oportunidad sin evidencia suficiente; más datos ≠ más inteligencia.
+
 ## 1. Objetos
 
 | Objeto | Qué es | Ejemplo | Tabla |

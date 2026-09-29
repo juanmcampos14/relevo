@@ -53,7 +53,7 @@ export function resolveTargetEntity(t: TargetEntityRefs): ResolvedEntity | null 
       name: companyName(t.company),
       place: null,
       isDemo: !!t.company.is_demo,
-      verification: t.company.verification_status ?? "hipotesis",
+      verification: t.company.verification_status ?? "unverified",
     };
   }
   if (t.establishment) {
@@ -63,7 +63,7 @@ export function resolveTargetEntity(t: TargetEntityRefs): ResolvedEntity | null 
       name: t.establishment.name,
       place: t.establishment,
       isDemo: !!t.establishment.is_demo,
-      verification: t.establishment.verification_status ?? "hipotesis",
+      verification: t.establishment.verification_status ?? "unverified",
     };
   }
   if (t.asset) {
@@ -73,7 +73,7 @@ export function resolveTargetEntity(t: TargetEntityRefs): ResolvedEntity | null 
       name: t.asset.title,
       place: t.asset,
       isDemo: !!t.asset.is_demo,
-      verification: t.asset.verification_status ?? "hipotesis",
+      verification: t.asset.verification_status ?? "unverified",
       subtype: t.asset.kind,
     };
   }

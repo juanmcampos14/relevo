@@ -1,4 +1,4 @@
-// Reglas de honestidad de datos: nada "confirmado" sin fuente, precio sin fuente/fecha,
+// Reglas de honestidad de datos: nada verificado sin fuente, precio sin fuente/fecha,
 // coordenadas sin dirección verificada, teléfonos/emails sin procedencia, descarte sin motivo.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addMember, asUser, cleanup, createUser, createWorkspace, newPool, type TestUser } from "./harness";
@@ -29,10 +29,10 @@ const run = (sql: string, params: unknown[]) => asUser(pool, user, (c) => c.quer
 describe("verificación y fuentes", () => {
   it("una empresa 'confirmada' exige fuente", async () => {
     await expect(
-      run(`insert into companies (workspace_id, trade_name, verification_status) values ($1, 'X', 'confirmado')`, [ws]),
+      run(`insert into companies (workspace_id, trade_name, verification_status) values ($1, 'X', 'publicly_verified')`, [ws]),
     ).rejects.toThrow(/check/);
     await expect(
-      run(`insert into companies (workspace_id, trade_name, verification_status, source_id) values ($1, 'X', 'confirmado', $2)`, [
+      run(`insert into companies (workspace_id, trade_name, verification_status, source_id) values ($1, 'X', 'publicly_verified', $2)`, [
         ws,
         sourceId,
       ]),

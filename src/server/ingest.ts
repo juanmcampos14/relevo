@@ -75,7 +75,7 @@ export async function ingestFindings(
         evidence: item.evidence ?? null,
         analysis: item.analysis ?? null,
         origin: "research_externo",
-        verification_status: "fuente_publica_sin_verificar",
+        verification_status: "partially_verified",
         dedup_key: dedupKey(url, item.statement),
         ingest_token_id: origin.tokenId ?? null,
         ingest_meta: { source_system: origin.sourceSystem, topic: item.topic ?? null, entity_hint: item.entity_hint ?? null },

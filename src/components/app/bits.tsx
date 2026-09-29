@@ -18,11 +18,12 @@ export function PageHeader({ title, subtitle, actions, back }: { title: ReactNod
 }
 
 const verificationTone: Record<string, string> = {
-  confirmado: "bg-primary/10 text-primary",
-  declarado_por_contacto: "bg-sky-500/10 text-sky-800 dark:text-sky-300",
-  fuente_publica_sin_verificar: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
-  hipotesis: "bg-muted text-muted-foreground",
-  demo: "bg-fuchsia-500/10 text-fuchsia-800 dark:text-fuchsia-300",
+  unverified: "bg-muted text-muted-foreground",
+  partially_verified: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
+  publicly_verified: "bg-sky-500/10 text-sky-800 dark:text-sky-300",
+  field_verified: "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300",
+  contradicted: "bg-destructive/10 text-destructive",
+  stale: "bg-orange-500/10 text-orange-800 dark:text-orange-300",
 };
 
 export function VerificationBadge({ status }: { status: string }) {
@@ -33,11 +34,11 @@ export function VerificationBadge({ status }: { status: string }) {
   );
 }
 
-/** Verificación + marca DEMO sin duplicar cuando el estado ya es "demo". */
+/** Verificación + marca DEMO. */
 export function StatusBadges({ verification, isDemo }: { verification: string; isDemo: boolean }) {
   return (
     <>
-      {!(verification === "demo" && isDemo) && <VerificationBadge status={verification} />}
+      <VerificationBadge status={verification} />
       <DemoBadge show={isDemo} />
     </>
   );
@@ -54,13 +55,13 @@ export function DemoBadge({ show = true }: { show?: boolean }) {
 
 // Color por estado de objetivo; siempre acompaña al texto (nunca color solo).
 const targetTone: Record<string, string> = {
-  identificado: "bg-muted text-muted-foreground border-transparent",
-  por_investigar: "bg-sky-500/10 text-sky-800 border-transparent dark:text-sky-300",
-  por_contactar: "bg-indigo-500/10 text-indigo-800 border-transparent dark:text-indigo-300",
+  investigacion: "bg-muted text-muted-foreground border-transparent",
+  calificacion: "bg-sky-500/10 text-sky-800 border-transparent dark:text-sky-300",
+  contacto_pendiente: "bg-indigo-500/10 text-indigo-800 border-transparent dark:text-indigo-300",
   contactado: "bg-violet-500/10 text-violet-800 border-transparent dark:text-violet-300",
-  visita_programada: "bg-amber-500/15 text-amber-900 border-transparent dark:text-amber-300",
-  visitado: "bg-emerald-500/12 text-emerald-800 border-transparent dark:text-emerald-300",
-  seguimiento: "bg-primary/10 text-primary border-transparent",
+  reunion: "bg-amber-500/15 text-amber-900 border-transparent dark:text-amber-300",
+  diagnostico: "bg-emerald-500/12 text-emerald-800 border-transparent dark:text-emerald-300",
+  oportunidad: "bg-primary/10 text-primary border-transparent",
   descartado: "bg-muted text-muted-foreground line-through border-transparent",
 };
 export function statusTone(status: string) {

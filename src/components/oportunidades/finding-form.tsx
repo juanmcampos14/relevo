@@ -46,7 +46,7 @@ export function FindingForm({
           name="verification_status"
           label="Verificación"
           options={opts(verificationStatus)}
-          defaultValue={origin === "research_externo" ? "fuente_publica_sin_verificar" : visitId ? "declarado_por_contacto" : "hipotesis"}
+          defaultValue={origin === "research_externo" || visitId ? "partially_verified" : "unverified"}
         />
       </div>
       <TextAreaField name="statement" label="Hallazgo" rows={3} placeholder="Una afirmación concreta. Ej.: El encargado dice que tercerizan la lavandería en Neuquén y no están conformes." />

@@ -8,7 +8,8 @@ import { dbErrorMessage, type ActionState } from "@/server/action-result";
 import { formToObject, stopStatusSchema, visitPlanSchema, visitSchema, zodFieldErrors } from "@/domain/schemas";
 
 const readOnly: ActionState = { message: "Tu rol es de solo lectura." };
-const PRE_VISIT = ["identificado", "por_investigar", "por_contactar", "contactado"];
+// Etapas CRM previas a una reunión: agendar una visita lleva a "Reunión"; registrarla, a "Diagnóstico".
+const PRE_VISIT = ["investigacion", "calificacion", "contacto_pendiente", "contactado"];
 
 async function editor(slug: string) {
   const ctx = await getWorkspaceContext(slug);
@@ -52,7 +53,7 @@ export async function addStop(slug: string, planId: string, _: ActionState, fd: 
   });
   if (error) return { message: error.code === "23505" ? "Ese objetivo ya está en la jornada." : dbErrorMessage(error) };
   // Una visita agendada adelanta el estado del objetivo, nunca lo retrocede.
-  await supabase.from("campaign_targets").update({ status: "visita_programada" }).eq("id", targetId).in("status", PRE_VISIT);
+  await supabase.from("campaign_targets").update({ status: "reunion" }).eq("id", targetId).in("status", PRE_VISIT);
   revalidatePath(`/w/${slug}`, "layout");
   return { ok: true, message: "Parada agregada." };
 }
@@ -108,9 +109,9 @@ export async function createVisit(slug: string, _: ActionState, fd: FormData): P
   if (v.stop_id) await supabase.from("visit_stops").update({ status: "realizada" }).eq("id", v.stop_id);
   await supabase
     .from("campaign_targets")
-    .update({ status: "visitado" })
+    .update({ status: "diagnostico" })
     .eq("id", v.target_id)
-    .in("status", [...PRE_VISIT, "visita_programada"]);
+    .in("status", [...PRE_VISIT, "reunion"]);
   revalidatePath(`/w/${slug}`, "layout");
   redirect(`/w/${slug}/agenda/visita/${data.id}?nueva=1`);
 }

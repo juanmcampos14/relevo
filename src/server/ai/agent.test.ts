@@ -19,7 +19,7 @@ function fakeClient(responses: Msg[]) {
 
 function fakeTools(): ToolContext & { drafts: unknown[] } {
   const drafts: unknown[] = [];
-  const row = { id: EST, name: "Parador Ruta 7", address_text: "Ruta 7", locality: "Añelo", address_status: "no_verificada", verification_status: "hipotesis", is_demo: true, notes: null, company_id: null };
+  const row = { id: EST, name: "Parador Ruta 7", address_text: "Ruta 7", locality: "Añelo", address_status: "no_verificada", verification_status: "unverified", is_demo: true, notes: null, company_id: null };
   const empty = { data: [], error: null };
   const chain: Record<string, unknown> = {};
   for (const k of ["select", "eq", "limit", "order", "in", "gte", "or", "ilike"]) chain[k] = () => chain;

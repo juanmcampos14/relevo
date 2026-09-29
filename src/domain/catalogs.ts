@@ -6,12 +6,68 @@ function catalog<const T extends Record<string, string>>(labels: T) {
   return { labels, values, label: (v: string | null | undefined) => (v ? (labels as Record<string, string>)[v] ?? v : "—") };
 }
 
+// Nivel de verificación (docs/04-modelo-canonico.md §3). "Demo" es la marca is_demo;
+// "declarado por contacto" es un origen, no un estado.
 export const verificationStatus = catalog({
-  confirmado: "Confirmado",
-  declarado_por_contacto: "Declarado por contacto",
-  fuente_publica_sin_verificar: "Fuente pública sin verificar",
-  hipotesis: "Hipótesis",
-  demo: "DEMO",
+  unverified: "Sin verificar",
+  partially_verified: "Parcialmente verificado",
+  publicly_verified: "Verificado públicamente",
+  field_verified: "Verificado en campo",
+  contradicted: "Contradicho",
+  stale: "Desactualizado",
+});
+
+export const evidenceOrigin = catalog({
+  field: "Campo",
+  interview: "Entrevista",
+  conversation: "Conversación",
+  website: "Sitio web",
+  public_registry: "Registro público",
+  press: "Prensa",
+  aog: "AOG",
+  crm_import: "CRM (Sheets)",
+  email: "Email",
+  manual: "Carga manual",
+  ai_research: "Investigación IA",
+});
+
+export const evidenceType = catalog({
+  dato: "Dato",
+  declaracion: "Declaración",
+  observacion: "Observación",
+  precio: "Precio",
+  capacidad: "Capacidad operativa",
+  contacto: "Dato de contacto",
+  propiedad: "Propiedad",
+  documento: "Documento",
+  publicacion: "Publicación",
+  otro: "Otro",
+});
+
+/** Días hasta revalidar por tipo de evidencia. P0: 30 para todos (Tano, 29/09); el modelo ya separa por tipo. */
+export const freshnessDays: Record<(typeof evidenceType.values)[number], number> = {
+  dato: 30, declaracion: 30, observacion: 30, precio: 30, capacidad: 30,
+  contacto: 30, propiedad: 30, documento: 30, publicacion: 30, otro: 30,
+};
+
+export const evidenceStance = catalog({
+  supports: "A favor",
+  contradicts: "En contra",
+  contextual: "Contexto",
+});
+
+export const assetPartyRole = catalog({
+  propietario: "Propietario",
+  operador: "Operador",
+  intermediario: "Intermediario",
+  administrador: "Administrador",
+  potencial_comprador: "Potencial comprador",
+  potencial_socio: "Potencial socio",
+});
+
+export const contactKind = catalog({
+  persona: "Persona",
+  canal_institucional: "Canal institucional",
 });
 
 export const campaignStatus = catalog({
@@ -21,14 +77,15 @@ export const campaignStatus = catalog({
   finalizada: "Finalizada",
 });
 
+// Etapas del objetivo en la misión: idioma del CRM (aprobado 29/09).
 export const targetStatus = catalog({
-  identificado: "Identificado",
-  por_investigar: "Por investigar",
-  por_contactar: "Por contactar",
+  investigacion: "Investigación",
+  calificacion: "Calificación",
+  contacto_pendiente: "Contacto pendiente",
   contactado: "Contactado",
-  visita_programada: "Visita programada",
-  visitado: "Visitado",
-  seguimiento: "Seguimiento",
+  reunion: "Reunión",
+  diagnostico: "Diagnóstico",
+  oportunidad: "Oportunidad",
   descartado: "Descartado",
 });
 
@@ -119,8 +176,8 @@ export const role = catalog({
   viewer: "Solo lectura",
 });
 
-/** Estados que necesitan una fuente registrada. */
-export const statusesRequiringSource = new Set(["confirmado", "declarado_por_contacto", "fuente_publica_sin_verificar"]);
+/** Todo estado distinto de "sin verificar" necesita una fuente registrada. */
+export const statusesRequiringSource: ReadonlySet<string> = new Set(verificationStatus.values.filter((v) => v !== "unverified"));
 
 // --- Corte B -----------------------------------------------------------------------
 export const findingKind = catalog({

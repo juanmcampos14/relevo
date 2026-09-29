@@ -322,13 +322,13 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
   const notFound = { content: "No encontrado o sin acceso", isError: true };
   const claimsAndFindings = async (fk: "company_id" | "establishment_id" | "asset_id") => {
     const [{ data: claims }, { data: findings }, { data: targets }, { data: contacts }] = await Promise.all([
-      db.from("claims").select("id, statement, verification_status, next_verification_step, sources(id, title, url)").eq(fk, id),
+      db.from("evidence").select("id, statement, quote, evidence_type, origin_kind, verification_status, observed_at, revalidate_after, next_verification_step, sources(id, title, url)").eq(fk, id).limit(40),
       db.from("findings").select("id, kind, statement, verification_status, review_status").eq(fk, id).limit(30),
       db.from("campaign_targets").select("id, status, next_action, campaigns(id, name), visits(id, visited_at, notes)").eq(fk, id),
       db.from("contact_links").select("relation, contacts(id, full_name, role_title, contact_permission, verification_status)").eq(fk, id),
     ]);
     return {
-      claims: (claims ?? []).map((c) => ({ statement: c.statement, verification: c.verification_status, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
+      evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
       findings: (findings ?? []).map((f) => ({ ref: ref("finding", f.id), kind: f.kind, statement: f.statement, verification: f.verification_status, review: f.review_status })),
       campaigns: (targets ?? []).map((t) => ({
         campaign: t.campaigns ? { ref: ref("campaign", t.campaigns.id), name: t.campaigns.name } : null,

@@ -220,7 +220,7 @@ export async function decideDraft(slug: string, draftId: string, verdict: "aprob
         statement: p.data.statement!,
         analysis: p.data.rationale,
         origin: "ia",
-        verification_status: "hipotesis",
+        verification_status: "unverified",
         dedup_key: `ai:${draftId}`,
         ...(k === "company" ? { company_id: eid } : k === "establishment" ? { establishment_id: eid } : k === "asset" ? { asset_id: eid } : {}),
       })

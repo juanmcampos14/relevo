@@ -62,7 +62,7 @@ flowchart LR
 | "Ficha comercial; validar …" (texto libre) | `partially_verified` | sí (el texto queda como pregunta abierta) |
 | — (calculado) | `stale` cuando pasan más de 30 días sin verificar (umbral de CONFIG) | — |
 
-Migración de datos existentes en RELEVO: `confirmado` → `field_verified` si viene de visita/entrevista, si no `publicly_verified`; `declarado_por_contacto` → `partially_verified` + origen "contacto"; `fuente_publica_sin_verificar` → `unverified`; `hipotesis` → `unverified`; `demo` → marca `is_demo`.
+Migración de datos existentes en RELEVO: ver docs/04-modelo-canonico.md §10.
 
 ## 5. Para aprobar: política de conflictos durante la transición
 

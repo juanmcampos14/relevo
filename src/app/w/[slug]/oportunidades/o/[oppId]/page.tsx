@@ -52,7 +52,7 @@ export default async function OpportunityPage({ params }: PageProps<"/w/[slug]/o
   const linked = new Set(findings.map((f) => f.id));
   const linkable = (approvedAll ?? []).filter((f) => !linked.has(f.id));
   const entities = new Map(findings.flatMap((f) => (f.entity ? [[`${f.entity.kind}:${f.entity.id}`, f.entity] as const] : [])));
-  const allUnverified = findings.length > 0 && findings.every((f) => f.verification_status !== "confirmado");
+  const allUnverified = findings.length > 0 && findings.every((f) => !["publicly_verified", "field_verified"].includes(f.verification_status));
   const openApproval = decisions.find((d) => d.kind === "aprobar_oportunidad" && (d.status === "requested" || d.status === "deferred"));
   const memberOptions = (members ?? []).map((m) => ({ value: m.user_id, label: names.get(m.user_id) ?? "—" }));
 
@@ -80,7 +80,7 @@ export default async function OpportunityPage({ params }: PageProps<"/w/[slug]/o
       {allUnverified && (
         <p className="mb-5 flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          Ningún hallazgo que la sustenta está confirmado: todo es declarado, público sin verificar o hipótesis. Se puede decidir igual, pero con esa advertencia.
+          Ningún hallazgo que la sustenta está verificado (en campo o públicamente): todo es parcial o sin verificar. Se puede decidir igual, pero con esa advertencia.
         </p>
       )}
 

@@ -96,7 +96,7 @@ describe("ingesta del Morning Brief", () => {
     );
     expect(rows).toHaveLength(2);
     expect(new Set(rows.map((r) => r.url))).toEqual(new Set(["https://medio.example/nota-1"]));
-    expect(rows.every((r) => r.review_status === "pendiente_revision" && r.origin === "research_externo" && r.verification_status === "fuente_publica_sin_verificar")).toBe(true);
+    expect(rows.every((r) => r.review_status === "pendiente_revision" && r.origin === "research_externo" && r.verification_status === "partially_verified")).toBe(true);
     const opps = await pool.query(`select 1 from opportunities where workspace_id = $1`, [ws]);
     expect(opps.rowCount).toBe(0);
   });

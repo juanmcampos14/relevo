@@ -99,7 +99,6 @@ export function EntityFields({
             <SelectField name="kind" label="Tipo de activo" options={opts(assetKind)} defaultValue={str("kind") || "terreno"} />
             <SelectField name="operation" label="Operación" options={opts(assetOperation)} defaultValue={str("operation") || "desconocida"} />
             <TextField name="surface_m2" label="Superficie (m²)" inputMode="decimal" defaultValue={d.surface_m2 != null ? String(d.surface_m2) : ""} />
-            <SelectField name="owner_company_id" label="Titular (si consta)" options={companies} placeholder="— Desconocido —" defaultValue={str("owner_company_id")} />
           </div>
           <PlaceFields d={d} />
           <fieldset className="space-y-3 rounded-md border p-3">

@@ -66,7 +66,7 @@ Prioridades determinísticas en P0. Brújula: **"¿qué debería hacer ahora y p
 | Antes | Ahora |
 |---|---|
 | `claims` (lo que sabemos de una entidad) | `evidence` (se migran las filas) |
-| Verificación `confirmado / declarado_por_contacto / fuente_publica_sin_verificar / hipotesis / demo` | `field_verified` o `publicly_verified` / `partially_verified` + origen conversación / `unverified` / `unverified` / `is_demo` |
+| Verificación `confirmado / declarado_por_contacto / fuente_publica_sin_verificar / hipotesis / demo` | `publicly_verified` (`field_verified` si viene de una visita) / `partially_verified` / `partially_verified` / `unverified` / `unverified` + `is_demo` |
 | Estados del objetivo (`identificado … descartado`) | Etapas del CRM |
 | Morning Brief y "pasar noticia a hallazgo" crean findings pendientes | Crean **propuestas de evidencia** (incremento D). Hasta entonces se mantienen como están |
 | `ai_action_drafts` (borradores del chat) | Se unifican en `proposals` (incremento C) |

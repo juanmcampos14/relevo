@@ -1,26 +1,7 @@
 // Validación de formularios (servidor). Replica las reglas de la base para dar
 // mensajes claros antes de que un CHECK de Postgres rechace el registro.
 import { z } from "zod";
-import {
-  addressStatus,
-  assetKind,
-  assetOperation,
-  campaignStatus,
-  companyKind,
-  consentStatus,
-  contactPermission,
-  contactRelation,
-  dealflowStage,
-  entityKind,
-  findingKind,
-  opportunityRoute,
-  taskStatus,
-  sourceKind,
-  statusesRequiringSource,
-  stopStatus,
-  targetStatus,
-  verificationStatus,
-} from "./catalogs";
+import { addressStatus, assetKind, assetOperation, campaignStatus, companyKind, consentStatus, contactPermission, contactRelation, dealflowStage, entityKind, findingKind, opportunityRoute, taskStatus, sourceKind, statusesRequiringSource, stopStatus, targetStatus, verificationStatus, evidenceType, evidenceOrigin, contactKind } from "./catalogs";
 
 const opt = z.string().trim().optional().transform((v) => (v ? v : null));
 const optUuid = z.uuid().optional().or(z.literal("")).transform((v) => (v ? v : null));
@@ -48,7 +29,7 @@ const bool = z
 const ids = z.array(z.uuid()).default([]);
 
 const verification = {
-  verification_status: z.enum(verificationStatus.values).default("hipotesis"),
+  verification_status: z.enum(verificationStatus.values).default("unverified"),
   source_id: optUuid,
 };
 
@@ -194,7 +175,6 @@ export const assetSchema = z
     price_currency: z.enum(["ARS", "USD"]).optional().or(z.literal("")).transform((v) => (v ? v : null)),
     price_observed_on: optDate,
     price_source_id: optUuid,
-    owner_company_id: optUuid,
     establishment_id: optUuid,
     notes: opt,
     is_demo: bool,
@@ -228,6 +208,7 @@ export const contactSchema = z
       .optional()
       .or(z.literal(""))
       .transform((v) => (v ? v : null)),
+    contact_kind: z.enum(contactKind.values).default("persona"),
     contact_permission: z.enum(contactPermission.values).default("sin_definir"),
     introduced_by: opt,
     notes: opt,
@@ -248,9 +229,12 @@ export const contactSchema = z
     }
   });
 
-export const claimSchema = z
+export const evidenceSchema = z
   .object({
-    statement: z.string().trim().min(1, "Escribí la afirmación"),
+    statement: z.string().trim().min(1, "Escribí qué sabemos"),
+    quote: opt,
+    evidence_type: z.enum(evidenceType.values).default("dato"),
+    origin_kind: z.enum(evidenceOrigin.values).default("manual"),
     entity_kind: z.enum([...entityKind.values, "contact"]),
     entity_id: z.uuid(),
     next_verification_step: opt,
@@ -260,7 +244,7 @@ export const claimSchema = z
 
 export const targetFieldsSchema = z
   .object({
-    status: z.enum(targetStatus.values).default("identificado"),
+    status: z.enum(targetStatus.values).default("investigacion"),
     priority: z.coerce.number().int().min(1).max(3).default(2),
     next_action: opt,
     next_action_due: optDate,
@@ -335,7 +319,7 @@ export const findingSchema = z
     statement: z.string().trim().min(1, "Escribí el hallazgo"),
     evidence: opt,
     analysis: opt,
-    verification_status: z.enum(verificationStatus.values).default("hipotesis"),
+    verification_status: z.enum(verificationStatus.values).default("unverified"),
     source_id: z.uuid({ message: "Todo hallazgo necesita una fuente" }),
     visit_id: optUuid,
     campaign_id: optUuid,

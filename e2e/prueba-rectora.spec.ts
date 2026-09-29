@@ -100,7 +100,7 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   await page.waitForURL(/\/oportunidades\/o\/[0-9a-f-]{36}$/);
   const oppUrl = page.url();
   await expect(page.getByText("Candidata", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Ningún hallazgo que la sustenta está confirmado/)).toBeVisible();
+  await expect(page.getByText(/Ningún hallazgo que la sustenta está verificado/)).toBeVisible();
   await page.getByRole("button", { name: "Pedir aprobación" }).click();
   await toast(page, /Aprobación solicitada/);
 

@@ -42,6 +42,12 @@ describe("empresas", () => {
     expect(m.values.notes).toContain("Ficha comercial");
   });
 
+  it("el detalle del estado no se pierde: pasa a evidence_note", () => {
+    const m = mapCompany(row("EMPRESAS", { "ID anterior": "AN-0054", ID: "AN-0054", "Empresa / establecimiento": "Modular X", "Estado de evidencia": "Verificado públicamente · expositor AOG 2026 + operación Neuquén" }));
+    expect(m.values).toMatchObject({ verification_status: "publicly_verified", evidence_note: "expositor AOG 2026 + operación Neuquén" });
+    expect(mapCompany(row("EMPRESAS", { "ID anterior": "AN-1", ID: "AN-1", "Empresa / establecimiento": "Y", "Estado de evidencia": "Pre-mapeado" })).values.evidence_note).toBeNull();
+  });
+
   it("mapping de estados aprobado", () => {
     expect(mapEvidenceStatus("Pre-mapeado").status).toBe("unverified");
     expect(mapEvidenceStatus("No verificado").status).toBe("unverified");

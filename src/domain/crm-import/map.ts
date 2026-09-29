@@ -41,6 +41,8 @@ export type CompanyValues = {
   drive_folder_url: string | null;
   last_verified_on: string | null;
   source_ref: string | null;
+  /** Lo que el CRM dice sobre la verificación además del estado ("expositor AOG 2026 + operación Neuquén"). */
+  evidence_note: string | null;
 };
 
 export type ContactValues = {
@@ -136,6 +138,17 @@ export function mapPriority(v: string | null): 1 | 2 | 3 | null {
 }
 
 /** Estado de evidencia del CRM → verificación canónica (mapping aprobado por Tano el 29/09). */
+/** Detalle después del estado: "Verificado públicamente · expositor AOG 2026" → "expositor AOG 2026". */
+export function evidenceDetail(v: string | null): string | null {
+  const t = txt(v);
+  if (!t) return null;
+  const { status, freeText } = mapEvidenceStatus(t);
+  if (freeText) return t;
+  if (status !== "publicly_verified") return null;
+  const detail = t.replace(/^verificado p[uú]blicamente\s*[·:\-–—]?\s*/i, "").trim();
+  return detail || null;
+}
+
 export function mapEvidenceStatus(v: string | null): { status: string; freeText: boolean } {
   const t = txt(v);
   if (!t) return { status: "unverified", freeText: false };
@@ -196,7 +209,7 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
       code: "fuente_texto_libre",
       severity: "info",
       field: "Fuente ID",
-      message: `"Fuente ID" no es un SRC: "${sourceRef}". Se registra como fuente citada por el CRM (sin verificar por nosotros).`,
+      message: `"Fuente ID" no es un SRC: "${sourceRef}". Se registra como fuente citada por el CRM (sin revisarla nosotros).`,
     });
   }
 
@@ -244,6 +257,7 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
       drive_folder_url: toUrl(txt(v["Carpeta expediente URL"]) ?? txt(v["Carpeta expediente URL#link"])),
       last_verified_on: parseDate(v["Última verificación"]),
       source_ref: sourceRef,
+      evidence_note: evidenceDetail(v["Estado de evidencia"]),
     },
   };
 }

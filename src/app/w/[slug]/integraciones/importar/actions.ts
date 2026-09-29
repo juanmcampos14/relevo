@@ -85,7 +85,9 @@ export async function applyImport(slug: string, batchId: string): Promise<Action
   if (res.errors.length) {
     return { message: `Se aplicaron ${res.applied} filas; ${res.errors.length} con error: ${res.errors.map((e) => `${e.external_id} (${e.message})`).join(" · ")}` };
   }
-  return { ok: true, message: res.applied ? `Listo: ${res.applied} filas escritas en RELEVO.` : "No había filas aprobadas por aplicar." };
+  if (res.applied) return { ok: true, message: `Listo: ${res.applied} filas escritas en RELEVO.` };
+  if (res.unchanged) return { ok: true, message: `Lote cerrado: ${res.unchanged} registros sin cambios (procedencia actualizada).` };
+  return { ok: true, message: "No había filas aprobadas por aplicar." };
 }
 
 export async function discardImport(slug: string, batchId: string): Promise<void> {

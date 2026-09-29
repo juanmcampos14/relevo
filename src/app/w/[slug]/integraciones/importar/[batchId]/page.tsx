@@ -81,6 +81,8 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
   const rows = (raw ?? []) as unknown as RowView[];
   const pending = rows.filter((r) => r.decision === "pendiente");
   const toApply = rows.filter((r) => r.decision === "aprobada" && !r.applied_at && r.action !== "sin_cambios");
+  // Las filas sin cambios también se confirman: actualizan la procedencia (fecha de reimportación).
+  const unconfirmed = rows.filter((r) => r.decision === "aprobada" && !r.applied_at && r.action === "sin_cambios");
   const applied = rows.filter((r) => r.applied_at && r.action !== "sin_cambios");
   const rejected = rows.filter((r) => r.decision === "rechazada");
   const unchanged = rows.filter((r) => r.action === "sin_cambios");
@@ -116,7 +118,9 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
             <SubmitButton variant="outline">Aprobar las filas sin nada que decidir</SubmitButton>
           </ActionForm>
           <ActionForm action={applyImport.bind(null, slug, batchId)} className="space-y-0">
-            <SubmitButton disabled={!toApply.length}>Escribir {toApply.length} aprobadas en RELEVO</SubmitButton>
+            <SubmitButton disabled={!toApply.length && !unconfirmed.length}>
+              {toApply.length ? `Escribir ${toApply.length} aprobadas en RELEVO` : "Cerrar lote (sin cambios)"}
+            </SubmitButton>
           </ActionForm>
           <form action={discardImport.bind(null, slug, batchId)}>
             <button className="h-9 px-2 text-sm text-muted-foreground hover:underline">Descartar lote</button>
@@ -200,7 +204,7 @@ function RowCard({ r, slug, editable }: { r: RowView; slug: string; editable: bo
               {i.proposal && i.severity === "revisar" && (
                 editable ? (
                   <fieldset className="flex flex-wrap gap-x-4 gap-y-1 pl-6 text-sm">
-                    <legend className="sr-only">{i.message}</legend>
+                    <legend className="sr-only">Decisión sobre este punto</legend>
                     <label className="flex min-h-9 items-center gap-2"><input type="radio" name={`issue-${idx}`} value="aplicar" defaultChecked={r.resolution.issues?.[idx] === "aplicar"} className="size-4 accent-primary" />{i.proposal.label}</label>
                     <label className="flex min-h-9 items-center gap-2"><input type="radio" name={`issue-${idx}`} value="ignorar" defaultChecked={r.resolution.issues?.[idx] === "ignorar"} className="size-4 accent-primary" />Dejar como viene</label>
                   </fieldset>

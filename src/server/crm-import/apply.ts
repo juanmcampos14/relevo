@@ -71,6 +71,19 @@ async function crmSourceId(db: Db, workspaceId: string): Promise<string> {
   return created.id;
 }
 
+/** Fuente que el CRM cita en texto libre: se registra una vez (tipo "crm") y se reutiliza. */
+async function citedSourceId(db: Db, workspaceId: string, text: string, externalId: string): Promise<string> {
+  const { data } = await db.from("sources").select("id").eq("kind", "crm").eq("title", text).maybeSingle();
+  if (data) return data.id;
+  const { data: created, error } = await db
+    .from("sources")
+    .insert({ workspace_id: workspaceId, kind: "crm", title: text, reference: `Citada por el CRM en ${externalId}`, notes: "Fuente mencionada en el CRM de Sheets; RELEVO todavía no la revisó." })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return created.id;
+}
+
 async function verticalId(db: Db, workspaceId: string, name: string, cache: Map<string, string>): Promise<string> {
   const key = fold(name);
   if (cache.has(key)) return cache.get(key)!;
@@ -92,7 +105,7 @@ async function upsertIgnore<T extends keyof Database["public"]["Tables"]>(db: Db
   if (error) throw error;
 }
 
-export type ApplyResult = { applied: number; errors: { external_id: string; message: string }[] };
+export type ApplyResult = { applied: number; unchanged: number; errors: { external_id: string; message: string }[] };
 
 export async function applyBatch(db: Db, workspaceId: string, batchId: string): Promise<ApplyResult> {
   const { data: raw } = await db
@@ -105,7 +118,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
   const ctx = await loadStageContext(db, workspaceId);
   const crmSource = await crmSourceId(db, workspaceId);
   const verticals = new Map<string, string>();
-  const result: ApplyResult = { applied: 0, errors: [] };
+  const result: ApplyResult = { applied: 0, unchanged: 0, errors: [] };
   const evidenceLater: { row: Row; ids: EntityIds; v: Record<string, unknown> }[] = [];
 
   const refOf = (type: EntityType, ext: unknown) => (typeof ext === "string" ? ctx.refs.get(`${type}:${ext.toUpperCase()}`) : undefined);
@@ -130,6 +143,33 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
     ctx.refs.set(`${row.entity_type}:${row.external_id.toUpperCase()}`, { external_id: row.external_id, entity_type: row.entity_type, entity_id: entityId, last_values: last_values as Record<string, unknown> });
   };
 
+  // Lo que la fila del CRM dice además de sus campos: la fuente citada en texto libre y el detalle del
+  // estado de verificación. Idempotente: se completa también en reimportaciones sin cambios.
+  const ensureCompanyDerived = async (row: Row, v: Record<string, unknown>, ids: EntityIds, companyId: string) => {
+    const ref = typeof v.source_ref === "string" ? v.source_ref.trim() : "";
+    if (ref && !SRC_ID.test(ref) && !ids.cited_source) {
+      ids.cited_source = await citedSourceId(db, workspaceId, ref, row.external_id);
+      await db.from("companies").update({ source_id: ids.cited_source }).eq("id", companyId).eq("source_id", crmSource);
+    }
+    if (typeof v.evidence_note === "string" && v.evidence_note && !ids.status_evidence) {
+      ids.status_evidence = crypto.randomUUID();
+      const source = ids.cited_source ?? (SRC_ID.test(ref) ? refOf("source", ref)?.entity_id : undefined) ?? crmSource;
+      const observed = (v.last_verified_on as string | null) ?? new Date().toISOString().slice(0, 10);
+      await upsertIgnore(db, "evidence", {
+        id: ids.status_evidence,
+        workspace_id: workspaceId,
+        statement: v.evidence_note,
+        evidence_type: "dato",
+        origin_kind: /aog/i.test(`${v.evidence_note} ${ref}`) ? "aog" : "crm_import",
+        verification_status: (v.verification_status as string) ?? "unverified",
+        observed_at: observed,
+        revalidate_after: revalidateAfter(observed, "dato"),
+        source_id: source,
+        company_id: companyId,
+      });
+    }
+  };
+
   for (const row of rows) {
     try {
       const v = finalValues(row);
@@ -139,6 +179,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
       const entityId = row.target_entity_id;
 
       if (row.action === "sin_cambios") {
+        if (row.entity_type === "company" && ids.company) await ensureCompanyDerived(row, v, ids, entityId!);
         await saveRef(row, entityId!, ids);
       } else if (row.entity_type === "source") {
         const sourceRow = {
@@ -228,6 +269,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
             }
           }
           ids.company = companyId;
+          await ensureCompanyDerived(row, v, ids, companyId);
           await saveRef(row, companyId, ids);
         }
       } else if (row.entity_type === "contact") {
@@ -279,7 +321,8 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
 
       const { error } = await db.from("import_rows").update({ applied_at: new Date().toISOString() }).eq("id", row.id);
       if (error) throw error;
-      result.applied++;
+      if (row.action === "sin_cambios") result.unchanged++;
+      else result.applied++;
     } catch (e) {
       result.errors.push({ external_id: row.external_id, message: (e as { message?: string }).message ?? String(e) });
     }

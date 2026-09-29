@@ -32,7 +32,19 @@ export const COMPARED: Record<EntityType, readonly string[]> = {
 };
 
 /** Ids de las entidades RELEVO que representan una fila del CRM (guardados en external_refs.last_values._ids). */
-export type EntityIds = { company?: string; target?: string; establishment?: string; contact?: string; task?: string; source?: string; evidence?: string };
+export type EntityIds = {
+  company?: string;
+  target?: string;
+  establishment?: string;
+  contact?: string;
+  task?: string;
+  source?: string;
+  evidence?: string;
+  /** Fuente citada en texto libre por el CRM ("AOG Patagonia 2026 / sitio oficial"). */
+  cited_source?: string;
+  /** Evidencia con el detalle del estado de verificación del CRM. */
+  status_evidence?: string;
+};
 
 export type StagedPayload = { values: Record<string, unknown>; ids: EntityIds };
 
@@ -164,9 +176,14 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
   const inBatch = (type: EntityType, ext: string | null) =>
     !!ext && (ctx.refs.has(refKey(type, ext)) || { company: companies, contact: contacts, task: tasks, source: sources }[type].some((m) => m.externalId.toUpperCase() === ext.toUpperCase()));
   const ownerIssue = (name: string | null): Issue[] => {
-    const { unknown } = resolveOwners(name, ctx.members);
+    const { ids, unknown } = resolveOwners(name, ctx.members);
     return unknown.length
-      ? [{ code: "responsable_desconocido", severity: "info", field: "Responsable", message: `No hay un miembro del workspace que coincida con "${unknown.join(", ")}". Queda sin asignar (se puede asignar después).` }]
+      ? [{
+          code: "responsable_desconocido",
+          severity: "info",
+          field: "Responsable",
+          message: `No hay un miembro del workspace que coincida con "${unknown.join(", ")}": ${ids.length ? "se asigna a quien sí es miembro" : "queda sin asignar"} (se puede cambiar después).`,
+        }]
       : [];
   };
 

@@ -32,6 +32,10 @@ function workbook(over: { hotelNext?: string; hotelNotes?: string } = {}): Parse
           "Estado de evidencia": "Fuente pública pendiente revalidación", "Fuente ID": "SRC-9001", Responsable: "Tano",
           "Próxima acción": over.hotelNext ?? "Identificar decisor", "Fecha próxima acción": "05/10/2026", Notas: over.hotelNotes ?? "Nota original",
         }),
+        r("EMPRESAS", 58, {
+          "ID anterior": "AN-9054", ID: "AN-9054", "Empresa / establecimiento": "Modular Prueba", Prioridad: "Alta", Responsable: "Tano",
+          "Estado de evidencia": "Verificado públicamente · expositor AOG 2026 + operación Neuquén", "Fuente ID": `AOG Patagonia 2026 / sitio oficial ${RUN}`, "Última verificación": "2026-09-29",
+        }),
         r("EMPRESAS", 45, { "ID anterior": "AN-9041", ID: "AN-9041", "Empresa / establecimiento": "Constructora Prueba", Sector: "Contratista industrial", Prioridad: "Media", "Teléfono público": "https://constructora.example/" }),
       ],
       contacts: [r("RED | CONTACTOS", 9, { ID: "CT-9005", Nombre: "Administración (cargo; persona por identificar)", "Empresa ID": "AN-9023", Cargo: "Administración", "Acceso / vínculo": "Buzón institucional", Correo: "admin@hotel.example", "Fuente / referencia": "SRC-9001" })],
@@ -82,7 +86,7 @@ describe("importador del CRM", () => {
     first = await stageImport(db, ws, workbook(), { fileName: "crm.xlsx", sha256: "a" });
     const rows = await rowsOf(first);
     expect(rows.map((x) => `${x.entity_type}:${x.external_id}:${x.action}`).sort()).toEqual([
-      "company:AN-9023:crear", "company:AN-9041:crear", "contact:CT-9005:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "task:ACT-9003:crear",
+      "company:AN-9023:crear", "company:AN-9041:crear", "company:AN-9054:crear", "contact:CT-9005:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "task:ACT-9003:crear",
     ]);
     const codes = rows.flatMap((x) => (x.issues as { code: string }[]).map((i) => `${x.external_id}:${i.code}`));
     expect(codes).toEqual(expect.arrayContaining(["AN-9041:dato_en_campo_incorrecto", "CT-9005:canal_institucional", "SRC-9004:fuente_sin_entidad", "ACT-9003:responsable_compartido", "ACT-9003:responsable_desconocido"]));
@@ -100,7 +104,13 @@ describe("importador del CRM", () => {
     await approveAll(first);
     const res = await applyBatch(db, ws, first);
     expect(res.errors).toEqual([]);
-    expect(res.applied).toBe(6);
+    expect(res.applied).toBe(7);
+
+    // Estado con detalle + fuente en texto libre: fuente citada por el CRM + evidencia, sin perder nada.
+    const { data: modular } = await db.from("companies").select("id, verification_status, sources(kind, title)").eq("trade_name", "Modular Prueba").single();
+    expect(modular).toMatchObject({ verification_status: "publicly_verified", sources: { kind: "crm", title: `AOG Patagonia 2026 / sitio oficial ${RUN}` } });
+    const { data: mev } = await db.from("evidence").select("statement, origin_kind, verification_status, observed_at").eq("company_id", modular!.id);
+    expect(mev).toEqual([{ statement: "expositor AOG 2026 + operación Neuquén", origin_kind: "aog", verification_status: "publicly_verified", observed_at: "2026-09-29T00:00:00+00:00" }]);
 
     const { data: hotel } = await db.from("companies").select("id, trade_name, activity, verification_status, source_id, sources(title)").eq("trade_name", "Hotel Prueba").single();
     expect(hotel).toMatchObject({ activity: "Hotel + viandas", verification_status: "partially_verified", sources: { title: "Hotel Prueba, ficha pública" } });
@@ -121,16 +131,21 @@ describe("importador del CRM", () => {
     const { data: fixed } = await db.from("companies").select("website, public_phone").eq("trade_name", "Constructora Prueba").single();
     expect(fixed).toEqual({ website: "https://constructora.example/", public_phone: null });
     const { count: refs } = await db.from("external_refs").select("id", { count: "exact", head: true });
-    expect(refs).toBe(6);
+    expect(refs).toBe(7);
   });
 
   it("reimportar el mismo archivo no duplica nada", async () => {
     const again = await stageImport(db, ws, workbook(), { fileName: "crm.xlsx", sha256: "a" });
     const rows = await rowsOf(again);
     expect(new Set(rows.map((x) => x.action))).toEqual(new Set(["sin_cambios"]));
-    await applyBatch(db, ws, again);
+    const closed = await applyBatch(db, ws, again);
+    expect(closed).toMatchObject({ applied: 0, unchanged: 7, errors: [] });
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });
-    expect(count).toBe(2);
+    expect(count).toBe(3);
+    const { count: ev } = await db.from("evidence").select("id", { count: "exact", head: true });
+    expect(ev).toBe(2);
+    const { count: cited } = await db.from("sources").select("id", { count: "exact", head: true }).eq("kind", "crm").like("title", "AOG Patagonia%");
+    expect(cited).toBe(1);
   });
 
   it("editado en RELEVO + cambiado en el Sheet: conflicto campo por campo; lo que solo cambió el Sheet se actualiza", async () => {

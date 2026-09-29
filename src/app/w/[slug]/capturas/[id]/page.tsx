@@ -59,11 +59,17 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
   const proposals = (rawProposals ?? []) as unknown as Proposal[];
 
   const findingIds = [...new Set(proposals.flatMap((p) => ((p.payload.related_findings as { finding_id: string }[] | undefined) ?? []).map((r) => r.finding_id)))];
-  const [{ data: signed }, { data: people }, { data: findings }] = await Promise.all([
+  const [{ data: signed }, { data: people }, { data: findings }, { data: transcripts }] = await Promise.all([
     c.capture_media.length ? supabase.storage.from(CAPTURE_BUCKET).createSignedUrls(c.capture_media.map((m) => m.storage_path), 3600) : Promise.resolve({ data: [] }),
     supabase.from("profiles").select("user_id, display_name, email").in("user_id", [c.captured_by, ...proposals.map((p) => p.decided_by)].filter((x): x is string => !!x)),
     findingIds.length ? supabase.from("findings").select("id, statement").in("id", findingIds) : Promise.resolve({ data: [] }),
+    supabase.from("transcripts").select("capture_media_id, status, text, utterances, error, provider, model").eq("capture_id", id),
   ]);
+  const transcriptOf = new Map((transcripts ?? []).map((t) => [t.capture_media_id, t]));
+  const mediaUrl = new Map(c.capture_media.map((m) => [m.id, urlOf_(m.storage_path)]));
+  function urlOf_(path: string) {
+    return (signed ?? []).find((s) => s.path === path)?.signedUrl ?? null;
+  }
   const urlOf = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
   const nameOf = new Map((people ?? []).map((p) => [p.user_id, p.display_name || p.email]));
   const findingText = new Map((findings ?? []).map((f) => [f.id, f.statement]));
@@ -93,10 +99,13 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
                     <Image src={url} alt="Foto de la captura" fill unoptimized className="object-cover" sizes="7rem" />
                   </a>
                 ) : (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <Mic className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <audio controls preload="none" src={url} className="h-10 max-w-[16rem]" />
-                    {m.duration_ms != null && <span className="text-xs text-muted-foreground">{formatDuration(m.duration_ms)}</span>}
+                  <div key={m.id} className="w-full space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Mic className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <audio controls preload="metadata" src={url} className="h-10 w-full max-w-sm" />
+                      {m.duration_ms != null && <span className="text-xs text-muted-foreground">{formatDuration(m.duration_ms)}</span>}
+                    </div>
+                    <Transcript t={transcriptOf.get(m.id)} url={url} />
                   </div>
                 );
               })}
@@ -142,7 +151,7 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
               </h3>
               <ul className="space-y-3">
                 {items.map((p) => (
-                  <ProposalCard key={p.id} p={p} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(p.decided_by ?? "")} byKey={byKey} findingText={findingText} />
+                  <ProposalCard key={p.id} p={p} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(p.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} />
                 ))}
               </ul>
             </div>
@@ -173,14 +182,17 @@ function resultLink(p: Proposal, slug: string): ReactNode {
   return href ? <Link href={href} className="text-sm text-primary hover:underline">Abrir</Link> : null;
 }
 
-function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText }: {
+function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaUrl }: {
   p: Proposal;
   slug: string;
   editable: boolean;
   decidedBy?: string;
   byKey: Map<string, Proposal>;
   findingText: Map<string, string>;
+  mediaUrl: Map<string, string | null>;
 }) {
+  const audio = p.payload.audio as { capture_media_id: string; start_ms: number } | undefined;
+  const audioUrl = audio ? mediaUrl.get(audio.capture_media_id) : null;
   const v = { ...p.payload, ...(p.final_payload ?? {}) };
   const open = editable && p.status === "propuesta";
   const personLabel = (key: unknown) => {
@@ -235,8 +247,14 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText }: {
       {p.quote && (
         <blockquote className="flex gap-2 border-l-2 pl-3 text-sm text-muted-foreground italic">
           <Quote className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span>De la nota: “{p.quote}”</span>
+          <span>{audio ? "Del audio" : "De la nota"}: “{p.quote}”</span>
         </blockquote>
+      )}
+      {audio && audioUrl && (
+        <a href={`${audioUrl}#t=${Math.floor(audio.start_ms / 1000)}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 text-sm text-primary hover:underline">
+          <Mic className="size-4" aria-hidden="true" />
+          Escuchar desde {formatDuration(audio.start_ms)}
+        </a>
       )}
 
       {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "person") && (
@@ -325,5 +343,28 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="font-medium">{label}</span>
       {children}
     </label>
+  );
+}
+
+function Transcript({ t, url }: { t?: { status: string; text: string | null; utterances: unknown; error: string | null }; url: string }) {
+  if (!t) return <p className="text-xs text-muted-foreground">Sin transcribir todavía.</p>;
+  if (t.status === "error") return <p className="text-xs text-destructive">Transcripción: {t.error}</p>;
+  const segs = (t.utterances as { start_ms: number; text: string }[] | null) ?? [];
+  return (
+    <details open className="rounded-lg bg-muted/50 p-3 text-sm">
+      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Transcripción automática (puede tener errores)</summary>
+      {segs.length ? (
+        <ol className="mt-2 space-y-1">
+          {segs.map((s, i) => (
+            <li key={i} className="flex gap-2">
+              <a href={`${url}#t=${Math.floor(s.start_ms / 1000)}`} target="_blank" rel="noopener noreferrer" className="shrink-0 font-mono text-xs text-primary hover:underline">{formatDuration(s.start_ms)}</a>
+              <span>{s.text}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-2 whitespace-pre-wrap">{t.text || "(sin habla reconocible)"}</p>
+      )}
+    </details>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProposals, verifiedQuote } from "./capture-proposals";
+import { buildProposals, locateInAudio, verifiedQuote } from "./capture-proposals";
 
 const body = "Hablé con el encargado de una empresa. Tienen 35 camionetas y mandan 8 por semana a Neuquén porque no consiguen resolver determinados mantenimientos en Añelo.";
 
@@ -61,5 +61,18 @@ describe("propuestas desde una captura", () => {
 
   it("fecha de la próxima acción solo si es AAAA-MM-DD", () => {
     expect(byKind("next_action")[0].payload).toMatchObject({ contact: "p1", due: null });
+  });
+});
+
+describe("citas de audio", () => {
+  const audios = [{ mediaId: "m1", utterances: [
+    { start_ms: 0, end_ms: 4200, text: "Estuve con Pedro de la empresa." },
+    { start_ms: 4200, end_ms: 9800, text: "Tienen cuarenta camionetas y cuando algo" },
+    { start_ms: 9800, end_ms: 15000, text: "no se puede reparar en Añelo pierden un día." },
+  ] }];
+  it("encuentra el segundo exacto, aunque la cita cruce dos segmentos", () => {
+    expect(locateInAudio("Tienen cuarenta camionetas", audios)).toEqual({ capture_media_id: "m1", start_ms: 4200, end_ms: 9800 });
+    expect(locateInAudio("cuando algo no se puede reparar", audios)).toEqual({ capture_media_id: "m1", start_ms: 4200, end_ms: 15000 });
+    expect(locateInAudio("algo que no dijo", audios)).toBeNull();
   });
 });

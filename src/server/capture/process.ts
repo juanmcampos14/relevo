@@ -4,8 +4,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { CAPTURE_BUCKET } from "@/domain/capture";
-import { buildProposals } from "@/domain/capture-proposals";
+import { buildProposals, locateInAudio } from "@/domain/capture-proposals";
+import { formatDuration } from "@/domain/capture";
 import { EXTRACT_MODEL, EXTRACT_PROMPT_VERSION, extractCapture } from "./extract";
+import { configuredTranscriber, type Transcriber, type Utterance } from "./transcribe";
 
 type Db = SupabaseClient<Database>;
 const DAILY_LIMIT = 60;
@@ -21,7 +23,10 @@ function formatAR(iso: string) {
  * Procesa una captura con IA y deja propuestas para revisar. No escribe empresas, personas,
  * evidencia ni findings: eso lo hace una persona al aceptar cada propuesta.
  */
-export async function processCapture(db: Db, opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic }): Promise<ProcessResult> {
+export async function processCapture(
+  db: Db,
+  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic; transcriber?: Transcriber | null },
+): Promise<ProcessResult> {
   if ((opts.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent !== true) {
     return { ok: false, message: "El workspace no habilitó el procesamiento con IA (Miembros → Procesamiento con IA)." };
   }
@@ -35,8 +40,11 @@ export async function processCapture(db: Db, opts: { workspaceId: string; settin
   if (!capture) return { ok: false, message: "Captura no encontrada." };
   if (!capture.ai_consent) return { ok: false, message: "Esta captura se guardó sin \"Procesar con IA\"." };
   const photos = capture.capture_media.filter((m) => m.kind === "photo" && IMAGE_TYPES.has(m.mime_type));
+  const audios = capture.capture_media.filter((m) => m.kind === "audio");
+  const transcriber = opts.transcriber === undefined ? configuredTranscriber() : opts.transcriber;
   if (!capture.body?.trim() && !photos.length) {
-    return { ok: false, message: capture.capture_media.some((m) => m.kind === "audio") ? "Solo tiene audio: se procesa cuando esté activa la transcripción." : "La captura no tiene texto ni fotos para procesar." };
+    if (!audios.length) return { ok: false, message: "La captura no tiene texto, fotos ni audio para procesar." };
+    if (!transcriber) return { ok: false, message: "Solo tiene audio y la transcripción no está configurada en este entorno (falta DEEPGRAM_API_KEY)." };
   }
 
   const since = new Date(Date.now() - 86_400_000).toISOString();
@@ -53,6 +61,42 @@ export async function processCapture(db: Db, opts: { workspaceId: string; settin
   };
 
   try {
+    // 1. Audio → transcripción (una vez por archivo; el audio original queda intacto).
+    const transcribed: { mediaId: string; text: string; utterances: Utterance[]; durationMs: number | null }[] = [];
+    const notes: string[] = [];
+    if (audios.length) {
+      const { data: existing } = await db.from("transcripts").select("capture_media_id, status, text, utterances, duration_ms").eq("capture_id", capture.id);
+      for (const [i, a] of audios.entries()) {
+        const prev = existing?.find((t) => t.capture_media_id === a.id && t.status === "ok");
+        if (prev) {
+          transcribed.push({ mediaId: a.id, text: prev.text ?? "", utterances: (prev.utterances ?? []) as Utterance[], durationMs: prev.duration_ms });
+          continue;
+        }
+        if (!transcriber) {
+          notes.push(`Audio ${i + 1}: sin transcribir (falta configurar la transcripción).`);
+          continue;
+        }
+        const { data: file } = await db.storage.from(CAPTURE_BUCKET).download(a.storage_path);
+        const t = file ? await transcriber(await file.arrayBuffer(), a.mime_type) : { ok: false as const, error: "No se pudo leer el audio guardado.", retry: true, provider: "—", model: "—" };
+        await db.from("transcripts").upsert(
+          t.ok
+            ? { workspace_id: opts.workspaceId, capture_id: capture.id, capture_media_id: a.id, provider: t.provider, model: t.model, language: t.language, status: "ok", text: t.text, utterances: t.utterances as unknown as NonNullable<Json>, duration_ms: t.durationMs, error: null }
+            : { workspace_id: opts.workspaceId, capture_id: capture.id, capture_media_id: a.id, provider: t.provider, model: t.model, status: "error", text: null, error: t.error },
+          { onConflict: "capture_media_id" },
+        );
+        if (t.ok) transcribed.push({ mediaId: a.id, text: t.text, utterances: t.utterances, durationMs: t.durationMs });
+        else notes.push(`Audio ${i + 1}: ${t.error}`);
+      }
+      if (!capture.body?.trim() && !photos.length && !transcribed.some((t) => t.text)) {
+        return fail(notes.join(" ") || "El audio no tiene habla reconocible.", null);
+      }
+    }
+    // Nota escrita + transcripciones: el mismo texto que ve la IA y contra el que se validan las citas.
+    const fullText = [
+      capture.body?.trim() || null,
+      ...transcribed.filter((t) => t.text).map((t, i) => `[Audio ${i + 1}${t.durationMs ? `, ${formatDuration(t.durationMs)}` : ""}, transcripción automática]\n${t.text}`),
+    ].filter(Boolean).join("\n\n");
+
     const [companies, contacts, findings, author, mission, images] = await Promise.all([
       db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone").order("updated_at", { ascending: false }).limit(400),
       db.from("contacts").select("id, full_name, role_title, contact_links(companies(trade_name, legal_name))").order("updated_at", { ascending: false }).limit(400),
@@ -80,7 +124,7 @@ export async function processCapture(db: Db, opts: { workspaceId: string; settin
       capturedBy: author.data?.display_name || author.data?.email || "el equipo",
       missionName: mission.data?.name ?? null,
       location: capture.latitude != null ? `${capture.latitude.toFixed(5)}, ${capture.longitude?.toFixed(5)} (GPS${capture.location_accuracy_m ? ` ±${Math.round(capture.location_accuracy_m)} m` : ""}, sin verificar)` : null,
-      body: capture.body,
+      body: fullText,
       photos: images.filter((i): i is NonNullable<typeof i> => !!i),
       companies: companyList,
       contacts: contactList,
@@ -107,7 +151,12 @@ export async function processCapture(db: Db, opts: { workspaceId: string; settin
       .single();
     if (!result.ok) return fail(result.error, run?.id ?? null);
 
-    const drafts = buildProposals(result.extraction, { body: capture.body, companies: companyList, contacts: contactList, findings: findingList });
+    const drafts = buildProposals(result.extraction, { body: fullText, companies: companyList, contacts: contactList, findings: findingList });
+    // Evidencia dicha en un audio: se guarda en qué momento del audio está, para escucharla.
+    for (const d of drafts) {
+      const where = d.kind === "evidence" || d.kind === "person" ? locateInAudio(d.quote, transcribed) : null;
+      if (where) d.payload.audio = where;
+    }
     await db.from("proposals").delete().eq("capture_id", capture.id).eq("status", "propuesta");
     if (drafts.length) {
       const { error } = await db.from("proposals").insert(
@@ -126,7 +175,12 @@ export async function processCapture(db: Db, opts: { workspaceId: string; settin
     }
     await db
       .from("captures")
-      .update({ status: drafts.length ? "propuestas_listas" : "revisado", ai_summary: result.extraction.summary, processed_at: new Date().toISOString(), ai_run_id: run?.id ?? null })
+      .update({
+        status: drafts.length ? "propuestas_listas" : "revisado",
+        ai_summary: [result.extraction.summary, ...notes].join(" "),
+        processed_at: new Date().toISOString(),
+        ai_run_id: run?.id ?? null,
+      })
       .eq("id", capture.id);
     return { ok: true, proposals: drafts.length };
   } catch (e) {

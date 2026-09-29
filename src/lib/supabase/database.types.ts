@@ -1092,6 +1092,37 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"transcripts": {
+                  Row: {
+                    "capture_id": string,"capture_media_id": string,"created_at": string,"created_by": string | null,"duration_ms": number | null,"error": string | null,"id": string,"language": string | null,"model": string,"provider": string,"status": string,"text": string | null,"utterances": NonNullable<Json>,"workspace_id": string
+                  }
+                  Insert: {
+                    "capture_id": string,"capture_media_id": string,"created_at"?: string,"created_by"?: string | null,"duration_ms"?: number | null,"error"?: string | null,"id"?: string,"language"?: string | null,"model": string,"provider": string,"status": string,"text"?: string | null,"utterances"?: NonNullable<Json>,"workspace_id": string
+                  }
+                  Update: {
+                    "capture_id"?: string,"capture_media_id"?: string,"created_at"?: string,"created_by"?: string | null,"duration_ms"?: number | null,"error"?: string | null,"id"?: string,"language"?: string | null,"model"?: string,"provider"?: string,"status"?: string,"text"?: string | null,"utterances"?: NonNullable<Json>,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transcripts_workspace_id_capture_id_fkey"
+      columns: ["workspace_id","capture_id"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "transcripts_workspace_id_capture_media_id_fkey"
+      columns: ["workspace_id","capture_media_id"]
+isOneToOne: false
+      referencedRelation: "capture_media"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "transcripts_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"user_preferences": {
                   Row: {
                     "home": NonNullable<Json>,"updated_at": string,"user_id": string,"workspace_id": string

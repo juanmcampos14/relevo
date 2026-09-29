@@ -79,7 +79,7 @@ export default async function CapturesPage({ params }: PageProps<"/w/[slug]/capt
                       ) : (
                         <div key={m.id} className="flex items-center gap-2">
                           <Mic className="size-4 text-muted-foreground" aria-hidden="true" />
-                          <audio controls preload="none" src={url} className="h-10 max-w-[16rem]" />
+                          <audio controls preload="metadata" src={url} className="h-10 max-w-[16rem]" />
                           {m.duration_ms != null && <span className="text-xs text-muted-foreground">{formatDuration(m.duration_ms)}</span>}
                         </div>
                       );

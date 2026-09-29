@@ -81,7 +81,8 @@ Tu trabajo es PROPONER, no decidir: todo lo que devolvés lo revisa una persona 
 Reglas:
 - Separá siempre lo que se observó directamente de lo que alguien declaró, y ambos de las interpretaciones. Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
 - No inventes nombres, cifras, fechas ni empresas. Si algo es aproximado en la nota ("unas 35"), conservá la aproximación.
-- Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota. Si no hay fragmento textual (p. ej. algo visto en una foto), usá null.
+- Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota o de la transcripción. Si no hay fragmento textual (p. ej. algo visto en una foto), usá null.
+- La nota puede incluir la transcripción automática de un audio: puede tener errores de reconocimiento. No "corrijas" nombres, marcas ni cifras dudosas; si algo parece mal transcripto, dejalo como está y no lo uses como dato firme.
 - Para no duplicar: usá existing_id solo si la empresa o persona de la lista es claramente la misma. Ante la duda, null.
 - Una persona sin nombre ("el encargado", "Compras") es institutional: true.
 - Revisá los findings existentes: si un dato los apoya, los contradice o les da contexto, indicalo en related_findings. Buscá activamente la contraevidencia.

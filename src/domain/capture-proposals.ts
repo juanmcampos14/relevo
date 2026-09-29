@@ -35,6 +35,28 @@ export type ProposalContext = {
 
 const squash = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 
+/** Ubica una cita en los segmentos de un audio transcripto: para escuchar exactamente dónde se dijo. */
+export function locateInAudio(
+  quote: string | null,
+  audios: { mediaId: string; utterances: { start_ms: number; end_ms: number; text: string }[] }[],
+): { capture_media_id: string; start_ms: number; end_ms: number } | null {
+  if (!quote) return null;
+  const q = squash(quote.replace(/^["“”«»']+|["“”«»']+$/g, ""));
+  // Primero el segmento más preciso; si no está en uno solo, la cita puede cruzar dos consecutivos.
+  for (const width of [1, 2]) {
+    for (const a of audios) {
+      const segs = a.utterances;
+      for (let i = 0; i + width <= segs.length; i++) {
+        const span = segs.slice(i, i + width);
+        if (squash(span.map((s) => s.text).join(" ")).includes(q)) {
+          return { capture_media_id: a.mediaId, start_ms: span[0].start_ms, end_ms: span[span.length - 1].end_ms };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /** La cita solo vale si está en la nota (tolera espacios y mayúsculas). */
 export function verifiedQuote(quote: string | null, body: string | null): string | null {
   if (!quote || !body) return null;

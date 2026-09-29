@@ -139,6 +139,10 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             observed_at: capture.captured_at,
             revalidate_after: revalidateAfter(capture.captured_at, type, freshnessFor(opts.settings)),
             capture_id: capture.id,
+            // Si salió de un audio: el archivo y el momento exacto (para escucharlo).
+            capture_media_id: (p.audio as { capture_media_id?: string } | undefined)?.capture_media_id ?? null,
+            media_start_ms: (p.audio as { start_ms?: number } | undefined)?.start_ms ?? null,
+            media_end_ms: (p.audio as { end_ms?: number } | undefined)?.end_ms ?? null,
             campaign_id: capture.campaign_id,
             company_id: p.about_company && decided(company) ? company!.result_id : null,
             stated_by_contact_id: decided(speaker) ? speaker!.result_id : null,

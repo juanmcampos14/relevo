@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v1";
+export const EXTRACT_PROMPT_VERSION = "captura-v2";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -26,7 +26,19 @@ export const ExtractionSchema = z.object({
       quote: z.string().nullable(),
     })
     .nullable()
-    .describe("La empresa o establecimiento principal de la captura, si se menciona o se infiere de la foto. null si no hay."),
+    .describe("La empresa u organización principal de la captura, si se menciona o se ve (cartel con nombre). null si no hay."),
+  asset: z
+    .object({
+      title: z.string().describe("Nombre corto: \"Local comercial en Los Algarrobos\"."),
+      kind: z.enum(["inmueble", "terreno", "local", "fondo_de_comercio", "otro"]),
+      operation: z.enum(["venta", "alquiler", "asociacion", "desconocida"]),
+      address_text: z.string().nullable(),
+      locality: z.string().nullable(),
+      surface_m2: z.number().nullable().describe("Solo si figura; es lo que DICE la fuente, no algo medido."),
+      quote: z.string().nullable(),
+    })
+    .nullable()
+    .describe("Un activo físico observado o mencionado (local, terreno, galpón, hotel, fondo de comercio), sobre todo si está en venta o alquiler. null si no hay."),
   people: z.array(
     z.object({
       key: z.string().describe("Clave local: p1, p2…"),
@@ -43,9 +55,12 @@ export const ExtractionSchema = z.object({
       statement: z.string().describe("Un dato atómico y verificable, en una oración. Sin interpretaciones."),
       quote: z.string().nullable().describe("Fragmento TEXTUAL de la nota que lo sostiene (copiado tal cual)."),
       evidence_type: z.enum(EVIDENCE_TYPES),
-      origin: z.enum(["observacion_directa", "declaracion"]).describe("observacion_directa: lo vio quien capturó. declaracion: se lo dijo alguien."),
-      stated_by: z.string().nullable().describe("Clave de la persona que lo dijo (p1…), si aplica."),
-      about_company: z.boolean().describe("true si el dato es sobre la empresa principal."),
+      origin: z
+        .enum(["observado", "declarado_por_persona", "declarado_por_documento"])
+        .describe("observado: quien capturó lo vio con sus propios ojos (\"hay un cartel de alquiler\"). declarado_por_persona: se lo dijo alguien. declarado_por_documento: lo afirma un cartel, aviso, folleto o documento (\"el cartel dice 35 m²\")."),
+      stated_by: z.string().nullable().describe("Clave de la persona que lo dijo (p1…), si origin es declarado_por_persona."),
+      declared_by: z.string().nullable().describe("Si origin es declarado_por_documento: qué lo afirma (\"aviso de alquiler en la vidriera\")."),
+      about: z.enum(["company", "asset", "none"]).describe("Sobre qué es el dato: la empresa principal, el activo, o ninguno de los dos."),
       related_findings: z.array(
         z.object({
           finding_id: z.string().describe("id de la lista de findings existentes."),
@@ -79,7 +94,7 @@ export const SYSTEM = `Estructurás capturas de campo de un equipo que investiga
 Tu trabajo es PROPONER, no decidir: todo lo que devolvés lo revisa una persona antes de guardarse.
 
 Reglas:
-- Separá siempre lo que se observó directamente de lo que alguien declaró, y ambos de las interpretaciones. Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
+- Distinguí siempre tres cosas: lo OBSERVADO por quien capturó ("se observó un cartel de alquiler"), lo DECLARADO por una persona, y lo DECLARADO por un documento, cartel o aviso ("el aviso dice 35 m²"). Ver un cartel verifica que el cartel existe, no lo que el cartel dice: los datos que figuran en el cartel son declarados_por_documento. Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
 - No inventes nombres, cifras, fechas ni empresas. Si algo es aproximado en la nota ("unas 35"), conservá la aproximación.
 - Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota o de la transcripción. Si no hay fragmento textual (p. ej. algo visto en una foto), usá null.
 - La nota puede incluir la transcripción automática de un audio: puede tener errores de reconocimiento. No "corrijas" nombres, marcas ni cifras dudosas; si algo parece mal transcripto, dejalo como está y no lo uses como dato firme.

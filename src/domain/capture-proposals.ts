@@ -4,22 +4,24 @@
 // - Los duplicados se buscan con las mismas reglas del importador, además de lo que sugiera la IA.
 import { findCandidates, normalizeName } from "./crm-import/dedupe";
 
-export type ProposalKind = "company" | "person" | "evidence" | "finding" | "next_action";
+export type ProposalKind = "company" | "asset" | "person" | "evidence" | "finding" | "next_action";
 export type Match = { type: "company" | "contact"; id: string; name: string; reason: string };
 export type ProposalDraft = { kind: ProposalKind; position: number; payload: Record<string, unknown>; quote: string | null; matches: Match[] };
 
 type ExtractionLike = {
   summary: string;
   company: { name: string; existing_id: string | null; locality: string | null; activity: string | null; quote: string | null } | null;
+  asset?: { title: string; kind: string; operation: string; address_text: string | null; locality: string | null; surface_m2: number | null; quote: string | null } | null;
   people: { key: string; name: string | null; role: string | null; institutional: boolean; existing_id: string | null; quote: string | null }[];
   evidence: {
     key: string;
     statement: string;
     quote: string | null;
     evidence_type: string;
-    origin: "observacion_directa" | "declaracion";
+    origin: "observado" | "declarado_por_persona" | "declarado_por_documento";
     stated_by: string | null;
-    about_company: boolean;
+    declared_by: string | null;
+    about: "company" | "asset" | "none";
     related_findings: { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[];
   }[];
   finding_candidates: { statement: string; kind: string; rationale: string; supports: string[]; contradicts: string[] }[];
@@ -82,6 +84,11 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
     push("company", { key: "c", name: c.name.trim(), locality: c.locality, activity: c.activity }, c.quote, matches);
   }
 
+  if (ex.asset?.title.trim()) {
+    const a = ex.asset;
+    push("asset", { key: "a", title: a.title.trim(), kind: a.kind, operation: a.operation, address_text: a.address_text, locality: a.locality, surface_m2: a.surface_m2 }, a.quote);
+  }
+
   const personKeys = new Set<string>();
   for (const p of ex.people) {
     const label = p.name?.trim() || p.role?.trim();
@@ -100,13 +107,15 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
   for (const e of ex.evidence) {
     if (!e.statement.trim()) continue;
     evidenceKeys.add(e.key);
+    const about = e.about === "company" && ex.company ? "company" : e.about === "asset" && ex.asset ? "asset" : "none";
     push("evidence", {
       key: e.key,
       statement: e.statement.trim(),
       evidence_type: e.evidence_type,
       origin: e.origin,
-      stated_by: e.stated_by && personKeys.has(e.stated_by) ? e.stated_by : null,
-      about_company: e.about_company && !!ex.company,
+      stated_by: e.origin === "declarado_por_persona" && e.stated_by && personKeys.has(e.stated_by) ? e.stated_by : null,
+      declared_by: e.origin === "declarado_por_documento" ? e.declared_by?.trim() || "documento o cartel" : null,
+      about,
       related_findings: e.related_findings.filter((r) => findingIds.has(r.finding_id)),
     }, e.quote);
   }

@@ -53,14 +53,15 @@ beforeAll(async () => {
   extraction = {
     summary: "Empresa de flota en Añelo deriva mantenimiento a Neuquén.",
     company: { name: "Empresa X", existing_id: null, locality: "Añelo", activity: "Flota de camionetas", quote: null },
+    asset: null,
     people: [
       { key: "p1", name: null, role: "Encargado", institutional: true, existing_id: null, quote: "el encargado" },
       { key: "p2", name: "Laura", role: "Compras", institutional: false, existing_id: null, quote: "Laura de Compras" },
     ],
     evidence: [
-      { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declaracion", stated_by: "p1", about_company: true, related_findings: [] },
-      { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declaracion", stated_by: "p1", about_company: true, related_findings: [{ finding_id: existingFinding, stance: "contradicts" }] },
-      { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observacion_directa", stated_by: null, about_company: true, related_findings: [] },
+      { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [] },
+      { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [{ finding_id: existingFinding, stance: "contradicts" }] },
+      { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observado", declared_by: null, stated_by: null, about: "company" as const, related_findings: [] },
     ],
     finding_candidates: [{ statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] }],
     next_actions: [{ title: "Hablar con Laura (Compras) sobre frecuencia, gasto y proceso de compra", why: "Validar el costo del traslado", contact: "p2", due: null }],

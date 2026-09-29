@@ -27,8 +27,9 @@ const fakeClient = {
         const extraction: Extraction = {
           summary: "Pedro, de una empresa de flota, cuenta que pierden un día por reparación.",
           company: null,
+          asset: null,
           people: [{ key: "p1", name: "Pedro", role: null, institutional: false, existing_id: null, quote: "Estuve con Pedro" }],
-          evidence: [{ key: "e1", statement: "Tienen cuarenta camionetas", quote: "tienen cuarenta camionetas", evidence_type: "capacidad", origin: "declaracion", stated_by: "p1", about_company: false, related_findings: [] }],
+          evidence: [{ key: "e1", statement: "Tienen cuarenta camionetas", quote: "tienen cuarenta camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "none" as const, related_findings: [] }],
           finding_candidates: [],
           next_actions: [],
         };

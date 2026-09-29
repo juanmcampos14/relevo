@@ -11,9 +11,9 @@ const extraction = {
     { key: "p2", name: null, role: null, institutional: false, existing_id: null, quote: null },
   ],
   evidence: [
-    { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declaracion" as const, stated_by: "p1", about_company: true, related_findings: [{ finding_id: "f1", stance: "supports" as const }, { finding_id: "inventado", stance: "contradicts" as const }] },
-    { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimiento", quote: "mandan  8 por semana a NEUQUÉN", evidence_type: "dato", origin: "declaracion" as const, stated_by: "p9", about_company: true, related_findings: [] },
-    { key: "e3", statement: "Dicen que es caro", quote: "es carísimo", evidence_type: "declaracion", origin: "declaracion" as const, stated_by: null, about_company: true, related_findings: [] },
+    { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declarado_por_persona" as const, declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [{ finding_id: "f1", stance: "supports" as const }, { finding_id: "inventado", stance: "contradicts" as const }] },
+    { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimiento", quote: "mandan  8 por semana a NEUQUÉN", evidence_type: "dato", origin: "declarado_por_persona" as const, declared_by: null, stated_by: "p9", about: "company" as const, related_findings: [] },
+    { key: "e3", statement: "Dicen que es caro", quote: "es carísimo", evidence_type: "declaracion", origin: "declarado_por_persona" as const, declared_by: null, stated_by: null, about: "company" as const, related_findings: [] },
   ],
   finding_candidates: [{ statement: "Posible falta de talleres de flota en Añelo", kind: "necesidad", rationale: "…", supports: ["e1", "e2", "e9"], contradicts: [] }],
   next_actions: [{ title: "Hablar con Compras sobre gasto", why: "…", contact: "p1", due: "en dos semanas" }],

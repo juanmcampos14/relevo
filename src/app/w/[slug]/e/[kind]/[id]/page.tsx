@@ -99,7 +99,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
       .eq(fk, id),
     supabase
       .from("evidence")
-      .select("id, statement, quote, evidence_type, verification_status, origin_kind, observed_at, revalidate_after, next_verification_step, created_at, created_by, is_demo, capture_id, visit_id, sources(id, title, url), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(id, full_name)")
+      .select("id, statement, quote, evidence_type, verification_status, origin_kind, observed_at, revalidate_after, next_verification_step, created_at, created_by, is_demo, capture_id, visit_id, declared_by, sources(id, title, url), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(id, full_name)")
       .eq(fk, id)
       .order("observed_at", { ascending: false, nullsFirst: false }),
     supabase
@@ -276,6 +276,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                           <DemoBadge show={e.is_demo} />
                           <span>{evidenceType.label(e.evidence_type)} · {evidenceOrigin.label(e.origin_kind)}</span>
                           {e.stated_by && <span>· dicho por {e.stated_by.full_name}</span>}
+                          {e.declared_by && <span>· declarado por {e.declared_by}</span>}
                           {e.sources ? (
                             e.sources.url ? (
                               <a href={e.sources.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">· {e.sources.title}</a>

@@ -3,12 +3,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { Building2, CheckCircle2, CircleSlash, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, UserRound } from "lucide-react";
+import { Building2, Check, CheckCircle2, CircleSlash, Landmark, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, UserRound, X } from "lucide-react";
 import { cn } from "cn";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { CAPTURE_BUCKET, formatDuration } from "@/domain/capture";
-import { evidenceType, findingKind, verificationStatus } from "@/domain/catalogs";
+import { assetKind, assetOperation, evidenceType, findingKind, verificationStatus } from "@/domain/catalogs";
 import { entityHref } from "@/server/entities";
 import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
@@ -22,7 +22,7 @@ export const maxDuration = 120;
 
 type Proposal = {
   id: string;
-  kind: "company" | "person" | "evidence" | "finding" | "next_action";
+  kind: "company" | "asset" | "person" | "evidence" | "finding" | "next_action";
   status: "propuesta" | "aceptada" | "editada" | "rechazada";
   payload: Record<string, unknown>;
   final_payload: Record<string, unknown> | null;
@@ -33,12 +33,15 @@ type Proposal = {
   decided_by: string | null;
 };
 
-const SECTIONS: { kind: Proposal["kind"]; title: string; icon: typeof Building2 }[] = [
-  { kind: "company", title: "Empresa", icon: Building2 },
-  { kind: "person", title: "Personas", icon: UserRound },
-  { kind: "evidence", title: "Evidencia", icon: ScrollText },
-  { kind: "finding", title: "Posible finding", icon: Lightbulb },
-  { kind: "next_action", title: "Próximas acciones", icon: ListTodo },
+/** Sujeto de un dato (las propuestas anteriores usaban about_company). */
+const aboutOf = (p: Record<string, unknown>) => (p.about as string | undefined) ?? (p.about_company ? "company" : "none");
+
+// Empresa y activo se muestran como grupos con sus datos adentro; el resto, por tipo.
+const GROUPS: { key: string; title: string; icon: typeof Building2; match: (p: Proposal) => boolean }[] = [
+  { key: "person", title: "Personas", icon: UserRound, match: (p) => p.kind === "person" },
+  { key: "evidence", title: "Otros datos", icon: ScrollText, match: (p) => p.kind === "evidence" },
+  { key: "finding", title: "Posible finding", icon: Lightbulb, match: (p) => p.kind === "finding" },
+  { key: "next_action", title: "Próximas acciones", icon: ListTodo, match: (p) => p.kind === "next_action" },
 ];
 
 const input = "h-11 w-full rounded-lg border bg-card px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -139,11 +142,36 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
             {pending ? `${pending} por decidir. ` : "Todo decidido. "}Nada se guarda sin que lo aceptes; lo aceptado queda vinculado a esta captura.
           </p>
         )}
-        {SECTIONS.map(({ kind, title, icon: Icon }) => {
-          const items = proposals.filter((p) => p.kind === kind);
+        {(["company", "asset"] as const).map((subject) => {
+          const head = proposals.find((p) => p.kind === subject);
+          if (!head) return null;
+          const facts = proposals.filter((p) => p.kind === "evidence" && aboutOf(p.payload) === subject);
+          const Icon = subject === "company" ? Building2 : Landmark;
+          return (
+            <div key={subject} className="space-y-2">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Icon className="size-4 text-primary" aria-hidden="true" />
+                {subject === "company" ? "Empresa propuesta" : "Activo propuesto"}
+              </h3>
+              <div className="rounded-xl border bg-card shadow-xs">
+                <ProposalCard as="div" p={head} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(head.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} groupSize={facts.filter((f) => f.status === "propuesta").length} />
+                {facts.length > 0 && (
+                  <ul className="divide-y border-t">
+                    <li className="px-4 pt-3 pb-1 text-xs font-medium text-muted-foreground">RELEVO detectó {facts.length} {facts.length === 1 ? "dato" : "datos"}:</li>
+                    {facts.map((f) => (
+                      <ProposalCard key={f.id} compact p={f} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(f.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {GROUPS.map(({ key, title, icon: Icon, match }) => {
+          const items = proposals.filter((p) => match(p) && !(p.kind === "evidence" && aboutOf(p.payload) !== "none" && proposals.some((h) => h.kind === aboutOf(p.payload))));
           if (!items.length) return null;
           return (
-            <div key={kind} className="space-y-2">
+            <div key={key} className="space-y-2">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <Icon className="size-4 text-primary" aria-hidden="true" />
                 {title}
@@ -177,11 +205,15 @@ function resultLink(p: Proposal, slug: string): ReactNode {
   if (!p.result_id) return null;
   const base = `/w/${slug}`;
   const href =
-    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : null;
+    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "asset" ? entityHref(slug, "asset", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : null;
   return href ? <Link href={href} className="text-sm text-primary hover:underline">Abrir</Link> : null;
 }
 
-function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaUrl }: {
+function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaUrl, compact = false, groupSize, as = "li" }: {
+  /** compact: fila dentro de un grupo. groupSize: datos pendientes del grupo (muestra "Aceptar todo"). */
+  compact?: boolean;
+  groupSize?: number;
+  as?: "li" | "div";
   p: Proposal;
   slug: string;
   editable: boolean;
@@ -208,6 +240,14 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
       {p.kind === "company" && (
         <p className="text-base font-medium">{String(v.name)}{v.locality ? <span className="font-normal text-muted-foreground"> · {String(v.locality)}</span> : null}{v.activity ? <span className="font-normal text-muted-foreground"> · {String(v.activity)}</span> : null}</p>
       )}
+      {p.kind === "asset" && (
+        <p className="text-base font-medium">
+          {String(v.title)}
+          <span className="block text-sm font-normal text-muted-foreground">
+            {[assetKind.label(String(v.kind)), assetOperation.label(String(v.operation)), v.address_text, v.surface_m2 ? `${v.surface_m2} m² (según la fuente)` : null].filter(Boolean).join(" · ")}
+          </span>
+        </p>
+      )}
       {p.kind === "person" && (
         <p className="text-base font-medium">
           {String(v.name ?? v.role ?? "")}
@@ -217,10 +257,8 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
       )}
       {p.kind === "evidence" && (
         <div className="space-y-1">
-          <p className="text-base">{String(v.statement)}</p>
-          <p className="text-xs text-muted-foreground">
-            {evidenceType.label(String(v.evidence_type))} · {v.origin === "observacion_directa" ? "observado en persona (se guarda como verificado en campo)" : `declarado${v.stated_by ? ` por ${personLabel(v.stated_by)}` : ""} (se guarda sin verificar)`}
-          </p>
+          <p className={compact ? "text-sm" : "text-base"}>{String(v.statement)}</p>
+          <p className="text-xs text-muted-foreground">{evidenceType.label(String(v.evidence_type))} · {originLabel(v, personLabel)}</p>
           {((v.related_findings as { finding_id: string; stance: string }[] | undefined) ?? []).map((r) => (
             <p key={r.finding_id} className={cn("text-xs", r.stance === "contradicts" ? "font-medium text-destructive" : "text-muted-foreground")}>
               {r.stance === "contradicts" ? "En contra de" : r.stance === "supports" ? "A favor de" : "Contexto para"}: “{findingText.get(r.finding_id) ?? "finding"}”
@@ -256,10 +294,10 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
         </a>
       )}
 
-      {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "person") && (
+      {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "asset" || p.kind === "person") && (
         <fieldset className="space-y-1 rounded-lg border p-3 text-sm">
           <legend className="px-1 font-medium">¿Ya existe?</legend>
-          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : "una persona nueva"}</label>
+          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : p.kind === "asset" ? "un activo nuevo" : "una persona nueva"}</label>
           {p.matches.map((m) => (
             <label key={m.id} className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value={m.id} className="size-4 accent-primary" />Es “{m.name}” ({m.reason})</label>
           ))}
@@ -271,12 +309,24 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
           <summary className="cursor-pointer text-sm font-medium text-primary">Editar antes de aceptar</summary>
           <div className="mt-3 space-y-3">
             {/* Valores de partida (incluye los defaults que muestra el formulario): solo lo que cambie cuenta como edición. */}
-            <input type="hidden" name="original" value={JSON.stringify(p.kind === "evidence" ? { ...p.payload, verification_status: v.origin === "observacion_directa" ? "field_verified" : "unverified" } : p.payload)} />
+            <input type="hidden" name="original" value={JSON.stringify(p.kind === "evidence" ? { ...p.payload, verification_status: isObserved(v) ? "field_verified" : "unverified" } : p.payload)} />
             {p.kind === "company" && (
               <>
                 <Field label="Nombre"><input name="name" defaultValue={String(v.name ?? "")} className={input} /></Field>
                 <Field label="Localidad"><input name="locality" defaultValue={String(v.locality ?? "")} className={input} /></Field>
                 <Field label="Actividad"><input name="activity" defaultValue={String(v.activity ?? "")} className={input} /></Field>
+              </>
+            )}
+            {p.kind === "asset" && (
+              <>
+                <Field label="Nombre"><input name="title" defaultValue={String(v.title ?? "")} className={input} /></Field>
+                <Field label="Operación">
+                  <select name="operation" defaultValue={String(v.operation ?? "desconocida")} className={input}>
+                    {assetOperation.values.map((t) => <option key={t} value={t}>{assetOperation.label(t)}</option>)}
+                  </select>
+                </Field>
+                <Field label="Dirección"><input name="address_text" defaultValue={String(v.address_text ?? "")} className={input} /></Field>
+                <Field label="Superficie según la fuente (m²)"><input name="surface_m2" inputMode="decimal" defaultValue={v.surface_m2 != null ? String(v.surface_m2) : ""} className={input} /></Field>
               </>
             )}
             {p.kind === "person" && (
@@ -294,7 +344,7 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
                   </select>
                 </Field>
                 <Field label="Verificación">
-                  <select name="verification_status" defaultValue={v.origin === "observacion_directa" ? "field_verified" : "unverified"} className={input}>
+                  <select name="verification_status" defaultValue={isObserved(v) ? "field_verified" : "unverified"} className={input}>
                     {verificationStatus.values.map((t) => <option key={t} value={t}>{verificationStatus.label(t)}</option>)}
                   </select>
                 </Field>
@@ -316,24 +366,46 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
         </details>
       )}
 
-      {open && (
+      {open && groupSize != null && groupSize > 0 && (
+        <>
+          <input type="hidden" name="group" value={p.kind} />
+          <SubmitButton name="decision" value="todo" className="h-11 w-full text-base">Aceptar todo ({groupSize + 1})</SubmitButton>
+        </>
+      )}
+      {open && compact && (
         <div className="flex gap-2">
-          <SubmitButton name="decision" value="aceptar" className="h-11 flex-1 text-base">Aceptar</SubmitButton>
+          <SubmitButton name="decision" value="aceptar" variant="outline" className="h-10 flex-1"><Check className="size-4" aria-hidden="true" />Aceptar</SubmitButton>
+          <SubmitButton name="decision" value="rechazar" variant="outline" className="h-10 flex-1"><X className="size-4" aria-hidden="true" />Rechazar</SubmitButton>
+        </div>
+      )}
+      {open && !compact && (
+        <div className="flex gap-2">
+          <SubmitButton name="decision" value="aceptar" variant={groupSize ? "outline" : "default"} className="h-11 flex-1 text-base">{groupSize ? "Aceptar solo esto" : "Aceptar"}</SubmitButton>
           <SubmitButton name="decision" value="rechazar" variant="outline" className="h-11 flex-1 text-base">Rechazar</SubmitButton>
         </div>
       )}
     </>
   );
 
+  const Wrapper = as;
   return (
-    <li className={cn("rounded-xl border bg-card p-4 shadow-xs", p.status === "rechazada" && "opacity-60")}>
+    <Wrapper className={cn(compact || as === "div" ? "px-4 py-3" : "rounded-xl border bg-card p-4 shadow-xs", p.status === "rechazada" && "opacity-60")}>
       {open ? (
-        <ActionForm action={decideProposalAction.bind(null, slug, p.id)} className="space-y-3">{content}</ActionForm>
+        <ActionForm action={decideProposalAction.bind(null, slug, p.id)} className={compact ? "space-y-2" : "space-y-3"}>{content}</ActionForm>
       ) : (
-        <div className="space-y-3">{content}</div>
+        <div className={compact ? "space-y-2" : "space-y-3"}>{content}</div>
       )}
-    </li>
+    </Wrapper>
   );
+}
+
+const isObserved = (v: Record<string, unknown>) => v.origin === "observado" || v.origin === "observacion_directa";
+
+/** Observé algo ≠ una fuente afirma algo ≠ verifiqué el dato. */
+function originLabel(v: Record<string, unknown>, personLabel: (key: unknown) => string | null): string {
+  if (isObserved(v)) return "observado en persona (queda verificado en campo)";
+  if (v.origin === "declarado_por_documento") return `declarado por ${String(v.declared_by || "un documento o cartel")}, observado en campo (sin verificar)`;
+  return `declarado${v.stated_by ? ` por ${personLabel(v.stated_by)}` : ""} (sin verificar)`;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

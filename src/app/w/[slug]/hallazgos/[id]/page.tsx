@@ -45,7 +45,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
 
   const { data: f } = await supabase
     .from("findings")
-    .select("id, statement, kind, analysis, review_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
+    .select("id, statement, kind, analysis, review_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
     .eq("id", id)
     .maybeSingle();
   if (!f) notFound();
@@ -212,6 +212,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
                   <span>{evidenceOrigin.label(e.origin_kind)}</span>
                   {e.companies && <span>· {companyName(e.companies)}</span>}
                   {e.stated_by && <span>· dicho por {e.stated_by.full_name}{e.stated_by.role_title ? ` (${e.stated_by.role_title})` : ""}</span>}
+                  {e.declared_by && <span>· declarado por {e.declared_by}</span>}
                   {e.observed_at && <span>· {formatDate(e.observed_at)}</span>}
                   {e.capture_id && <Link href={`${base}/capturas/${e.capture_id}`} className="text-primary hover:underline">· captura original</Link>}
                   {e.capture_id && e.media_start_ms != null && (

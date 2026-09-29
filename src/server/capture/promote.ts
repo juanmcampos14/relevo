@@ -10,7 +10,7 @@ type EvidenceType = (typeof evidenceType.values)[number];
 
 type Proposal = {
   id: string;
-  kind: "company" | "person" | "evidence" | "finding" | "next_action";
+  kind: "company" | "asset" | "person" | "evidence" | "finding" | "next_action";
   status: string;
   payload: Record<string, unknown>;
   quote: string | null;
@@ -45,7 +45,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   const captureId = prop.capture_id;
 
   const [{ data: capture }, { data: siblings }] = await Promise.all([
-    db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id").eq("id", captureId).single(),
+    db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id, latitude, longitude, location_accuracy_m").eq("id", captureId).single(),
     db.from("proposals").select("id, kind, status, payload, quote, result_id").eq("capture_id", captureId),
   ]);
   if (!capture) return { ok: false, message: "Captura no encontrada." };
@@ -56,12 +56,15 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   const ws = opts.workspaceId;
 
   const company = all.find((x) => x.kind === "company");
+  const asset = all.find((x) => x.kind === "asset");
+  // Sujeto de un dato (propuestas anteriores usaban about_company).
+  const aboutOf = (x: Record<string, unknown>) => (x.about as string | undefined) ?? (x.about_company ? "company" : "none");
   const personByKey = (key: unknown) => all.find((x) => x.kind === "person" && x.payload.key === key);
   const evidenceByKey = (key: unknown) => all.find((x) => x.kind === "evidence" && x.payload.key === key);
   const need = (dep: Proposal | undefined, what: string): string | null =>
     dep && dep.status === "propuesta" ? `Primero decidí ${what} (más arriba).` : null;
 
-  let resultType: "company" | "contact" | "evidence" | "finding" | "task";
+  let resultType: "company" | "asset" | "contact" | "evidence" | "finding" | "task";
   let resultId: string = prop.id;
   let message: string;
   let affectedFindings: string[] = [];
@@ -86,6 +89,44 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           const { data: existing } = await db.from("campaign_targets").select("id").eq("campaign_id", capture.campaign_id).eq("company_id", resultId).maybeSingle();
           if (!existing) {
             const { error } = await db.from("campaign_targets").insert({ workspace_id: ws, campaign_id: capture.campaign_id, company_id: resultId, status: "investigacion", owner_id: opts.userId });
+            if (error) throw error;
+          }
+        }
+        break;
+      }
+      case "asset": {
+        resultType = "asset";
+        if (typeof p.link_to === "string" && p.link_to) {
+          resultId = p.link_to;
+          message = "Vinculado con el activo existente: no se creó otro.";
+        } else {
+          const address = typeof p.address_text === "string" && p.address_text.trim() ? p.address_text.trim() : null;
+          const hasGps = capture.latitude != null && capture.longitude != null;
+          const surface = Number(p.surface_m2);
+          const { error } = await db.from("assets").upsert(
+            {
+              id: prop.id,
+              workspace_id: ws,
+              title: String(p.title ?? "Activo").trim() || "Activo",
+              kind: String(p.kind || "otro"),
+              operation: String(p.operation || "desconocida"),
+              address_text: address,
+              address_status: address ? "no_verificada" : "sin_direccion",
+              locality: (p.locality as string | null) ?? null,
+              // La superficie es lo que DICE la fuente; queda como dato del activo y como evidencia declarada.
+              surface_m2: Number.isFinite(surface) && surface > 0 ? surface : null,
+              ...(hasGps ? { latitude: capture.latitude, longitude: capture.longitude, location_status: "gps_captured", location_accuracy_m: capture.location_accuracy_m, location_source: "gps" } : {}),
+              notes: `Creado desde una captura de campo (${capture.captured_at.slice(0, 10)}).`,
+            },
+            { onConflict: "id", ignoreDuplicates: true },
+          );
+          if (error) throw error;
+          message = hasGps ? "Activo creado con la ubicación GPS de la captura (sin verificar)." : "Activo creado.";
+        }
+        if (capture.campaign_id) {
+          const { data: existing } = await db.from("campaign_targets").select("id").eq("campaign_id", capture.campaign_id).eq("asset_id", resultId).maybeSingle();
+          if (!existing) {
+            const { error } = await db.from("campaign_targets").insert({ workspace_id: ws, campaign_id: capture.campaign_id, asset_id: resultId, status: "investigacion", owner_id: opts.userId });
             if (error) throw error;
           }
         }
@@ -127,9 +168,12 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
       case "evidence": {
         resultType = "evidence";
         const speaker = personByKey(p.stated_by);
-        const blocked = (p.about_company ? need(company, "la empresa") : null) ?? need(speaker, "quién lo dijo");
+        const about = aboutOf(p);
+        const blocked = (about === "company" ? need(company, "la empresa") : about === "asset" ? need(asset, "el activo") : null) ?? need(speaker, "quién lo dijo");
         if (blocked) return { ok: false, message: blocked };
-        const direct = p.origin === "observacion_directa";
+        // Observé algo ≠ una fuente afirma algo ≠ verifiqué el dato.
+        const origin = p.origin === "observacion_directa" ? "observado" : p.origin === "declaracion" ? "declarado_por_persona" : String(p.origin);
+        const direct = origin === "observado";
         const type = (String(p.evidence_type) || "dato") as EvidenceType;
         const { error } = await db.from("evidence").upsert(
           {
@@ -138,9 +182,10 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             statement: String(p.statement),
             quote: prop.quote,
             evidence_type: type,
-            origin_kind: direct ? "field" : "conversation",
-            // Lo visto en persona es verificación de campo; lo que alguien declaró queda sin verificar.
+            origin_kind: origin === "declarado_por_persona" ? "conversation" : "field",
+            // Solo lo observado en persona queda verificado en campo; lo que afirma una persona o un cartel, no.
             verification_status: (p.verification_status as string | undefined) ?? (direct ? "field_verified" : "unverified"),
+            declared_by: origin === "declarado_por_documento" ? String(p.declared_by || "documento o cartel") : null,
             observed_at: capture.captured_at,
             revalidate_after: revalidateAfter(capture.captured_at, type, freshnessFor(opts.settings)),
             capture_id: capture.id,
@@ -149,7 +194,8 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             media_start_ms: (p.audio as { start_ms?: number } | undefined)?.start_ms ?? null,
             media_end_ms: (p.audio as { end_ms?: number } | undefined)?.end_ms ?? null,
             campaign_id: capture.campaign_id,
-            company_id: p.about_company && decided(company) ? company!.result_id : null,
+            company_id: about === "company" && decided(company) ? company!.result_id : null,
+            asset_id: about === "asset" && decided(asset) ? asset!.result_id : null,
             stated_by_contact_id: decided(speaker) ? speaker!.result_id : null,
           },
           { onConflict: "id", ignoreDuplicates: true },
@@ -317,4 +363,33 @@ async function captureSource(db: Db, ws: string, capture: { id: string; captured
 async function closeIfDone(db: Db, captureId: string) {
   const { count } = await db.from("proposals").select("id", { count: "exact", head: true }).eq("capture_id", captureId).eq("status", "propuesta");
   if (!count) await db.from("captures").update({ status: "revisado" }).eq("id", captureId).eq("status", "propuestas_listas");
+}
+
+/**
+ * "Aceptar todo" de un grupo: el sujeto (empresa o activo), las personas que declararon esos datos
+ * y los datos pendientes sobre ese sujeto. Lo ya decidido (aceptado, editado o rechazado) no se toca.
+ */
+export async function acceptGroup(
+  db: Db,
+  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; subject: "company" | "asset"; subjectEdits?: Record<string, unknown> },
+): Promise<{ accepted: number; skipped: string[]; affectedFindings: string[] }> {
+  const { data } = await db.from("proposals").select("id, kind, status, payload").eq("capture_id", opts.captureId).order("position");
+  const all = (data ?? []) as { id: string; kind: string; status: string; payload: Record<string, unknown> }[];
+  const about = (p: Record<string, unknown>) => (p.about as string | undefined) ?? (p.about_company ? "company" : "none");
+  const facts = all.filter((x) => x.kind === "evidence" && x.status === "propuesta" && about(x.payload) === opts.subject);
+  const speakers = new Set(facts.map((f) => f.payload.stated_by).filter(Boolean));
+  const order = [
+    ...all.filter((x) => x.kind === opts.subject && x.status === "propuesta"),
+    ...all.filter((x) => x.kind === "person" && x.status === "propuesta" && speakers.has(x.payload.key)),
+    ...facts,
+  ];
+  const out = { accepted: 0, skipped: [] as string[], affectedFindings: [] as string[] };
+  for (const x of order) {
+    const res = await decideProposal(db, { ...opts, proposalId: x.id, decision: { action: "aceptar", edits: x.kind === opts.subject ? opts.subjectEdits : undefined } });
+    if (res.ok) {
+      out.accepted++;
+      out.affectedFindings.push(...(res.affectedFindings ?? []));
+    } else out.skipped.push(res.message);
+  }
+  return out;
 }

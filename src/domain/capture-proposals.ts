@@ -144,7 +144,12 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
     const matches: Match[] = known
       ? [{ type: "contact", id: known.id, name: known.name, reason: "sugerida por la IA" }]
       : p.name
-        ? ctx.contacts.filter((c) => normalizeName(c.name) === normalizeName(p.name!)).map((c) => ({ type: "contact" as const, id: c.id, name: c.name, reason: "mismo nombre" }))
+        ? ctx.contacts.filter((c) => normalizeName(c.name) === normalizeName(p.name!)).map((c) => ({
+            type: "contact" as const,
+            id: c.id,
+            name: c.company ? `${c.name} (${c.company})` : c.name,
+            reason: ex.company && c.company && normalizeName(c.company) === normalizeName(ex.company.name) ? "mismo nombre y misma empresa" : "solo coincide el nombre: confirmá con la empresa o el cargo",
+          }))
         : [];
     push("person", { key: p.key, name: p.name?.trim() || null, role: p.role, institutional: p.institutional || !p.name, company_key: ex.company ? "c" : null, resolves: p.name?.trim() ? unresolvedOf(p.resolves, "actor") : null }, p.quote ?? null, matches);
   }

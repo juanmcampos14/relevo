@@ -190,7 +190,7 @@ export function findingTimeline(input: {
   links: (EvidenceLink & { linkedAt: string; statement: string })[];
   assessments: { at: string; gaps: string[] }[];
   validations: { title: string; createdAt: string; completedAt: string | null }[];
-  revisions?: { at: string; kind: "enunciado" | "madurez"; relation: string | null; previous: string; next: string }[];
+  revisions?: { at: string; kind: "enunciado" | "madurez" | "estado"; relation: string | null; previous: string; next: string; reason?: string | null }[];
 }): TimelineEvent[] {
   const ev: TimelineEvent[] = [{ at: input.createdAt, kind: "apertura", text: `Se abrió la hipótesis${input.origin ? ` (${input.origin})` : ""}.` }];
   const sorted = [...input.links].sort((a, b) => a.linkedAt.localeCompare(b.linkedAt));
@@ -218,13 +218,13 @@ export function findingTimeline(input: {
     ev.push({ at: v.createdAt, kind: "validacion_agendada", text: `Validación agendada: ${v.title}.` });
     if (v.completedAt) ev.push({ at: v.completedAt, kind: "validacion_hecha", text: `Validación hecha: ${v.title}.` });
   }
-  const MAT: Record<string, string> = { idea: "idea", hipotesis: "hipótesis", finding: "finding" };
+  const MAT: Record<string, string> = { idea: "idea", hipotesis: "hipótesis", finding: "finding", caso: "caso en estudio", activo: "activo", pausado: "pausado", cerrado: "cerrado", descartado: "descartado" };
   const REL: Record<string, string> = { acota: "se acotó", amplia: "se amplió", segmenta: "se segmentó" };
   for (const r of input.revisions ?? []) {
     ev.push(
       r.kind === "enunciado"
         ? { at: r.at, kind: "reformulada", text: `La hipótesis ${REL[r.relation ?? ""] ?? "se reformuló"}: antes «${r.previous}».` }
-        : { at: r.at, kind: "madurez", text: `Pasó de ${MAT[r.previous] ?? r.previous} a ${MAT[r.next] ?? r.next} (decisión humana).` },
+        : { at: r.at, kind: "madurez", text: `${r.kind === "estado" ? "Estado" : "Madurez"}: de ${MAT[r.previous] ?? r.previous} a ${MAT[r.next] ?? r.next} (decisión humana)${r.reason && r.reason !== "Promoción" ? `. Motivo: ${r.reason}` : ""}.` },
     );
   }
   return ev.sort((a, b) => a.at.localeCompare(b.at));

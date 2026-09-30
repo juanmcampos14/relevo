@@ -8,7 +8,8 @@ import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-fo
 import { TextAreaField, TextField } from "@/components/app/fields";
 import { TokenForm } from "@/components/app/token-form";
 import { createIngestToken, importBatch, revokeIngestToken } from "./actions";
-import { uploadCrm } from "./importar/actions";
+import { closeSheet, reopenSheet, setCutoffDate, uploadCrm } from "./importar/actions";
+import { readCutover, reconciliationBatch } from "@/domain/crm-import/cutover";
 import Link from "next/link";
 
 export const metadata: Metadata = { title: "Integraciones" };
@@ -40,7 +41,10 @@ export default async function IntegracionesPage({ params }: PageProps<"/w/[slug]
     ? await supabase.from("ingest_tokens").select("id, name, token_hint, created_at, last_used_at, revoked_at").order("created_at", { ascending: false })
     : { data: [] };
   const endpoint = `${publicEnv.NEXT_PUBLIC_SITE_URL}/api/ingest/findings`;
-  const { data: batches } = await supabase.from("import_batches").select("id, file_name, status, summary, created_at").order("created_at", { ascending: false }).limit(10);
+  const { data: batches } = await supabase.from("import_batches").select("id, file_name, status, summary, created_at").order("created_at", { ascending: false }).limit(30);
+  const cutover = readCutover(ctx.workspace.settings);
+  const recon = reconciliationBatch(batches ?? [], cutover.cutoff_on);
+  const isOwner = ctx.role === "owner";
 
   return (
     <div className="max-w-3xl space-y-10">
@@ -54,7 +58,51 @@ export default async function IntegracionesPage({ params }: PageProps<"/w/[slug]
           Exportá el Sheet (Archivo → Descargar → Microsoft Excel .xlsx) y subilo. RELEVO arma una propuesta por fila —nueva, cambios del
           Sheet, conflicto o sin cambios— y no escribe nada hasta que la revisás y aprobás. Reimportar no duplica ni pisa lo editado en RELEVO.
         </p>
-        {ctx.canEdit && (
+        <div className={`space-y-3 rounded-xl border p-4 text-sm ${cutover.status === "cerrado" ? "border-emerald-500/40 bg-emerald-500/5" : "bg-card"}`}>
+          {cutover.status === "cerrado" ? (
+            <p><span className="font-medium">Corte registrado el {formatDate(cutover.closed_at, true)}.</span> RELEVO es la fuente de verdad; el Sheet queda como respaldo y no se vuelve a importar.</p>
+          ) : (
+            <>
+              <p>
+                <span className="font-medium">El Sheet sigue siendo fuente operativa activa</span>
+                {cutover.cutoff_on ? ` hasta el ${formatDate(cutover.cutoff_on)}.` : " hasta que se acuerde una fecha de corte."}{" "}
+                Antes del corte: una importación completa (sin filtro), revisada y aplicada, como reconciliación final.
+              </p>
+              <p className="text-muted-foreground">
+                Reconciliación final: {recon ? <Link href={`/w/${slug}/integraciones/importar/${recon.id}`} className="text-primary hover:underline">lote aplicado listo</Link> : cutover.cutoff_on ? "todavía no hay un lote completo aplicado desde la fecha de corte." : "se habilita al fijar la fecha."}
+              </p>
+            </>
+          )}
+          {isOwner && cutover.status === "activo" && (
+            <div className="flex flex-wrap items-end gap-3">
+              <ActionForm action={setCutoffDate.bind(null, slug)} className="flex items-end gap-2 space-y-0">
+                <label className="space-y-1"><span className="block text-xs font-medium">Fecha de corte</span><input type="date" name="cutoff_on" defaultValue={cutover.cutoff_on ?? ""} className="h-9 rounded-lg border bg-background px-2" /></label>
+                <SubmitButton variant="outline">Guardar fecha</SubmitButton>
+              </ActionForm>
+              {recon && (
+                <ActionForm action={closeSheet.bind(null, slug, recon.id)} className="flex items-end gap-2 space-y-0">
+                  <label className="flex h-9 items-center gap-2 text-xs"><input type="checkbox" name="confirm" className="size-4 accent-primary" />Revisé la reconciliación (altas, cambios, conflictos, duplicados)</label>
+                  <SubmitButton>Registrar el corte</SubmitButton>
+                </ActionForm>
+              )}
+            </div>
+          )}
+          {isOwner && cutover.status === "cerrado" && (
+            <details>
+              <summary className="cursor-pointer text-xs text-primary">Reabrir el Sheet como fuente (excepcional)</summary>
+              <ActionForm action={reopenSheet.bind(null, slug)} className="mt-2 flex flex-wrap items-end gap-2 space-y-0">
+                <input name="reason" placeholder="Motivo (queda en el historial)" className="h-9 min-w-0 flex-1 rounded-lg border bg-background px-3" />
+                <SubmitButton variant="outline">Reabrir</SubmitButton>
+              </ActionForm>
+            </details>
+          )}
+          {cutover.history.length > 0 && (
+            <ul className="space-y-0.5 text-xs text-muted-foreground">
+              {cutover.history.map((h, i) => <li key={i}>{formatDate(h.at, true)} · {h.by} · {h.note}</li>)}
+            </ul>
+          )}
+        </div>
+        {ctx.canEdit && cutover.status === "activo" && (
           <ActionForm action={uploadCrm.bind(null, slug)}>
             <div className="space-y-1">
               <label htmlFor="crm-file" className="text-sm font-medium">Archivo .xlsx</label>

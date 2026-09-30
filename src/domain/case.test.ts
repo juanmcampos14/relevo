@@ -25,6 +25,11 @@ describe("caso en estudio", () => {
     expect(r.items.find((i) => i.key === "economia")!.detail).toBe("hasta $18.000 por comida");
   });
 
+  it("una fuente directa fuerte alcanza como evidencia suficiente (explicado)", () => {
+    const r = opportunityCriteria({ dims: [], gaps: [], metrics: { independentCases: 1, contradicts: 0 }, economics: [], nextMilestone: null, strongSources: 1 });
+    expect(r.items.find((i) => i.key === "evidencia")).toMatchObject({ ok: true, detail: "1 caso independiente · 1 fuente directa o documental fuerte." });
+  });
+
   it("una contradicción sin resolver impide 'evidencia suficiente'", () => {
     const r = opportunityCriteria({ dims: [], gaps: ["contradiccion_sin_resolver"], metrics: { independentCases: 3, contradicts: 2 }, economics: [], nextMilestone: null });
     expect(r.items.find((i) => i.key === "evidencia")).toMatchObject({ ok: false, detail: "3 casos independientes · 2 en contra sin resolver." });

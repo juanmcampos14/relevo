@@ -141,3 +141,15 @@ describe("responsables", () => {
     expect(resolveOwners(null, members)).toEqual({ ids: [], unknown: [] });
   });
 });
+
+describe("identidad de personas: el nombre solo sugiere", async () => {
+  const { findContactCandidates } = await import("./dedupe");
+  const pool = [
+    { id: "a", name: "Juan Pérez", email: "juan@pecom.example", companies: ["PECOM"] },
+    { id: "b", name: "Juan Perez", companies: ["Otra SA"] },
+  ];
+  it("email es fuerte; nombre + empresa es sugerencia fuerte; nombre solo es sugerencia débil", () => {
+    expect(findContactCandidates({ id: "", name: "J. Pérez", email: "JUAN@pecom.example" }, pool)).toEqual([{ id: "a", name: "Juan Pérez", reason: "mismo_email" }]);
+    expect(findContactCandidates({ id: "", name: "Juan Pérez", companies: ["Pecom"] }, pool).map((c) => [c.id, c.reason])).toEqual([["a", "mismo_nombre_y_empresa"], ["b", "mismo_nombre"]]);
+  });
+});

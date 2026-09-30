@@ -53,20 +53,33 @@ export function BottomNav({ slug }: { slug: string }) {
       aria-label="Principal"
       className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
-      {items.map(({ href, label, short, icon: Icon }) => (
-        <Link
-          key={href}
-          href={base + href}
-          aria-current={isActive(href) ? "page" : undefined}
-          className={cn(
-            "flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground",
-            isActive(href) && "font-medium text-primary",
-          )}
-        >
-          <Icon className="size-5" aria-hidden="true" />
-          {short ?? label}
-        </Link>
-      ))}
+      {items.map(({ href, label, short, icon: Icon }) =>
+        href === "/ai" ? (
+          // En el teléfono, RELEVO se abre como panel sobre la pantalla actual (con su contexto).
+          <button
+            key={href}
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("relevo:open-assistant"))}
+            className="flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground"
+          >
+            <Icon className="size-5" aria-hidden="true" />
+            RELEVO
+          </button>
+        ) : (
+          <Link
+            key={href}
+            href={base + href}
+            aria-current={isActive(href) ? "page" : undefined}
+            className={cn(
+              "flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground",
+              isActive(href) && "font-medium text-primary",
+            )}
+          >
+            <Icon className="size-5" aria-hidden="true" />
+            {short ?? label}
+          </Link>
+        ),
+      )}
     </nav>
   );
 }

@@ -15,9 +15,10 @@ import { PageHeader, Pill, Section, VerificationBadge, formatDate } from "@/comp
 import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { decideProposalAction } from "../../capturas/actions";
-import { assessFindingNow, linkEvidence, promoteMaturity, requestHelp } from "../actions";
+import { assessFindingNow, changeCaseState, linkEvidence, promoteMaturity, requestHelp } from "../actions";
 import { BASIS_LABEL, ECONOMICS, unknownEconomics, type EconomicFact } from "@/domain/economics";
 import { STAGE_LABEL, caseStage, opportunityCriteria } from "@/domain/case";
+import { isStrongSource } from "@/domain/provenance";
 
 export const metadata: Metadata = { title: "Estado del finding" };
 // El análisis con IA corre en una Server Action de esta página.
@@ -47,19 +48,20 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
 
   const { data: f } = await supabase
     .from("findings")
-    .select("id, statement, kind, analysis, review_status, maturity, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
+    .select("id, statement, kind, analysis, review_status, maturity, case_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
     .eq("id", id)
     .maybeSingle();
   if (!f) notFound();
 
-  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }, { data: revisions }, { data: opps }, { data: members }] = await Promise.all([
+  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }, { data: revisions }, { data: opps }, { data: members }, { data: helps }] = await Promise.all([
     supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases, economics").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("proposals").select("id, status, payload, result_id").eq("finding_id", id).order("created_at", { ascending: false }).order("position"),
     supabase.from("tasks").select("id, title, status, due_on, description, created_at, completed_at").eq("finding_id", id).order("created_at", { ascending: false }),
     supabase.from("evidence").select("id, statement, companies(trade_name, legal_name), observed_at").order("created_at", { ascending: false }).limit(60),
-    supabase.from("finding_revisions").select("kind, relation, previous_value, new_value, created_at").eq("finding_id", id).order("created_at"),
+    supabase.from("finding_revisions").select("kind, relation, previous_value, new_value, reason, created_at, created_by").eq("finding_id", id).order("created_at"),
     supabase.from("opportunity_findings").select("opportunities(id, title, status)").eq("finding_id", id),
     supabase.from("profiles").select("user_id, display_name, email"),
+    supabase.from("help_requests").select("id, kind, ask, target, status, result, assignee_id, requested_by, due_on, created_at").eq("finding_id", id).order("created_at", { ascending: false }),
   ]);
 
   const assessment = history?.[0] ?? null;
@@ -81,13 +83,13 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
     links: rows.map(({ stance, linkedAt, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id, linkedAt, statement: e.statement })),
     assessments: (history ?? []).map((a) => ({ at: a.created_at, gaps: a.gaps })),
     validations: (tasks ?? []).map((t) => ({ title: t.title, createdAt: t.created_at, completedAt: t.completed_at })),
-    revisions: (revisions ?? []).map((r) => ({ at: r.created_at, kind: r.kind as "enunciado" | "madurez", relation: r.relation, previous: r.previous_value, next: r.new_value })),
+    revisions: (revisions ?? []).map((r) => ({ at: r.created_at, kind: r.kind as "enunciado" | "madurez" | "estado", relation: r.relation, previous: r.previous_value, next: r.new_value, reason: r.reason })),
   });
   // Como posible negocio: etapa, economía y criterios de oportunidad (sin puntaje).
   const economics = ((assessment?.economics ?? []) as unknown as EconomicFact[]);
   const openValidation = (tasks ?? []).find((t) => t.status !== "done")?.title ?? pending.map((p) => String((p.payload as { title?: string }).title ?? "")).find(Boolean) ?? null;
   const stage = caseStage({ maturity: f.maturity, independentCases: m.independentCases, hasOpportunity: (opps ?? []).some((o) => o.opportunities && o.opportunities.status !== "rechazada") });
-  const criteria = opportunityCriteria({ dims, gaps, metrics: m, economics, nextMilestone: openValidation });
+  const criteria = opportunityCriteria({ dims, gaps, metrics: m, economics, nextMilestone: openValidation, strongSources: rows.filter((r) => r.stance === "supports" && isStrongSource(r.e)).length });
   const dimOf = (...keys: string[]) => keys.map((k) => dims.find((d) => d.key === k)).find((d) => d && d.status !== "falta") ?? dims.find((d) => keys.includes(d.key));
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
   const sinceYesterday = timeline.filter((e) => e.at >= yesterday && e.kind !== "apertura");
@@ -117,6 +119,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
             <Pill>{findingKind.label(f.kind)}</Pill>
             <Pill>{reviewStatus.label(f.review_status)}</Pill>
             {f.companies && <Link href={entityHref(slug, "company", f.companies.id)} className="text-primary hover:underline">{companyName(f.companies)}</Link>}
+            {f.case_status !== "activo" && <Pill className="border-amber-500/40 text-amber-800 dark:text-amber-300">{CASE_STATUS[f.case_status]}</Pill>}
             <span className="text-xs">{MATURITY_NOTE[f.maturity]}</span>
             {ctx.canEdit && f.maturity !== "caso" && (
               <ActionForm action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : f.maturity === "hipotesis" ? "finding" : "caso")} className="space-y-0">
@@ -126,6 +129,29 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
           </span>
         }
       />
+
+      {ctx.canEdit && (
+        <details className="rounded-xl border bg-card p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-primary">Cambiar estado o madurez (pausar, cerrar, descartar, retroceder…)</summary>
+          <ActionForm action={changeCaseState.bind(null, slug, f.id)} className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1"><span className="font-medium">Estado</span>
+              <select name="case_status" defaultValue={f.case_status} className="h-10 w-full rounded-lg border bg-background px-3">
+                {Object.entries(CASE_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1"><span className="font-medium">Madurez</span>
+              <select name="maturity" defaultValue={f.maturity} className="h-10 w-full rounded-lg border bg-background px-3">
+                {Object.entries(MATURITY).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 sm:col-span-2"><span className="font-medium">Motivo (queda en la historia)</span>
+              <textarea name="reason" rows={2} required className="w-full rounded-lg border bg-background px-3 py-2" placeholder="Ej.: la contraevidencia de dos compradores no se sostiene; se pausa hasta hablar con Compras." />
+              <FieldError name="reason" />
+            </label>
+            <div className="sm:col-span-2"><SubmitButton variant="outline">Registrar cambio</SubmitButton></div>
+          </ActionForm>
+        </details>
+      )}
 
       {(f.maturity === "finding" || f.maturity === "caso") && (
         <Section title="Como posible negocio">
@@ -171,6 +197,24 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
                 ))}
               </ul>
             </div>
+            {(helps ?? []).length > 0 && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Pedidos de ayuda</p>
+                <ul className="space-y-1 text-sm">
+                  {(helps ?? []).map((h) => {
+                    const who = (id2: string | null) => (members ?? []).find((mm) => mm.user_id === id2);
+                    const name = (id2: string | null) => who(id2)?.display_name || who(id2)?.email || "—";
+                    return (
+                      <li key={h.id}>
+                        <span className="text-muted-foreground">{HELP_KIND[h.kind]} · {name(h.requested_by)} → {name(h.assignee_id)}:</span> {h.ask}
+                        <span className="text-xs text-muted-foreground"> · {h.status === "resuelto" ? "resuelto" : h.status === "en_curso" ? "en curso" : h.status === "cancelado" ? "cancelado" : "abierto"}</span>
+                        {h.result && <span className="block text-xs">Resultado: {h.result}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
             {ctx.canEdit && (
               <details className="rounded-lg border p-3">
                 <summary className="cursor-pointer text-sm font-medium text-primary">Pedir ayuda (contacto, introducción, acceso, validación…)</summary>
@@ -183,9 +227,19 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
                     </select>
                   </label>
                   <label className="block space-y-1 text-sm">
-                    <span className="font-medium">Qué necesitás</span>
-                    <textarea name="ask" rows={2} required placeholder="¿Conocés a alguien en compras de contratistas de Añelo?" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    <span className="font-medium">Tipo de ayuda</span>
+                    <select name="kind" defaultValue="introduccion" className="h-10 w-full rounded-lg border bg-background px-3 text-sm">
+                      {Object.entries(HELP_KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
                   </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium">Qué necesitás concretamente</span>
+                    <textarea name="ask" rows={2} required placeholder="Una introducción a quien decide compras de alimentación en PECOM" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="block space-y-1 text-sm"><span className="font-medium">A quién buscamos (opcional)</span><input name="target" placeholder="Compras / gerente de base" className="h-10 w-full rounded-lg border bg-background px-3 text-sm" /></label>
+                    <label className="block space-y-1 text-sm"><span className="font-medium">Para cuándo (opcional)</span><input name="due_on" type="date" className="h-10 w-full rounded-lg border bg-background px-3 text-sm" /></label>
+                  </div>
                   <SubmitButton>Pedir ayuda</SubmitButton>
                 </ActionForm>
               </details>
@@ -409,6 +463,8 @@ function Block({ title, icon, items, empty, renderRef }: { title: string; icon: 
 }
 
 const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding", caso: "Caso en estudio" };
+const HELP_KIND: Record<string, string> = { contacto: "Contacto", introduccion: "Introducción", acceso: "Acceso", validacion: "Validación", aprobacion: "Aprobación", capital: "Capital", conocimiento: "Conocimiento sectorial" };
+const CASE_STATUS: Record<string, string> = { activo: "Activo", pausado: "Pausado", cerrado: "Cerrado", descartado: "Descartado" };
 const MATURITY_NOTE: Record<string, string> = {
   idea: "Una idea de quien capturó: todavía sin evidencia de demanda.",
   hipotesis: "Hipótesis exploratoria: pasa a finding cuando la evidencia sostiene un patrón (decisión humana).",

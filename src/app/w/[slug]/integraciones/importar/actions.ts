@@ -10,6 +10,7 @@ import { stageImport } from "@/server/crm-import/stage";
 import { applyBatch, type Resolution } from "@/server/crm-import/apply";
 import { decideRow } from "@/server/crm-import/review";
 import { triageBatch, type TriageRow } from "@/domain/crm-import/triage";
+import { readCutover, type Cutover } from "@/domain/crm-import/cutover";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -17,6 +18,9 @@ const MAX_BYTES = 4 * 1024 * 1024;
 export async function uploadCrm(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  if (readCutover(ctx.workspace.settings).status === "cerrado") {
+    return { message: "El corte del Sheet ya se registró: RELEVO es la fuente de verdad y el Sheet queda como respaldo. Para volver a importar, el owner tiene que reabrirlo (con motivo)." };
+  }
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return { errors: { file: "Elegí el archivo .xlsx exportado del Sheet." } };
   if (!/\.xlsx$/i.test(file.name)) return { errors: { file: "Tiene que ser .xlsx (Archivo → Descargar → Microsoft Excel)." } };
@@ -100,4 +104,49 @@ export async function discardImport(slug: string, batchId: string): Promise<void
   const supabase = await createClient();
   await supabase.from("import_batches").update({ status: "descartado", closed_at: new Date().toISOString() }).eq("id", batchId).eq("status", "en_revision");
   revalidatePath(`/w/${slug}/integraciones`, "layout");
+}
+
+// ---------------------------------------------------------------------------------
+// Corte del Sheet: transición explícita y auditable (sin sincronización bidireccional)
+// ---------------------------------------------------------------------------------
+
+async function saveCutover(slug: string, mutate: (c: Cutover, who: string) => Cutover | string): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (ctx.role !== "owner") return { message: "Solo el owner decide el corte del Sheet." };
+  const current = readCutover(ctx.workspace.settings);
+  const who = ctx.user.email ?? ctx.user.id;
+  const next = mutate(current, who);
+  if (typeof next === "string") return { message: next };
+  const supabase = await createClient();
+  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), sheet_cutover: next };
+  const { data, error } = await supabase.from("workspaces").update({ settings }).eq("id", ctx.workspace.id).select("id");
+  if (error) return { message: dbErrorMessage(error) };
+  if (!data?.length) return { message: "Solo el owner puede cambiar esta configuración." };
+  revalidatePath(`/w/${slug}`, "layout");
+  return { ok: true, message: "Registrado." };
+}
+
+export async function setCutoffDate(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const date = String(fd.get("cutoff_on") ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { errors: { cutoff_on: "Elegí la fecha de corte." } };
+  return saveCutover(slug, (c, who) =>
+    c.status === "cerrado" ? "El corte ya se registró." : { ...c, cutoff_on: date, history: [...c.history, { at: new Date().toISOString(), by: who, action: "fecha", note: `Fecha de corte: ${date}` }] },
+  );
+}
+
+export async function closeSheet(slug: string, batchId: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  if (fd.get("confirm") !== "on") return { message: "Confirmá que revisaste la reconciliación." };
+  return saveCutover(slug, (c, who) => {
+    if (c.status === "cerrado") return "El corte ya se registró.";
+    const now = new Date().toISOString();
+    return { ...c, status: "cerrado", closed_at: now, closed_by: who, reconciliation_batch_id: batchId, history: [...c.history, { at: now, by: who, action: "corte", note: `Reconciliación final: lote ${batchId}. Desde ahora RELEVO es la fuente de verdad.` }] };
+  });
+}
+
+export async function reopenSheet(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const reason = String(fd.get("reason") ?? "").trim();
+  if (reason.length < 5) return { errors: { reason: "Escribí el motivo de la reapertura." } };
+  return saveCutover(slug, (c, who) =>
+    c.status !== "cerrado" ? "El Sheet no está cerrado." : { ...c, status: "activo", closed_at: null, closed_by: null, history: [...c.history, { at: new Date().toISOString(), by: who, action: "reapertura", note: reason }] },
+  );
 }

@@ -30,7 +30,15 @@ const known = (dims: Dimension[], ...keys: string[]) => dims.find((d) => keys.in
  * suficiente, actor afectado, comprador o decisor identificable, economía y un próximo hito verificable.
  * No decide: muestra qué está y qué no.
  */
-export function opportunityCriteria(input: { dims: Dimension[]; gaps: Gap[]; metrics: Pick<Metrics, "independentCases" | "contradicts">; economics: EconomicFact[]; nextMilestone: string | null }): { met: boolean; items: Criterion[] } {
+export function opportunityCriteria(input: {
+  dims: Dimension[];
+  gaps: Gap[];
+  metrics: Pick<Metrics, "independentCases" | "contradicts">;
+  economics: EconomicFact[];
+  nextMilestone: string | null;
+  /** Fuentes directas o documentales fuertes a favor (observado en campo, o documentado y verificado). */
+  strongSources?: number;
+}): { met: boolean; items: Criterion[] } {
   const { dims, gaps, metrics, economics } = input;
   const problem = known(dims, "problema");
   const actor = known(dims, "actor_afectado", "usuario");
@@ -40,10 +48,11 @@ export function opportunityCriteria(input: { dims: Dimension[]; gaps: Gap[]; met
   const items: Criterion[] = [
     { key: "problema", label: "Problema concreto", ok: !!problem, detail: problem?.summary ?? "Todavía no está respaldado por evidencia." },
     {
+      // Suficiente = una fuente directa o documental fuerte, o más de una fuente independiente consistente; sin contradicción abierta.
       key: "evidencia",
       label: "Evidencia suficiente",
-      ok: metrics.independentCases >= 2 && !disputed,
-      detail: `${metrics.independentCases} ${metrics.independentCases === 1 ? "caso independiente" : "casos independientes"}${metrics.contradicts ? ` · ${metrics.contradicts} en contra${disputed ? " sin resolver" : ""}` : ""}.`,
+      ok: (metrics.independentCases >= 2 || (input.strongSources ?? 0) >= 1) && !disputed,
+      detail: `${metrics.independentCases} ${metrics.independentCases === 1 ? "caso independiente" : "casos independientes"}${input.strongSources ? ` · ${input.strongSources} ${input.strongSources === 1 ? "fuente directa o documental fuerte" : "fuentes directas o documentales fuertes"}` : ""}${metrics.contradicts ? ` · ${metrics.contradicts} en contra${disputed ? " sin resolver" : ""}` : ""}.`,
     },
     { key: "actor", label: "Actor afectado", ok: !!actor, detail: actor?.summary ?? "No sabemos bien quién lo sufre." },
     { key: "comprador", label: "Comprador o decisor identificable", ok: !!buyer, detail: buyer?.summary ?? "No sabemos quién paga ni quién decide." },

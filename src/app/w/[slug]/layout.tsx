@@ -6,6 +6,7 @@ import { BottomNav, SideNav } from "@/components/app/nav";
 import { role as roleCatalog } from "@/domain/catalogs";
 import { LogoMark } from "@/components/app/brand";
 import { APP_VERSION } from "@/lib/build";
+import { AssistantButton, AssistantPanel } from "@/components/ai/assistant-panel";
 import { CaptureProvider, CaptureTopButton, PendingCapturesBadge } from "@/components/app/capture/capture-dock";
 
 export default async function WorkspaceLayout({ children, params }: LayoutProps<"/w/[slug]">) {
@@ -67,12 +68,16 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
               />
             </form>
             <PendingCapturesBadge />
-            {ctx.canEdit && <span className="ml-auto hidden md:inline-flex"><CaptureTopButton /></span>}
+            <span className="ml-auto hidden items-center gap-2 md:inline-flex">
+              <AssistantButton />
+              {ctx.canEdit && <CaptureTopButton />}
+            </span>
             <Link href="/cuenta" className="text-xs text-muted-foreground md:hidden">Cuenta</Link>
           </header>
           <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-5 pb-40 md:pb-24">{children}</main>
         </div>
         <BottomNav slug={slug} />
+        <AssistantPanel slug={slug} canEdit={ctx.canEdit} />
       </div>
     </CaptureProvider>
   );

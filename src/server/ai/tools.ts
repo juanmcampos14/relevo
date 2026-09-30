@@ -6,15 +6,17 @@ import { z } from "zod";
 import type { Database } from "@/lib/supabase/database.types";
 import { dealflowStage, findingKind, opportunityStatus, reviewStatus, targetStatus } from "@/domain/catalogs";
 import { companyName } from "@/server/entities";
+import { DRAFT_ACTIONS, HELP_KINDS, ProposeActionInput } from "./drafts";
+import { KNOWLEDGE_TOOLS, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool } from "./tools-knowledge";
 
 type Db = SupabaseClient<Database>;
 
 /** Tipos de referencia citables: [[tipo:uuid]]. */
 export const REF_TYPES = [
-  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task", "news",
+  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task", "news", "capture", "evidence",
 ] as const;
 export type RefType = (typeof REF_TYPES)[number];
-export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task|news):([0-9a-f-]{36})\]\]/g;
+export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task|news|capture|evidence):([0-9a-f-]{36})\]\]/g;
 
 const ref = (type: RefType, id: string) => `${type}:${id}`;
 const clip = (s: string | null | undefined, n = 1500) => (s && s.length > n ? `${s.slice(0, n)}… [recortado]` : s ?? null);
@@ -86,44 +88,35 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
   {
     name: "propose_action",
     description:
-      "Registra un BORRADOR de acción para que un humano lo apruebe o rechace. No ejecuta nada. Acciones: create_task (tarea), draft_finding (hallazgo pendiente de revisión; requiere source_ref de una fuente existente), request_decision (pedir una decisión). Siempre explicá el motivo y citá la evidencia.",
+      "Registra una PROPUESTA de cambio para que una persona la vea (qué cambia, por qué, evidencia, riesgo de duplicado) y la apruebe o rechace. No ejecuta nada. Acciones: create_task, prepare_validation (validación de una hipótesis: finding_ref), link_evidence (evidence_ref + finding_ref + stance), update_next_action (entity_ref + next_action), request_help (assignee_ref de list_members + help_kind + title con lo concreto que se pide; finding_ref si es sobre un caso), draft_finding (source_ref + statement; queda pendiente de revisión), request_decision (title). NO existen acciones para promover oportunidades, fusionar personas, confirmar reuniones, enviar mensajes, cambiar economía ni descartar casos: eso lo hace una persona.",
     input_schema: strict(
       {
-        action: { type: "string", enum: ["create_task", "draft_finding", "request_decision"] },
-        title: { type: "string", description: "Título de la tarea o pregunta de la decisión" },
-        statement: { type: "string", description: "Texto del hallazgo (solo draft_finding)" },
+        action: { type: "string", enum: [...DRAFT_ACTIONS] },
+        title: { type: "string", description: "Tarea, validación, pedido de ayuda o pregunta de la decisión" },
+        statement: { type: "string", description: "Texto de la hipótesis (draft_finding)" },
         finding_kind: { type: "string", enum: [...findingKind.values] },
-        source_ref: { type: "string", description: "source:uuid (obligatorio para draft_finding)" },
-        entity_ref: { type: "string", description: "company|establishment|asset:uuid relacionado (opcional)" },
-        opportunity_ref: { type: "string", description: "opportunity:uuid relacionado (opcional)" },
-        due_on: { type: "string", description: "Fecha AAAA-MM-DD (opcional)" },
+        source_ref: { type: "string", description: "source:uuid (draft_finding)" },
+        entity_ref: { type: "string", description: "company|establishment|asset:uuid" },
+        opportunity_ref: { type: "string" },
+        finding_ref: { type: "string", description: "finding:uuid" },
+        evidence_ref: { type: "string", description: "evidence:uuid" },
+        contact_ref: { type: "string", description: "contact:uuid (persona involucrada)" },
+        stance: { type: "string", enum: ["supports", "contradicts", "contextual"] },
+        next_action: { type: "string" },
+        assignee_ref: { type: "string", description: "member:uuid (request_help)" },
+        help_kind: { type: "string", enum: [...HELP_KINDS] },
+        help_target: { type: "string", description: "A quién se busca (request_help, opcional)" },
+        due_on: { type: "string", description: "AAAA-MM-DD (opcional)" },
         rationale: { type: "string", description: "Por qué se propone" },
         evidence_refs: { type: "array", items: { type: "string" }, description: "Referencias 'tipo:uuid' que la sustentan" },
       },
       ["action", "rationale", "evidence_refs"],
     ),
   },
+  ...KNOWLEDGE_TOOLS,
 ];
 
-export const ProposeActionInput = z.object({
-  action: z.enum(["create_task", "draft_finding", "request_decision"]),
-  title: z.string().trim().max(300).optional(),
-  statement: z.string().trim().max(2000).optional(),
-  finding_kind: z.enum(findingKind.values).optional(),
-  source_ref: z.string().regex(/^source:[0-9a-f-]{36}$/).optional(),
-  entity_ref: z.string().regex(/^(company|establishment|asset):[0-9a-f-]{36}$/).optional(),
-  opportunity_ref: z.string().regex(/^opportunity:[0-9a-f-]{36}$/).optional(),
-  due_on: z.iso.date().optional(),
-  rationale: z.string().trim().min(1).max(2000),
-  evidence_refs: z.array(z.string()).max(20),
-}).superRefine((v, ctx) => {
-  if ((v.action === "create_task" || v.action === "request_decision") && !v.title) {
-    ctx.addIssue({ code: "custom", message: "title es obligatorio para esta acción" });
-  }
-  if (v.action === "draft_finding" && (!v.statement || !v.source_ref)) {
-    ctx.addIssue({ code: "custom", message: "draft_finding requiere statement y source_ref" });
-  }
-});
+export { ProposeActionInput };
 
 // ---------------------------------------------------------------------------------
 // Ejecución (solo lectura, con el cliente del usuario → RLS)
@@ -131,6 +124,9 @@ export const ProposeActionInput = z.object({
 
 export type ToolContext = {
   db: Db;
+  slug: string;
+  /** Si una herramienta lleva al usuario a otra pantalla (open_page). */
+  navigate?: (href: string) => void;
   /** Referencias devueltas por las herramientas en esta conversación: únicas citables. */
   seenRefs: Set<string>;
   /** Registra un borrador; devuelve su id. */
@@ -303,7 +299,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
     case "propose_action": {
       const parsed = ProposeActionInput.safeParse(a);
       if (!parsed.success) return { content: `Borrador inválido: ${parsed.error.issues.map((i) => i.message).join("; ")}`, isError: true };
-      const unknownRefs = [parsed.data.source_ref, parsed.data.entity_ref, parsed.data.opportunity_ref, ...parsed.data.evidence_refs]
+      const unknownRefs = [parsed.data.source_ref, parsed.data.entity_ref, parsed.data.opportunity_ref, parsed.data.finding_ref, parsed.data.evidence_ref, parsed.data.contact_ref, parsed.data.assignee_ref, ...parsed.data.evidence_refs]
         .filter((r): r is string => !!r)
         .filter((r) => !ctx.seenRefs.has(r));
       if (unknownRefs.length) {
@@ -313,6 +309,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
       return { content: `Borrador registrado (${id}). Queda pendiente de aprobación humana; no se ejecutó nada.` };
     }
     default:
+      if (KNOWLEDGE_TOOL_NAMES.has(name)) return runKnowledgeTool(name, a, ctx);
       return { content: `Herramienta desconocida: ${name}`, isError: true };
   }
 }

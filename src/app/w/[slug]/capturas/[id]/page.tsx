@@ -15,7 +15,7 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { AudioPlayer } from "@/components/app/audio-player";
 import { APP_VERSION } from "@/lib/build";
-import { approveCaptureAction, decideProposalAction, processCaptureNow } from "../actions";
+import { approveCaptureAction, decideProposalAction, processAsDistinct, processCaptureNow } from "../actions";
 import { captureExceptions } from "@/domain/capture-review";
 import type { ActionState } from "@/server/action-result";
 import { captureEffects, type CaptureEffects } from "@/server/findings/effects";
@@ -57,7 +57,7 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
   const base = `/w/${slug}`;
   const { data: c } = await supabase
     .from("captures")
-    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, ai_summary, ai_unknowns, capture_media(id, kind, storage_path, duration_ms)")
+    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, ai_summary, ai_unknowns, duplicate_of, capture_media(id, kind, storage_path, duration_ms)")
     .eq("id", id)
     .maybeSingle();
   if (!c) notFound();
@@ -105,6 +105,21 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
         title="Captura de campo"
         subtitle={`${nameOf.get(c.captured_by ?? "") ?? "—"} · ${formatDate(c.captured_at, true)}`}
       />
+
+      {c.status === "duplicado" && (
+        <div className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Parece la misma conversación que otra captura.</p>
+          <p className="text-muted-foreground">
+            Mismo audio o prácticamente el mismo texto que{" "}
+            {c.duplicate_of ? <Link href={`${base}/capturas/${c.duplicate_of}`} className="text-primary hover:underline">esta captura</Link> : "una captura anterior"}. Queda vinculada a ella y no se cuenta como una fuente independiente nueva.
+          </p>
+          {ctx.canEdit && c.ai_consent && (
+            <ActionForm action={processAsDistinct.bind(null, slug, c.id)} className="space-y-0">
+              <SubmitButton variant="outline">Es otra conversación: procesarla</SubmitButton>
+            </ActionForm>
+          )}
+        </div>
+      )}
 
       {(c.status === "procesando" || (c.status === "error" && c.status_error) || !c.ai_consent || canProcess) && (
         <div className="space-y-3">

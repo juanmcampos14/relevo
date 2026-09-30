@@ -6,7 +6,10 @@ import type { Database } from "@/lib/supabase/database.types";
 import { GAPS, type Dimension, type Gap } from "@/domain/readiness";
 import { BASIS_LABEL, ECONOMICS, type EconomicFact } from "@/domain/economics";
 import { STAGE_LABEL, caseStage, opportunityCriteria } from "@/domain/case";
+import { isStrongSource } from "@/domain/provenance";
 import { Pill, Section, formatDate } from "@/components/app/bits";
+import { ActionForm, SubmitButton } from "@/components/app/action-form";
+import { answerHelp } from "./hallazgos/actions";
 
 // Vista Ejecutiva: qué aprendimos, qué cambió y qué negocio puede derivarse. Mismos datos que la
 // operativa, otra lectura. Sin conteos de actividad: conocimiento, evidencia, incertidumbre y decisiones.
@@ -14,6 +17,7 @@ import { Pill, Section, formatDate } from "@/components/app/bits";
 type Db = SupabaseClient<Database>;
 const RANK: Record<string, number> = { caso: 0, finding: 1, hipotesis: 2, idea: 3 };
 const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding", caso: "Caso en estudio" };
+const HELP_KIND: Record<string, string> = { contacto: "contacto", introduccion: "introducción", acceso: "acceso", validacion: "validación", aprobacion: "aprobación", capital: "capital", conocimiento: "conocimiento sectorial" };
 const REL: Record<string, string> = { acota: "se acotó", amplia: "se amplió", segmenta: "se segmentó" };
 
 function Card({ children }: { children: ReactNode }) {
@@ -25,14 +29,14 @@ const q = (s: string, n = 90) => `«${s.length > n ? `${s.slice(0, n)}…` : s}�
 export async function ExecutiveView({ supabase, slug, userId, canApprove, since }: { supabase: Db; slug: string; userId: string; canApprove: boolean; since: string }) {
   const base = `/w/${slug}`;
   const [{ data: findings }, { data: assessments }, { data: revisions }, { data: contra }, { data: opps }, { data: decisions }, { data: help }, { data: milestones }, { data: proposed }] = await Promise.all([
-    supabase.from("findings").select("id, statement, maturity, created_at, updated_at, companies(trade_name, legal_name), opportunity_findings(opportunities(id, status))").eq("review_status", "aprobado").limit(200),
+    supabase.from("findings").select("id, statement, maturity, case_status, created_at, updated_at, companies(trade_name, legal_name), opportunity_findings(opportunities(id, status)), finding_evidence(stance, evidence(origin_kind, verification_status, declared_by))").eq("review_status", "aprobado").neq("case_status", "descartado").limit(200),
     supabase.from("finding_assessments").select("finding_id, created_at, summary, gaps, dimensions, economics, independent_cases, contradicts").order("created_at", { ascending: false }).limit(400),
     supabase.from("finding_revisions").select("finding_id, kind, relation, previous_value, new_value, created_at, capture_id").gte("created_at", since).order("created_at", { ascending: false }).limit(20),
     supabase.from("finding_evidence").select("finding_id, created_at, evidence(statement, capture_id)").eq("stance", "contradicts").gte("created_at", since).order("created_at", { ascending: false }).limit(20),
     supabase.from("opportunities").select("id, title, status, stage, next_action").neq("status", "rechazada").order("updated_at", { ascending: false }).limit(10),
     supabase.from("decisions").select("id, question, due_on, opportunity_id").eq("status", "requested").order("due_on", { nullsFirst: false }).limit(5),
-    supabase.from("tasks").select("id, title, assignee_id, finding_id, due_on").eq("kind", "Ayuda").neq("status", "done").order("created_at", { ascending: false }).limit(10),
-    supabase.from("tasks").select("finding_id, title").not("finding_id", "is", null).neq("status", "done").neq("kind", "Ayuda"),
+    supabase.from("help_requests").select("id, kind, ask, target, due_on, status, assignee_id, requested_by, finding_id, findings(statement)").in("status", ["abierto", "en_curso"]).order("created_at", { ascending: false }).limit(10),
+    supabase.from("tasks").select("finding_id, title").not("finding_id", "is", null).neq("status", "done"),
     supabase.from("proposals").select("finding_id, payload").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
   ]);
   // Próximo hito: una validación agendada o, si no, la primera propuesta.
@@ -50,7 +54,7 @@ export async function ExecutiveView({ supabase, slug, userId, canApprove, since 
     return {
       ...f, a, dims, gaps, economics, cases, contradicts: a?.contradicts ?? 0,
       stage: caseStage({ maturity: f.maturity, independentCases: cases, hasOpportunity: hasOpp }),
-      criteria: opportunityCriteria({ dims, gaps, metrics: { independentCases: cases, contradicts: a?.contradicts ?? 0 }, economics, nextMilestone: milestoneOf(f.id) }),
+      criteria: opportunityCriteria({ dims, gaps, metrics: { independentCases: cases, contradicts: a?.contradicts ?? 0 }, economics, nextMilestone: milestoneOf(f.id), strongSources: f.finding_evidence.filter((x) => x.stance === "supports" && x.evidence && isStrongSource(x.evidence)).length }),
       updated: a?.created_at ?? f.updated_at,
     };
   });
@@ -228,11 +232,26 @@ export async function ExecutiveView({ supabase, slug, userId, canApprove, since 
             </ul>
           )}
           {(help ?? []).length > 0 && (
-            <ul className="space-y-1">
+            <ul className="space-y-3">
               {(help ?? []).map((h) => (
-                <li key={h.id} className="text-sm">
-                  <span className="font-medium">{h.assignee_id === userId ? "Te piden ayuda" : "Pedido de ayuda"}:</span> {h.title}
-                  {h.finding_id && <> · <Link href={`${base}/hallazgos/${h.finding_id}`} className="text-primary hover:underline">caso</Link></>}
+                <li key={h.id} className="space-y-1 rounded-lg border p-3 text-sm">
+                  <p>
+                    <span className="font-medium">{h.assignee_id === userId ? "Te piden ayuda" : "Pedido de ayuda"} · {HELP_KIND[h.kind]}:</span> {h.ask}
+                    {h.target && <span className="text-muted-foreground"> · buscamos: {h.target}</span>}
+                    {h.due_on && <span className="text-muted-foreground"> · para el {formatDate(h.due_on)}</span>}
+                  </p>
+                  {h.findings && <p className="text-xs text-muted-foreground">Caso: <Link href={`${base}/hallazgos/${h.finding_id}`} className="text-primary hover:underline">{q(h.findings.statement, 80)}</Link> · {h.status === "en_curso" ? "en curso" : "abierto"}</p>}
+                  {h.assignee_id === userId && (
+                    <ActionForm action={answerHelp.bind(null, slug, h.id)} className="flex flex-wrap items-end gap-2">
+                      <select name="status" defaultValue="resuelto" className="h-9 rounded-lg border bg-background px-2 text-sm">
+                        <option value="en_curso">En curso</option>
+                        <option value="resuelto">Resuelto</option>
+                        <option value="cancelado">No puedo</option>
+                      </select>
+                      <input name="result" placeholder="Resultado: contacto, introducción, dato obtenido…" className="h-9 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm" />
+                      <SubmitButton variant="outline">Responder</SubmitButton>
+                    </ActionForm>
+                  )}
                 </li>
               ))}
             </ul>

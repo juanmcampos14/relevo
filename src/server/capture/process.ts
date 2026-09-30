@@ -6,6 +6,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { CAPTURE_BUCKET } from "@/domain/capture";
 import { buildProposals, locateInAudio } from "@/domain/capture-proposals";
 import { formatDuration } from "@/domain/capture";
+import { MIN_WORDS, NEAR_DUPLICATE, contentSimilarity, normalizeContent } from "@/domain/capture-dedupe";
 import { EXTRACT_MODEL, EXTRACT_PROMPT_VERSION, extractCapture } from "./extract";
 import { configuredTranscriber, type Transcriber, type Utterance } from "./transcribe";
 
@@ -13,7 +14,12 @@ type Db = SupabaseClient<Database>;
 const DAILY_LIMIT = 60;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export type ProcessResult = { ok: true; proposals: number } | { ok: false; message: string };
+export type ProcessResult = { ok: true; proposals: number } | { ok: false; message: string; duplicateOf?: string };
+
+async function sha256(data: ArrayBuffer | string): Promise<string> {
+  const buf = typeof data === "string" ? new TextEncoder().encode(data) : data;
+  return Buffer.from(await crypto.subtle.digest("SHA-256", buf)).toString("hex");
+}
 
 function formatAR(iso: string) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(iso));
@@ -25,7 +31,8 @@ function formatAR(iso: string) {
  */
 export async function processCapture(
   db: Db,
-  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic; transcriber?: Transcriber | null },
+  /** force: procesar aunque parezca un duplicado (la persona confirmó que es otra conversación). */
+  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic; transcriber?: Transcriber | null; force?: boolean },
 ): Promise<ProcessResult> {
   if ((opts.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent !== true) {
     return { ok: false, message: "El workspace no habilitó el procesamiento con IA (Miembros → Procesamiento con IA)." };
@@ -52,7 +59,7 @@ export async function processCapture(
   if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegaste al límite de ${DAILY_LIMIT} usos de IA en 24 horas.` };
 
   // Reserva: una sola corrida por captura aunque se toque dos veces o haya dos pestañas.
-  const { data: claimed } = await db.from("captures").update({ status: "procesando", status_error: null }).eq("id", capture.id).in("status", ["guardado", "error"]).select("id");
+  const { data: claimed } = await db.from("captures").update({ status: "procesando", status_error: null, ...(opts.force ? { duplicate_of: null } : {}) }).eq("id", capture.id).in("status", opts.force ? ["guardado", "error", "duplicado"] : ["guardado", "error"]).select("id");
   if (!claimed?.length) return { ok: false, message: capture.status === "procesando" ? "Ya se está procesando." : "La captura ya tiene propuestas." };
 
   const fail = async (message: string, runId: string | null) => {
@@ -60,6 +67,7 @@ export async function processCapture(
     return { ok: false as const, message };
   };
 
+  let duplicateOf: string | null = null;
   try {
     // 1. Audio → transcripción (una vez por archivo; el audio original queda intacto).
     const transcribed: { mediaId: string; text: string; utterances: Utterance[]; durationMs: number | null }[] = [];
@@ -77,7 +85,18 @@ export async function processCapture(
           continue;
         }
         const { data: file } = await db.storage.from(CAPTURE_BUCKET).download(a.storage_path);
-        const t = file ? await transcriber(await file.arrayBuffer(), a.mime_type) : { ok: false as const, error: "No se pudo leer el audio guardado.", retry: true, provider: "—", model: "—" };
+        const bytes = file ? await file.arrayBuffer() : null;
+        if (bytes) {
+          // Huella del audio: el mismo archivo subido dos veces es la misma conversación.
+          const hash = await sha256(bytes);
+          await db.from("capture_media").update({ sha256: hash }).eq("id", a.id);
+          if (!opts.force && !duplicateOf) {
+            const { data: same } = await db.from("capture_media").select("capture_id").eq("sha256", hash).neq("capture_id", capture.id).limit(1);
+            duplicateOf = same?.[0]?.capture_id ?? null;
+          }
+        }
+        if (duplicateOf) break;
+        const t = bytes ? await transcriber(bytes, a.mime_type) : { ok: false as const, error: "No se pudo leer el audio guardado.", retry: true, provider: "—", model: "—" };
         await db.from("transcripts").upsert(
           t.ok
             ? { workspace_id: opts.workspaceId, capture_id: capture.id, capture_media_id: a.id, provider: t.provider, model: t.model, language: t.language, status: "ok", text: t.text, utterances: t.utterances as unknown as NonNullable<Json>, duration_ms: t.durationMs, error: null }
@@ -87,7 +106,7 @@ export async function processCapture(
         if (t.ok) transcribed.push({ mediaId: a.id, text: t.text, utterances: t.utterances, durationMs: t.durationMs });
         else notes.push(`Audio ${i + 1}: ${t.error}`);
       }
-      if (!capture.body?.trim() && !photos.length && !transcribed.some((t) => t.text)) {
+      if (!duplicateOf && !capture.body?.trim() && !photos.length && !transcribed.some((t) => t.text)) {
         return fail(notes.join(" ") || "El audio no tiene habla reconocible.", null);
       }
     }
@@ -96,6 +115,32 @@ export async function processCapture(
       capture.body?.trim() || null,
       ...transcribed.filter((t) => t.text).map((t, i) => `[Audio ${i + 1}${t.durationMs ? `, ${formatDuration(t.durationMs)}` : ""}, transcripción automática]\n${t.text}`),
     ].filter(Boolean).join("\n\n");
+
+    // 2. ¿Es la misma conversación que otra captura? Mismo audio, mismo texto o prácticamente idéntico.
+    const normalized = normalizeContent(fullText);
+    const contentHash = normalized ? await sha256(normalized) : null;
+    if (!opts.force && !duplicateOf && contentHash) {
+      const { data: exact } = await db.from("captures").select("id").eq("content_hash", contentHash).neq("id", capture.id).limit(1);
+      duplicateOf = exact?.[0]?.id ?? null;
+      if (!duplicateOf && normalized.split(" ").length >= MIN_WORDS) {
+        const { data: recent } = await db
+          .from("captures")
+          .select("id, body, transcripts(text)")
+          .neq("id", capture.id)
+          .gte("captured_at", new Date(Date.parse(capture.captured_at) - 60 * 86_400_000).toISOString())
+          .order("captured_at", { ascending: false })
+          .limit(200);
+        const best = (recent ?? [])
+          .map((r) => ({ id: r.id, sim: contentSimilarity(normalized, normalizeContent([r.body ?? "", ...r.transcripts.map((t) => t.text ?? "")].join(" "))) }))
+          .sort((x, y) => y.sim - x.sim)[0];
+        if (best && best.sim >= NEAR_DUPLICATE) duplicateOf = best.id;
+      }
+    }
+    if (duplicateOf) {
+      await db.from("captures").update({ status: "duplicado", duplicate_of: duplicateOf, content_hash: contentHash }).eq("id", capture.id);
+      return { ok: false, message: "Parece la misma conversación que otra captura: no se procesó para no contarla como una fuente nueva.", duplicateOf };
+    }
+    await db.from("captures").update({ content_hash: contentHash }).eq("id", capture.id);
 
     const [companies, contacts, findings, author, mission, images, unresolved] = await Promise.all([
       db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone").order("updated_at", { ascending: false }).limit(400),

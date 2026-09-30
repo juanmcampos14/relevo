@@ -10,10 +10,19 @@ import { processCapture } from "@/server/capture/process";
 import { acceptGroup, approveCapture, decideProposal, resolveEntity } from "@/server/capture/promote";
 
 export async function processCaptureNow(slug: string, captureId: string): Promise<ActionState> {
+  return runProcess(slug, captureId, false);
+}
+
+/** La persona confirma que no es la misma conversación que la captura con la que coincidía. */
+export async function processAsDistinct(slug: string, captureId: string): Promise<ActionState> {
+  return runProcess(slug, captureId, true);
+}
+
+async function runProcess(slug: string, captureId: string, force: boolean): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   const supabase = await createClient();
-  const res = await processCapture(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, captureId });
+  const res = await processCapture(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, captureId, force });
   revalidatePath(`/w/${slug}`, "layout");
   return res.ok ? { ok: true, message: res.proposals ? `${res.proposals} propuestas para revisar.` : "No encontré nada para estructurar." } : { message: res.message };
 }

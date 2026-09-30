@@ -16,6 +16,7 @@ const statusLabel: Record<string, string> = {
   procesando: "Procesando",
   transcripto: "Transcripta",
   propuestas_listas: "Propuestas para revisar",
+  duplicado: "Misma conversación que otra captura",
   revisado: "Revisada",
   error: "Error",
 };

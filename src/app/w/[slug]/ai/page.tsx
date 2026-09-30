@@ -13,7 +13,11 @@ export const metadata: Metadata = { title: "RELEVO AI" };
 
 const actionLabel: Record<string, string> = {
   create_task: "Crear tarea",
-  draft_finding: "Registrar hallazgo (queda pendiente de revisión)",
+  prepare_validation: "Agendar validación",
+  link_evidence: "Vincular evidencia",
+  update_next_action: "Actualizar próxima acción",
+  request_help: "Pedir ayuda",
+  draft_finding: "Registrar hipótesis (queda pendiente de revisión)",
   request_decision: "Pedir decisión",
 };
 const draftStatus: Record<string, string> = { propuesta: "Propuesta", aprobada: "Aprobada", rechazada: "Rechazada", ejecutada: "Ejecutada", error: "Error" };
@@ -36,7 +40,7 @@ export default async function AiPage({ params, searchParams }: PageProps<"/w/[sl
   const [{ data: messages }, { data: drafts }, { data: runs }] = conv
     ? await Promise.all([
         supabase.from("ai_messages").select("id, role, text, citations, run_id, created_at").eq("conversation_id", conv.id).order("created_at"),
-        supabase.from("ai_action_drafts").select("id, message_id, action, payload, rationale, status, result_ref, error").eq("conversation_id", conv.id).order("created_at"),
+        supabase.from("ai_action_drafts").select("id, message_id, action, payload, rationale, status, result_ref, error, preview, before_state, after_state, decided_at").eq("conversation_id", conv.id).order("created_at"),
         supabase.from("ai_runs").select("id, cost_usd, tool_calls, status, error, created_at").eq("conversation_id", conv.id),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }];
@@ -111,8 +115,13 @@ export default async function AiPage({ params, searchParams }: PageProps<"/w/[sl
                           <span className="text-sm font-medium">{actionLabel[d.action]}</span>
                           <Pill className={d.status === "propuesta" ? "border-amber-400 text-amber-800 dark:text-amber-300" : ""}>{draftStatus[d.status]}</Pill>
                         </div>
-                        <p className="text-sm">{p.title ?? p.statement}</p>
+                        <p className="text-sm">{(d.preview as { summary?: string } | null)?.summary ?? p.title ?? p.statement}</p>
+                        {((d.preview as { changes?: { entity: string; field: string; before: string | null; after: string }[] } | null)?.changes ?? []).map((c, i) => (
+                          <p key={i} className="text-xs"><span className="text-muted-foreground">{c.entity} · {c.field}:</span> {c.before ? <><s>{c.before}</s> → </> : null}{c.after}</p>
+                        ))}
+                        {((d.preview as { duplicate_risk?: string[] } | null)?.duplicate_risk ?? []).map((r) => <p key={r} className="text-xs text-amber-800 dark:text-amber-300">{r}</p>)}
                         {d.rationale && <p className="text-xs text-muted-foreground">Motivo: {d.rationale}</p>}
+                        {d.status === "ejecutada" && d.decided_at && <p className="text-xs text-muted-foreground">Ejecutada {formatDate(d.decided_at, true)}{d.before_state ? " · se guardó el estado anterior" : ""}</p>}
                         {d.error && <p className="text-xs text-destructive">{d.error}</p>}
                         {d.status === "propuesta" && ctx.canEdit && (
                           <div className="flex gap-2">

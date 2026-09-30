@@ -97,14 +97,15 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   ]);
   // D/E: último estado de cada finding, validaciones propuestas y agendadas, errores y qué cambió desde ayer.
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
-  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes, { data: approvedFindings }, { count: unresolvedCount }] = await Promise.all([
-    supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status, maturity)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
+  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes, { data: approvedFindings }, { count: unresolvedCount }, { data: helpForMe }] = await Promise.all([
+    supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status, maturity, case_status)").neq("findings.review_status", "rechazado").eq("findings.case_status", "activo").order("created_at", { ascending: false }).limit(200),
     supabase.from("proposals").select("finding_id, payload, position").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
     supabase.from("tasks").select("finding_id, title, due_on").not("finding_id", "is", null).neq("status", "done").order("due_on", { nullsFirst: false }),
     supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "error"),
     changesSince(supabase, yesterday, today),
-    supabase.from("findings").select("id, statement, maturity").eq("review_status", "aprobado").order("created_at", { ascending: false }).limit(20),
+    supabase.from("findings").select("id, statement, maturity").eq("review_status", "aprobado").eq("case_status", "activo").order("created_at", { ascending: false }).limit(20),
     supabase.from("unresolved_entities").select("id", { count: "exact", head: true }).is("resolved_at", null),
+    supabase.from("help_requests").select("id, ask, finding_id").eq("assignee_id", ctx.user.id).in("status", ["abierto", "en_curso"]).limit(3),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
@@ -160,7 +161,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   // Prioridades de investigación: qué hacer ahora y por qué. La higiene del sistema va aparte.
   const Priorities = (
     <Section title="Qué hacer ahora">
-      {visitsToday.length || research.length || myVotes.length ? (
+      {visitsToday.length || research.length || myVotes.length || helpForMe?.length ? (
         <ol className="space-y-2">
           {visitsToday.length > 0 && (
             <li>
@@ -174,6 +175,17 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
               </Link>
             </li>
           )}
+          {(helpForMe ?? []).map((h) => (
+            <li key={h.id}>
+              <Link href={h.finding_id ? `${base}/hallazgos/${h.finding_id}` : base} className="flex min-h-14 gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">
+                <span className="min-w-0 flex-1 space-y-0.5">
+                  <span className="block font-medium">{h.ask}</span>
+                  <span className="block text-xs text-muted-foreground"><span className="font-medium">Por qué:</span> te pidieron ayuda en un caso; se responde desde la vista ejecutiva o el caso.</span>
+                </span>
+                <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
           {myVotes.map((d) => (
             <li key={d.id}>
               <Link href={d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`} className="flex min-h-14 gap-3 rounded-xl border bg-card px-4 py-3 shadow-xs hover:bg-muted/50">

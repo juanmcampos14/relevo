@@ -70,10 +70,22 @@ export function findCandidates(incoming: CompanyLike, existing: CompanyLike[]): 
   return out;
 }
 
-export type ContactLike = { id: string; name: string; email?: string | null; phone?: string | null };
-export type ContactCandidate = { id: string; name: string; reason: "mismo_email" | "mismo_telefono" | "mismo_nombre" };
+export type ContactLike = { id: string; name: string; email?: string | null; phone?: string | null; companies?: string[] };
+export type ContactCandidate = { id: string; name: string; reason: "mismo_email" | "mismo_telefono" | "mismo_nombre_y_empresa" | "mismo_nombre" };
 
-/** Personas que ya están en RELEVO (p. ej. creadas desde una captura) y parecen la misma que llega del CRM. */
+/** Cómo se explica cada coincidencia: el nombre solo, nunca confirma. */
+export const CONTACT_REASON: Record<ContactCandidate["reason"], string> = {
+  mismo_email: "mismo email",
+  mismo_telefono: "mismo teléfono",
+  mismo_nombre_y_empresa: "mismo nombre y misma empresa",
+  mismo_nombre: "solo coincide el nombre: confirmá con la empresa o el cargo",
+};
+
+/**
+ * Personas que ya están en RELEVO (p. ej. creadas desde una captura) y parecen la misma que llega del CRM.
+ * Email y teléfono son identificadores fuertes; el nombre solo genera una sugerencia (más fuerte si
+ * además coincide la empresa). Nada se fusiona solo: una persona confirma.
+ */
 export function findContactCandidates(incoming: ContactLike, existing: ContactLike[]): ContactCandidate[] {
   const email = incoming.email?.trim().toLowerCase() || null;
   const tel = phoneKey(incoming.phone);
@@ -81,8 +93,15 @@ export function findContactCandidates(incoming: ContactLike, existing: ContactLi
   const out: ContactCandidate[] = [];
   for (const e of existing) {
     if (e.id === incoming.id) continue;
+    const sameCompany = !!incoming.companies?.length && !!e.companies?.some((c) => incoming.companies!.some((x) => normalizeName(x) === normalizeName(c)));
     const reason: ContactCandidate["reason"] | null =
-      email && email === e.email?.trim().toLowerCase() ? "mismo_email" : tel && tel === phoneKey(e.phone) ? "mismo_telefono" : name && name === normalizeName(e.name) ? "mismo_nombre" : null;
+      email && email === e.email?.trim().toLowerCase()
+        ? "mismo_email"
+        : tel && tel === phoneKey(e.phone)
+          ? "mismo_telefono"
+          : name && name === normalizeName(e.name)
+            ? sameCompany ? "mismo_nombre_y_empresa" : "mismo_nombre"
+            : null;
     if (reason) out.push({ id: e.id, name: e.name, reason });
   }
   return out;

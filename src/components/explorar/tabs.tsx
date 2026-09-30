@@ -14,6 +14,7 @@ export function ExplorarTabs({ slug }: { slug: string }) {
     { href: `${base}/actividades`, label: "Actividades", active: pathname.startsWith(`${base}/actividades`) },
     { href: `${base}/evidencia`, label: "Evidencia", active: pathname.startsWith(`${base}/evidencia`) },
     { href: `${base}/sin-identificar`, label: "Sin identificar", active: pathname.startsWith(`${base}/sin-identificar`) },
+    { href: `${base}/calidad`, label: "Calidad", active: pathname.startsWith(`${base}/calidad`) },
     { href: `${base}/fuentes`, label: "Fuentes", active: pathname.startsWith(`${base}/fuentes`) },
     { href: `${base}/verticales`, label: "Verticales", active: pathname.startsWith(`${base}/verticales`) },
   ];

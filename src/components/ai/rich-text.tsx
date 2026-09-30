@@ -6,7 +6,7 @@ const CITE = /\[\[([a-z]+:[0-9a-f-]{36})\]\]/g;
 // La IA ya nombra el registro en el texto: la cita es un chip corto; el nombre completo va en el tooltip.
 const SHORT: Record<string, string> = {
   company: "empresa", establishment: "lugar", asset: "activo", contact: "contacto", finding: "hallazgo",
-  opportunity: "oportunidad", visit: "visita", decision: "decisión", source: "fuente", campaign: "campaña", task: "tarea", news: "noticia",
+  opportunity: "oportunidad", visit: "visita", decision: "decisión", source: "fuente", campaign: "campaña", task: "tarea", news: "noticia", capture: "captura", evidence: "evidencia",
 };
 
 function inline(text: string, labels: Map<string, RefLabel>, key: string): ReactNode[] {

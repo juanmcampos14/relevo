@@ -25,13 +25,13 @@ export type Database = {
           Tables: {
             "ai_action_drafts": {
                   Row: {
-                    "action": string,"conversation_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"error": string | null,"evidence_refs": NonNullable<Json>,"id": string,"message_id": string | null,"payload": NonNullable<Json>,"rationale": string | null,"result_ref": string | null,"status": string,"workspace_id": string
+                    "action": string,"after_state": Json | null,"before_state": Json | null,"conversation_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"error": string | null,"evidence_refs": NonNullable<Json>,"id": string,"message_id": string | null,"payload": NonNullable<Json>,"preview": NonNullable<Json>,"rationale": string | null,"result_ref": string | null,"status": string,"workspace_id": string
                   }
                   Insert: {
-                    "action": string,"conversation_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload": NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id": string
+                    "action": string,"after_state"?: Json | null,"before_state"?: Json | null,"conversation_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload": NonNullable<Json>,"preview"?: NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "action"?: string,"conversation_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload"?: NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id"?: string
+                    "action"?: string,"after_state"?: Json | null,"before_state"?: Json | null,"conversation_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"error"?: string | null,"evidence_refs"?: NonNullable<Json>,"id"?: string,"message_id"?: string | null,"payload"?: NonNullable<Json>,"preview"?: NonNullable<Json>,"rationale"?: string | null,"result_ref"?: string | null,"status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -312,13 +312,13 @@ isOneToOne: false
                   ]
                 },"capture_media": {
                   Row: {
-                    "capture_id": string,"created_at": string,"duration_ms": number | null,"id": string,"kind": string,"mime_type": string,"size_bytes": number | null,"storage_path": string,"workspace_id": string
+                    "capture_id": string,"created_at": string,"duration_ms": number | null,"id": string,"kind": string,"mime_type": string,"sha256": string | null,"size_bytes": number | null,"storage_path": string,"workspace_id": string
                   }
                   Insert: {
-                    "capture_id": string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind": string,"mime_type": string,"size_bytes"?: number | null,"storage_path": string,"workspace_id": string
+                    "capture_id": string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind": string,"mime_type": string,"sha256"?: string | null,"size_bytes"?: number | null,"storage_path": string,"workspace_id": string
                   }
                   Update: {
-                    "capture_id"?: string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind"?: string,"mime_type"?: string,"size_bytes"?: number | null,"storage_path"?: string,"workspace_id"?: string
+                    "capture_id"?: string,"created_at"?: string,"duration_ms"?: number | null,"id"?: string,"kind"?: string,"mime_type"?: string,"sha256"?: string | null,"size_bytes"?: number | null,"storage_path"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -337,13 +337,13 @@ isOneToOne: false
                   ]
                 },"captures": {
                   Row: {
-                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"ai_unknowns": (string)[],"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
+                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"ai_unknowns": (string)[],"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"content_hash": string | null,"created_at": string,"duplicate_of": string | null,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -352,6 +352,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "ai_runs"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "captures_duplicate_fk"
+      columns: ["workspace_id","duplicate_of"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "captures_source_fk"
       columns: ["workspace_id","source_id"]
@@ -775,13 +781,13 @@ isOneToOne: false
                   ]
                 },"findings": {
                   Row: {
-                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"ingest_meta": Json | null,"ingest_token_id": string | null,"kind": string,"maturity": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
+                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"case_status": string,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"ingest_meta": Json | null,"ingest_token_id": string | null,"kind": string,"maturity": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind": string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"case_status"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind": string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind"?: string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"case_status"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind"?: string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -838,6 +844,37 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "visits"
       referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"help_requests": {
+                  Row: {
+                    "ask": string,"assignee_id": string,"created_at": string,"due_on": string | null,"evidence_id": string | null,"finding_id": string | null,"id": string,"kind": string,"requested_by": string | null,"result": string | null,"status": string,"target": string | null,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "ask": string,"assignee_id": string,"created_at"?: string,"due_on"?: string | null,"evidence_id"?: string | null,"finding_id"?: string | null,"id"?: string,"kind": string,"requested_by"?: string | null,"result"?: string | null,"status"?: string,"target"?: string | null,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "ask"?: string,"assignee_id"?: string,"created_at"?: string,"due_on"?: string | null,"evidence_id"?: string | null,"finding_id"?: string | null,"id"?: string,"kind"?: string,"requested_by"?: string | null,"result"?: string | null,"status"?: string,"target"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "help_requests_workspace_id_evidence_id_fkey"
+      columns: ["workspace_id","evidence_id"]
+isOneToOne: false
+      referencedRelation: "evidence"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "help_requests_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "help_requests_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
     }
                   ]
                 },"import_batches": {

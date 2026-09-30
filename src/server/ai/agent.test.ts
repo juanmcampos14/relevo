@@ -27,6 +27,7 @@ function fakeTools(): ToolContext & { drafts: unknown[] } {
   chain.then = (res: (v: unknown) => unknown) => res(empty);
   return {
     db: { from: () => chain } as unknown as ToolContext["db"],
+    slug: "daicou",
     seenRefs: new Set(),
     drafts,
     saveDraft: async (d) => {

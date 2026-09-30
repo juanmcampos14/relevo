@@ -21,7 +21,7 @@ export const BASIS_LABEL: Record<EconomicBasis | "desconocido", string> = {
   observado: "observado",
   declarado: "declarado",
   calculado: "calculado",
-  estimado: "estimado",
+  estimado: "inferido (estimación)",
   desconocido: "desconocido",
 };
 

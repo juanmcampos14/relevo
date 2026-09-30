@@ -119,13 +119,24 @@ describe("audio → transcripción → propuestas", () => {
     expect(ev!.capture_media_id).not.toBeNull();
   });
 
-  it("reprocesar tras un error no vuelve a transcribir lo ya transcripto", async () => {
+  it("el mismo audio subido otra vez es la misma conversación: no se procesa ni cuenta como fuente nueva", async () => {
     const before = transcriptions;
     const id = await audioCapture();
-    await processCapture(db, { workspaceId: ws, settings, userId, captureId: id, client: fakeClient, transcriber: fakeTranscriber });
+    const res = await processCapture(db, { workspaceId: ws, settings, userId, captureId: id, client: fakeClient, transcriber: fakeTranscriber });
+    expect(res).toMatchObject({ ok: false, duplicateOf: expect.any(String) });
+    expect(transcriptions - before).toBe(0); // ni se transcribe
+    const { data: cap } = await db.from("captures").select("status, duplicate_of").eq("id", id).single();
+    expect(cap).toMatchObject({ status: "duplicado", duplicate_of: (res as { duplicateOf: string }).duplicateOf });
+    expect((await db.from("proposals").select("id", { count: "exact", head: true }).eq("capture_id", id)).count).toBe(0);
+  });
+
+  it("reprocesar tras un error no vuelve a transcribir lo ya transcripto (confirmado como otra conversación)", async () => {
+    const before = transcriptions;
+    const id = await audioCapture();
+    await processCapture(db, { workspaceId: ws, settings, userId, captureId: id, client: fakeClient, transcriber: fakeTranscriber, force: true });
     await pool.query(`update captures set status = 'error', status_error = 'forzado' where id = $1`, [id]);
     await pool.query(`delete from proposals where capture_id = $1`, [id]);
-    await processCapture(db, { workspaceId: ws, settings, userId, captureId: id, client: fakeClient, transcriber: fakeTranscriber });
+    await processCapture(db, { workspaceId: ws, settings, userId, captureId: id, client: fakeClient, transcriber: fakeTranscriber, force: true });
     expect(transcriptions - before).toBe(1);
   });
 });

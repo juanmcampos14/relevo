@@ -7,7 +7,7 @@ import type { BriefContent } from "@/domain/brief/contract";
 import { briefDateLabel } from "@/domain/brief/render";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { EmptyState, PageHeader, Pill, Section } from "@/components/app/bits";
-import { CheckboxField, TextAreaField } from "@/components/app/fields";
+import { CheckboxField, TextAreaField, TextField } from "@/components/app/fields";
 import { BriefView } from "@/components/brief/brief-view";
 import { generateBriefNow, saveBriefSettings } from "./actions";
 import { BriefStatus, type DeliveryRow } from "./status";
@@ -79,6 +79,7 @@ export default async function BriefPage({ params }: PageProps<"/w/[slug]/brief">
                 hint="Una persona por línea: «Nombre <email>». Todos reciben exactamente el mismo brief."
                 defaultValue={settings.recipients.map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join("\n")}
               />
+              <TextField name="monthly_cap_usd" label="Tope mensual de IA (USD)" type="number" defaultValue={String(settings.monthlyCapUsd)} hint="Si se alcanza, el brief sigue saliendo en modo reducido (sin investigación web)." />
               <SubmitButton>Guardar</SubmitButton>
             </ActionForm>
           </Section>

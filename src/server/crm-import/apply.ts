@@ -29,7 +29,7 @@ type Row = {
 
 const ORDER: EntityType[] = ["source", "company", "contact", "task"];
 const COMPANY_COLS = ["trade_name", "sector", "activity", "locality", "public_phone", "website", "notes", "drive_folder_url", "verification_status"];
-const CONTACT_COLS = ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes"];
+const CONTACT_COLS = ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes", "outreach_draft"];
 
 /** Qué falta decidir en una fila antes de poder aprobarla. */
 export function pendingChoices(row: Pick<Row, "issues" | "conflicts" | "resolution">): string[] {
@@ -118,7 +118,9 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
     .eq("batch_id", batchId)
     .eq("decision", "aprobada")
     .is("applied_at", null);
-  const rows = ((raw ?? []) as unknown as Row[]).sort((a, b) => ORDER.indexOf(a.entity_type) - ORDER.indexOf(b.entity_type));
+  // Tipo por tipo; dentro de empresas, las que se unifican con otra van después de su canónica.
+  const unifies = (r: Row) => (r.entity_type === "company" && typeof finalValues(r)._same_as === "string" ? 1 : 0);
+  const rows = ((raw ?? []) as unknown as Row[]).sort((a, b) => ORDER.indexOf(a.entity_type) - ORDER.indexOf(b.entity_type) || unifies(a) - unifies(b));
   const ctx = await loadStageContext(db, workspaceId);
   const crmSource = await crmSourceId(db, workspaceId);
   const verticals = new Map<string, string | null>();
@@ -222,6 +224,33 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
         if (creating && typeof v._link_to === "string") {
           // Duplicado confirmado: se vincula el ID del CRM a la empresa existente, sin tocar sus datos.
           await saveRef(row, v._link_to, { company: v._link_to });
+        } else if (creating && typeof v._same_as === "string") {
+          // Misma empresa que otra fila del archivo: este ID apunta a la canónica. Solo completa lo que la
+          // canónica no tiene (fuente y verificación mejores, dirección, web) y la prioridad más alta; no pisa datos.
+          const canon = refOf("company", v._same_as);
+          if (!canon) throw new Error(`Primero hay que aprobar ${v._same_as} (registro canónico).`);
+          const canonIds = (canon.last_values._ids ?? {}) as EntityIds;
+          const { data: cur } = await db.from("companies").select("website, locality, public_phone, verification_status, source_id").eq("id", canon.entity_id).single();
+          const rank: Record<string, number> = { unverified: 0, partially_verified: 1, publicly_verified: 2, field_verified: 3 };
+          const better = (rank[v.verification_status as string] ?? 0) > (rank[cur?.verification_status ?? "unverified"] ?? 0);
+          const fill = {
+            ...(!cur?.website && v.website ? { website: v.website as string } : {}),
+            ...(!cur?.locality && v.locality ? { locality: v.locality as string } : {}),
+            ...(!cur?.public_phone && v.public_phone ? { public_phone: v.public_phone as string } : {}),
+            ...(better ? { verification_status: v.verification_status as string, source_id: src } : {}),
+          };
+          if (Object.keys(fill).length) {
+            const { error } = await db.from("companies").update(fill).eq("id", canon.entity_id);
+            if (error) throw error;
+          }
+          if (canonIds.target && typeof v.priority === "number") {
+            await db.from("campaign_targets").update({ priority: v.priority }).eq("id", canonIds.target).gt("priority", v.priority);
+          }
+          const note = `También figura en el CRM como ${row.external_id} (unificada con ${v._same_as}).`;
+          const { data: withNotes } = await db.from("companies").select("notes").eq("id", canon.entity_id).single();
+          if (!withNotes?.notes?.includes(note)) await db.from("companies").update({ notes: [withNotes?.notes, note].filter(Boolean).join("\n") }).eq("id", canon.entity_id);
+          await saveRef(row, canon.entity_id, { ...canonIds });
+          if (v.evidence_note || (typeof v.source_ref === "string" && !SRC_ID.test(v.source_ref))) await ensureCompanyDerived(row, v, { company: canon.entity_id }, canon.entity_id);
         } else {
           const companyId = entityId ?? ids.company!;
           if (creating) {

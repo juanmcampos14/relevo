@@ -26,7 +26,7 @@ export type EntityType = "company" | "contact" | "task" | "source";
 /** Campos que se comparan en cada reimportación (los demás son metadatos). */
 export const COMPARED: Record<EntityType, readonly string[]> = {
   company: ["trade_name", "activity", "locality", "address_text", "public_phone", "website", "sector", "priority", "stage", "owner_name", "verification_status", "next_action", "next_action_due", "notes", "drive_folder_url"],
-  contact: ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes"],
+  contact: ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes", "outreach_draft"],
   task: ["title", "kind", "channel", "due_on", "status", "owner_name", "result"],
   source: ["title", "url", "publisher", "published_on", "captured_on", "quality", "supports", "limitations"],
 };
@@ -104,7 +104,7 @@ async function currentCompany(db: Db, ref: Ref, ctx: StageContext): Promise<Reco
 async function currentContact(db: Db, ref: Ref): Promise<Record<string, unknown> | null> {
   const { data } = await db
     .from("contacts")
-    .select("full_name, contact_kind, role_title, email, phone, profile_url, preferred_channel, relationship_status, contact_permission, notes")
+    .select("full_name, contact_kind, role_title, email, phone, profile_url, preferred_channel, relationship_status, contact_permission, notes, outreach_draft")
     .eq("id", ref.entity_id)
     .maybeSingle();
   return data;
@@ -161,6 +161,47 @@ type Staged = {
  * No escribe nada en las tablas de RELEVO: eso pasa recién al aplicar filas aprobadas.
  */
 export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWorkbook, opts: StageOptions) {
+  const { rows: planned, summary } = await planImport(db, workspaceId, parsed, opts);
+  const only = opts.onlyCompanies?.length ? opts.onlyCompanies.map((s) => s.toUpperCase()) : null;
+  const { data: batch, error } = await db
+    .from("import_batches")
+    .insert({
+      workspace_id: workspaceId,
+      source_system: "google_sheets",
+      file_name: opts.fileName,
+      file_sha256: opts.sha256,
+      summary: { ...summary, filtro: only, ids_formula: parsed.formulaIds } as JsonObj,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  const rows = planned.map((r) => ({ ...r, workspace_id: workspaceId, batch_id: batch.id }));
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error: e } = await db.from("import_rows").insert(rows.slice(i, i + 200));
+    if (e) throw e;
+  }
+  return batch.id;
+}
+
+export type PlannedRow = {
+  entity_type: EntityType;
+  external_id: string;
+  sheet: string;
+  row_number: number;
+  raw: JsonObj;
+  mapped: JsonObj;
+  action: Staged["action"];
+  target_entity_id: string | null;
+  issues: JsonObj;
+  conflicts: JsonObj;
+  decision: "pendiente" | "aprobada" | "rechazada";
+};
+
+/**
+ * Calcula la propuesta por fila SIN escribir nada (ni el lote): sirve para simular una reimportación
+ * contra producción antes de subirla (conciliación).
+ */
+export async function planImport(db: Db, workspaceId: string, parsed: ParsedWorkbook, opts: Pick<StageOptions, "onlyCompanies"> = {}): Promise<{ rows: PlannedRow[]; summary: Record<string, number> }> {
   const ctx = await loadStageContext(db, workspaceId);
   const only = opts.onlyCompanies?.length ? new Set(opts.onlyCompanies.map((s) => s.toUpperCase())) : null;
 
@@ -204,6 +245,20 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
   }));
   const companyNameByRef = new Map(companies.map((c) => [c.externalId.toUpperCase(), c.values.trade_name]));
 
+  // La misma empresa dos veces en el archivo (dos IDs): la fila anterior es la canónica; la posterior se
+  // propone unificar (su ID pasa a apuntar a la misma empresa y suma lo que la canónica no tiene).
+  const sameAs = new Map<string, string>();
+  {
+    const fresh = companies.filter((c) => !ctx.refs.has(refKey("company", c.externalId)));
+    const pool = fresh.map((c) => ({ id: c.externalId, name: c.values.trade_name, locality: c.values.locality, website: c.values.website, phone: c.values.public_phone }));
+    for (const [i, c] of fresh.entries()) {
+      const earlier = new Set(fresh.slice(0, i).map((x) => x.externalId));
+      const hit = findCandidates({ id: c.externalId, name: c.values.trade_name, locality: c.values.locality, website: c.values.website, phone: c.values.public_phone }, pool.filter((p) => earlier.has(p.id)))
+        .find((x) => x.reason !== "nombre_parecido");
+      if (hit) sameAs.set(c.externalId, hit.id);
+    }
+  }
+
   const staged: Staged[] = [];
   const stage = async (entity_type: EntityType, m: Mapped<Record<string, unknown>>, extra: Issue[], current: (ref: Ref) => Promise<Record<string, unknown> | null>) => {
     m.issues.push(...extra);
@@ -236,6 +291,18 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
     const extra: Issue[] = [...ownerIssue(c.values.owner_name)];
     if (c.values.source_ref && SRC_ID.test(c.values.source_ref) && !inBatch("source", c.values.source_ref)) {
       extra.push({ code: "fuente_inexistente", severity: "info", field: "Fuente ID", message: `"${c.values.source_ref}" no está en FUENTES. Se usa el CRM como fuente hasta que exista.` });
+    }
+    const canonical = sameAs.get(c.externalId);
+    if (canonical) {
+      extra.push({
+        code: "duplicado_en_archivo",
+        severity: "revisar",
+        message: `Parece la misma empresa que ${canonical} ("${companyNameByRef.get(canonical.toUpperCase())}") en este archivo.`,
+        proposal: { label: `Unificar con ${canonical}: este ID apunta a la misma empresa y suma su fuente, verificación y relaciones`, patch: { _same_as: canonical } },
+      });
+    } else if ([...sameAs.values()].includes(c.externalId)) {
+      const others = [...sameAs].filter(([, v]) => v === c.externalId).map(([k]) => k);
+      extra.push({ code: "duplicado_en_archivo", severity: "info", message: `Registro canónico: ${others.join(", ")} se propone(n) unificar con esta empresa.` });
     }
     if (!ctx.refs.has(refKey("company", c.externalId))) {
       for (const cand of findCandidates({ id: "", name: c.values.trade_name, locality: c.values.locality, website: c.values.website, phone: c.values.public_phone }, pool)) {
@@ -283,22 +350,7 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
 
   const rawOf = new Map(Object.values(parsed.rows).flat().map((r) => [`${r.sheet}#${r.row}`, r.values]));
   const summary = staged.reduce<Record<string, number>>((acc, s) => ((acc[s.action] = (acc[s.action] ?? 0) + 1), acc), {});
-  const { data: batch, error } = await db
-    .from("import_batches")
-    .insert({
-      workspace_id: workspaceId,
-      source_system: "google_sheets",
-      file_name: opts.fileName,
-      file_sha256: opts.sha256,
-      summary: { ...summary, filtro: only ? [...only] : null, ids_formula: parsed.formulaIds } as JsonObj,
-    })
-    .select("id")
-    .single();
-  if (error) throw error;
-
-  const rows = staged.map((s) => ({
-    workspace_id: workspaceId,
-    batch_id: batch.id,
+  const rows: PlannedRow[] = staged.map((s) => ({
     entity_type: s.entity_type,
     external_id: s.mapped.externalId || `sin-id-${s.mapped.sheet}-${s.mapped.row}`,
     sheet: s.mapped.sheet,
@@ -312,9 +364,5 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
     // Sin cambios o rechazada por un problema bloqueante: no requieren decisión.
     decision: s.action === "sin_cambios" ? ("aprobada" as const) : s.action === "rechazar" ? ("rechazada" as const) : ("pendiente" as const),
   }));
-  for (let i = 0; i < rows.length; i += 200) {
-    const { error: e } = await db.from("import_rows").insert(rows.slice(i, i + 200));
-    if (e) throw e;
-  }
-  return batch.id;
+  return { rows, summary };
 }

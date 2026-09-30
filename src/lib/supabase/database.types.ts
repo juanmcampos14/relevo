@@ -23,7 +23,51 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "ai_action_drafts": {
+            "ad_metric_imports": {
+                  Row: {
+                    "account_timezone": string | null,"created_at": string,"currency": string | null,"experiment_id": string,"file_name": string,"file_sha256": string,"file_text": string,"id": string,"imported_by": string | null,"period_end": string | null,"period_start": string | null,"rejected": NonNullable<Json>,"rows_applied": number,"rows_total": number,"unmatched": NonNullable<Json>,"workspace_id": string
+                  }
+                  Insert: {
+                    "account_timezone"?: string | null,"created_at"?: string,"currency"?: string | null,"experiment_id": string,"file_name": string,"file_sha256": string,"file_text": string,"id"?: string,"imported_by"?: string | null,"period_end"?: string | null,"period_start"?: string | null,"rejected"?: NonNullable<Json>,"rows_applied"?: number,"rows_total"?: number,"unmatched"?: NonNullable<Json>,"workspace_id": string
+                  }
+                  Update: {
+                    "account_timezone"?: string | null,"created_at"?: string,"currency"?: string | null,"experiment_id"?: string,"file_name"?: string,"file_sha256"?: string,"file_text"?: string,"id"?: string,"imported_by"?: string | null,"period_end"?: string | null,"period_start"?: string | null,"rejected"?: NonNullable<Json>,"rows_applied"?: number,"rows_total"?: number,"unmatched"?: NonNullable<Json>,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ad_metric_imports_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"ad_metrics_daily": {
+                  Row: {
+                    "ad_name": string | null,"currency": string,"day": string,"experiment_id": string,"id": string,"import_id": string,"impressions": number | null,"landing_page_views": number | null,"link_clicks": number | null,"meta_ad_id": string,"meta_adset_id": string | null,"meta_campaign_id": string | null,"reach": number | null,"spend": number,"updated_at": string,"variant_code": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "ad_name"?: string | null,"currency": string,"day": string,"experiment_id": string,"id"?: string,"import_id": string,"impressions"?: number | null,"landing_page_views"?: number | null,"link_clicks"?: number | null,"meta_ad_id": string,"meta_adset_id"?: string | null,"meta_campaign_id"?: string | null,"reach"?: number | null,"spend"?: number,"updated_at"?: string,"variant_code"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "ad_name"?: string | null,"currency"?: string,"day"?: string,"experiment_id"?: string,"id"?: string,"import_id"?: string,"impressions"?: number | null,"landing_page_views"?: number | null,"link_clicks"?: number | null,"meta_ad_id"?: string,"meta_adset_id"?: string | null,"meta_campaign_id"?: string | null,"reach"?: number | null,"spend"?: number,"updated_at"?: string,"variant_code"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ad_metrics_daily_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "ad_metrics_daily_workspace_id_import_id_fkey"
+      columns: ["workspace_id","import_id"]
+isOneToOne: false
+      referencedRelation: "ad_metric_imports"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"ai_action_drafts": {
                   Row: {
                     "action": string,"after_state": Json | null,"before_state": Json | null,"conversation_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"error": string | null,"evidence_refs": NonNullable<Json>,"id": string,"message_id": string | null,"payload": NonNullable<Json>,"preview": NonNullable<Json>,"rationale": string | null,"result_ref": string | null,"status": string,"workspace_id": string
                   }
@@ -635,13 +679,13 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"outreach_draft": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -679,16 +723,22 @@ isOneToOne: false
                   ]
                 },"decisions": {
                   Row: {
-                    "context": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"decision_note": string | null,"due_on": string | null,"id": string,"kind": string,"opportunity_id": string | null,"question": string,"requested_by": string | null,"status": string,"updated_at": string,"workspace_id": string
+                    "context": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"decision_note": string | null,"due_on": string | null,"experiment_id": string | null,"id": string,"kind": string,"opportunity_id": string | null,"question": string,"requested_by": string | null,"status": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question": string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
+                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"experiment_id"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question": string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question"?: string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "context"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"decision_note"?: string | null,"due_on"?: string | null,"experiment_id"?: string | null,"id"?: string,"kind"?: string,"opportunity_id"?: string | null,"question"?: string,"requested_by"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "decisions_experiment_fk"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "decisions_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
@@ -741,13 +791,13 @@ isOneToOne: false
                   ]
                 },"evidence": {
                   Row: {
-                    "about_unresolved_id": string | null,"asset_id": string | null,"campaign_id": string | null,"capture_id": string | null,"capture_media_id": string | null,"company_id": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"declared_by": string | null,"establishment_id": string | null,"evidence_type": string,"id": string,"is_demo": boolean,"media_end_ms": number | null,"media_start_ms": number | null,"next_verification_step": string | null,"observed_at": string | null,"origin_kind": string,"quote": string | null,"revalidate_after": string | null,"source_id": string | null,"stated_by_contact_id": string | null,"stated_by_unresolved_id": string | null,"statement": string,"updated_at": string,"value_currency": string | null,"value_number": number | null,"value_unit": string | null,"verification_status": string,"visit_id": string | null,"workspace_id": string
+                    "about_unresolved_id": string | null,"asset_id": string | null,"campaign_id": string | null,"capture_id": string | null,"capture_media_id": string | null,"company_id": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"declared_by": string | null,"establishment_id": string | null,"evidence_type": string,"id": string,"is_demo": boolean,"media_end_ms": number | null,"media_start_ms": number | null,"next_verification_step": string | null,"observed_at": string | null,"origin_kind": string,"quote": string | null,"revalidate_after": string | null,"source_id": string | null,"stated_by_contact_id": string | null,"stated_by_unresolved_id": string | null,"statement": string,"survey_response_id": string | null,"updated_at": string,"value_currency": string | null,"value_number": number | null,"value_unit": string | null,"verification_status": string,"visit_id": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind": string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement": string,"updated_at"?: string,"value_currency"?: string | null,"value_number"?: number | null,"value_unit"?: string | null,"verification_status"?: string,"visit_id"?: string | null,"workspace_id": string
+                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind": string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement": string,"survey_response_id"?: string | null,"updated_at"?: string,"value_currency"?: string | null,"value_number"?: number | null,"value_unit"?: string | null,"verification_status"?: string,"visit_id"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind"?: string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement"?: string,"updated_at"?: string,"value_currency"?: string | null,"value_number"?: number | null,"value_unit"?: string | null,"verification_status"?: string,"visit_id"?: string | null,"workspace_id"?: string
+                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind"?: string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement"?: string,"survey_response_id"?: string | null,"updated_at"?: string,"value_currency"?: string | null,"value_number"?: number | null,"value_unit"?: string | null,"verification_status"?: string,"visit_id"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -761,6 +811,12 @@ isOneToOne: false
       columns: ["workspace_id","stated_by_unresolved_id"]
 isOneToOne: false
       referencedRelation: "unresolved_entities"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "evidence_survey_response_fk"
+      columns: ["workspace_id","survey_response_id"]
+isOneToOne: false
+      referencedRelation: "survey_responses"
       referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "evidence_workspace_id_asset_id_fkey"
@@ -830,6 +886,44 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"experiment_costs": {
+                  Row: {
+                    "amount": number,"created_at": string,"created_by": string | null,"currency": string,"document_ref": string | null,"experiment_id": string,"fx_rate": number | null,"id": string,"kind": string,"notes": string | null,"period": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "amount": number,"created_at"?: string,"created_by"?: string | null,"currency": string,"document_ref"?: string | null,"experiment_id": string,"fx_rate"?: number | null,"id"?: string,"kind": string,"notes"?: string | null,"period"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "amount"?: number,"created_at"?: string,"created_by"?: string | null,"currency"?: string,"document_ref"?: string | null,"experiment_id"?: string,"fx_rate"?: number | null,"id"?: string,"kind"?: string,"notes"?: string | null,"period"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "experiment_costs_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"experiment_variants": {
+                  Row: {
+                    "code": string,"created_at": string,"creative_ref": string | null,"cta": string,"experiment_id": string,"headline": string,"id": string,"label": string,"meta_ad_id": string | null,"meta_adset_id": string | null,"meta_campaign_id": string | null,"primary_text": string,"status": string,"what_changes": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "code": string,"created_at"?: string,"creative_ref"?: string | null,"cta": string,"experiment_id": string,"headline": string,"id"?: string,"label": string,"meta_ad_id"?: string | null,"meta_adset_id"?: string | null,"meta_campaign_id"?: string | null,"primary_text": string,"status"?: string,"what_changes"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"creative_ref"?: string | null,"cta"?: string,"experiment_id"?: string,"headline"?: string,"id"?: string,"label"?: string,"meta_ad_id"?: string | null,"meta_adset_id"?: string | null,"meta_campaign_id"?: string | null,"primary_text"?: string,"status"?: string,"what_changes"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "experiment_variants_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"external_refs": {
                   Row: {
                     "entity_id": string,"entity_type": string,"external_id": string,"first_imported_at": string,"id": string,"last_batch_id": string | null,"last_imported_at": string,"last_values": NonNullable<Json>,"row_number": number | null,"sheet": string | null,"source_file_id": string | null,"source_system": string,"workspace_id": string
@@ -884,6 +978,31 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "workspaces"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"finding_companies": {
+                  Row: {
+                    "company_id": string,"finding_id": string,"role": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "company_id": string,"finding_id": string,"role"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "company_id"?: string,"finding_id"?: string,"role"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "finding_companies_workspace_id_company_id_fkey"
+      columns: ["workspace_id","company_id"]
+isOneToOne: false
+      referencedRelation: "companies"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "finding_companies_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
     }
                   ]
                 },"finding_evidence": {
@@ -1297,6 +1416,75 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"question_findings": {
+                  Row: {
+                    "finding_id": string,"question_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "finding_id": string,"question_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "finding_id"?: string,"question_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "question_findings_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "question_findings_workspace_id_question_id_fkey"
+      columns: ["workspace_id","question_id"]
+isOneToOne: false
+      referencedRelation: "research_questions"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"research_experiments": {
+                  Row: {
+                    "budget_cap_usd": number | null,"budget_decision_id": string | null,"budget_stage1_usd": number | null,"campaign_id": string | null,"contact_email": string | null,"created_at": string,"id": string,"preview_token_hash": string | null,"privacy_notice": string | null,"publication_decision_id": string | null,"purpose": string | null,"responsible_name": string | null,"retention_days": number,"slug": string,"status": string,"title": string,"updated_at": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "budget_cap_usd"?: number | null,"budget_decision_id"?: string | null,"budget_stage1_usd"?: number | null,"campaign_id"?: string | null,"contact_email"?: string | null,"created_at"?: string,"id"?: string,"preview_token_hash"?: string | null,"privacy_notice"?: string | null,"publication_decision_id"?: string | null,"purpose"?: string | null,"responsible_name"?: string | null,"retention_days"?: number,"slug": string,"status"?: string,"title": string,"updated_at"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "budget_cap_usd"?: number | null,"budget_decision_id"?: string | null,"budget_stage1_usd"?: number | null,"campaign_id"?: string | null,"contact_email"?: string | null,"created_at"?: string,"id"?: string,"preview_token_hash"?: string | null,"privacy_notice"?: string | null,"publication_decision_id"?: string | null,"purpose"?: string | null,"responsible_name"?: string | null,"retention_days"?: number,"slug"?: string,"status"?: string,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "research_experiments_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"research_questions": {
+                  Row: {
+                    "code": string,"created_at": string,"dimension": string | null,"evidence_asked": string | null,"hypothesis_text": string | null,"id": string,"industry": string | null,"kind": string,"next_action": string | null,"origin": string,"owner_name": string | null,"question": string,"source_url": string | null,"status": string,"updated_at": string,"vertical_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "code": string,"created_at"?: string,"dimension"?: string | null,"evidence_asked"?: string | null,"hypothesis_text"?: string | null,"id"?: string,"industry"?: string | null,"kind": string,"next_action"?: string | null,"origin"?: string,"owner_name"?: string | null,"question": string,"source_url"?: string | null,"status"?: string,"updated_at"?: string,"vertical_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"dimension"?: string | null,"evidence_asked"?: string | null,"hypothesis_text"?: string | null,"id"?: string,"industry"?: string | null,"kind"?: string,"next_action"?: string | null,"origin"?: string,"owner_name"?: string | null,"question"?: string,"source_url"?: string | null,"status"?: string,"updated_at"?: string,"vertical_id"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "research_questions_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "research_questions_workspace_id_vertical_id_fkey"
+      columns: ["workspace_id","vertical_id"]
+isOneToOne: false
+      referencedRelation: "verticals"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"sources": {
                   Row: {
                     "captured_at": string,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"kind": string,"notes": string | null,"published_at": string | null,"publisher": string | null,"quality": string | null,"reference": string | null,"title": string,"updated_at": string,"url": string | null,"workspace_id": string
@@ -1314,6 +1502,94 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "workspaces"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"survey_events": {
+                  Row: {
+                    "at": string,"id": number,"kind": string,"question": string | null,"session_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "at"?: string,"id"?: never,"kind": string,"question"?: string | null,"session_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "at"?: string,"id"?: never,"kind"?: string,"question"?: string | null,"session_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "survey_events_workspace_id_session_id_fkey"
+      columns: ["workspace_id","session_id"]
+isOneToOne: false
+      referencedRelation: "survey_sessions"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"survey_responses": {
+                  Row: {
+                    "answers": NonNullable<Json>,"answers_hash": string,"cohort": string,"created_at": string,"delete_after": string,"deletion_code": string,"duplicate_of": string | null,"eligible": boolean,"experiment_id": string,"id": string,"pii_detected": boolean,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"session_id": string,"useful": boolean,"version_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "answers": NonNullable<Json>,"answers_hash": string,"cohort": string,"created_at"?: string,"delete_after": string,"deletion_code": string,"duplicate_of"?: string | null,"eligible": boolean,"experiment_id": string,"id"?: string,"pii_detected"?: boolean,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"session_id": string,"useful": boolean,"version_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "answers"?: NonNullable<Json>,"answers_hash"?: string,"cohort"?: string,"created_at"?: string,"delete_after"?: string,"deletion_code"?: string,"duplicate_of"?: string | null,"eligible"?: boolean,"experiment_id"?: string,"id"?: string,"pii_detected"?: boolean,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"session_id"?: string,"useful"?: boolean,"version_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "survey_responses_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "survey_responses_workspace_id_session_id_fkey"
+      columns: ["workspace_id","session_id"]
+isOneToOne: false
+      referencedRelation: "survey_sessions"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"survey_sessions": {
+                  Row: {
+                    "attribution": string,"cohort": string,"completed_at": string | null,"delete_after": string,"device": string | null,"experiment_id": string,"flagged": string | null,"id": string,"ip_hash_day": string | null,"landing_at": string,"last_question": string | null,"meta": NonNullable<Json>,"outcome": string | null,"quick_tap": string | null,"quick_tap_shown": boolean,"referrer_host": string | null,"started_at": string | null,"utm": NonNullable<Json>,"variant_code": string | null,"version_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "attribution"?: string,"cohort": string,"completed_at"?: string | null,"delete_after": string,"device"?: string | null,"experiment_id": string,"flagged"?: string | null,"id"?: string,"ip_hash_day"?: string | null,"landing_at"?: string,"last_question"?: string | null,"meta"?: NonNullable<Json>,"outcome"?: string | null,"quick_tap"?: string | null,"quick_tap_shown"?: boolean,"referrer_host"?: string | null,"started_at"?: string | null,"utm"?: NonNullable<Json>,"variant_code"?: string | null,"version_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "attribution"?: string,"cohort"?: string,"completed_at"?: string | null,"delete_after"?: string,"device"?: string | null,"experiment_id"?: string,"flagged"?: string | null,"id"?: string,"ip_hash_day"?: string | null,"landing_at"?: string,"last_question"?: string | null,"meta"?: NonNullable<Json>,"outcome"?: string | null,"quick_tap"?: string | null,"quick_tap_shown"?: boolean,"referrer_host"?: string | null,"started_at"?: string | null,"utm"?: NonNullable<Json>,"variant_code"?: string | null,"version_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "survey_sessions_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "survey_sessions_workspace_id_version_id_fkey"
+      columns: ["workspace_id","version_id"]
+isOneToOne: false
+      referencedRelation: "survey_versions"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"survey_versions": {
+                  Row: {
+                    "created_at": string,"definition": NonNullable<Json>,"definition_sha": string,"experiment_id": string,"id": string,"version": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"definition": NonNullable<Json>,"definition_sha": string,"experiment_id": string,"id"?: string,"version": string,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"definition"?: NonNullable<Json>,"definition_sha"?: string,"experiment_id"?: string,"id"?: string,"version"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "survey_versions_workspace_id_experiment_id_fkey"
+      columns: ["workspace_id","experiment_id"]
+isOneToOne: false
+      referencedRelation: "research_experiments"
+      referencedColumns: ["workspace_id","id"]
     }
                   ]
                 },"target_verticals": {
@@ -1479,13 +1755,13 @@ isOneToOne: false
                   ]
                 },"verticals": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"id": string,"name": string,"owner_id": string | null,"problem_sought": string | null,"status": string,"thesis": string | null,"updated_at": string,"workspace_id": string
+                    "code": string | null,"created_at": string,"created_by": string | null,"definition": string | null,"front": string | null,"id": string,"name": string,"owner_id": string | null,"problem_sought": string | null,"provisional": boolean,"status": string,"thesis": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"owner_id"?: string | null,"problem_sought"?: string | null,"status"?: string,"thesis"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "code"?: string | null,"created_at"?: string,"created_by"?: string | null,"definition"?: string | null,"front"?: string | null,"id"?: string,"name": string,"owner_id"?: string | null,"problem_sought"?: string | null,"provisional"?: boolean,"status"?: string,"thesis"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"owner_id"?: string | null,"problem_sought"?: string | null,"status"?: string,"thesis"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "code"?: string | null,"created_at"?: string,"created_by"?: string | null,"definition"?: string | null,"front"?: string | null,"id"?: string,"name"?: string,"owner_id"?: string | null,"problem_sought"?: string | null,"provisional"?: boolean,"status"?: string,"thesis"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1658,6 +1934,9 @@ isOneToOne: false
 { Args: { "s": string }; Returns: boolean
                            },
 "is_member":
+{ Args: { "ws": string }; Returns: boolean
+                           },
+"is_research_admin":
 { Args: { "ws": string }; Returns: boolean
                            },
 "is_verification_status":

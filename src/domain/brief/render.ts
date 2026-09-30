@@ -32,6 +32,9 @@ function signalHtml(s: BriefSignalView) {
 <p style="margin:0 0 4px">${esc(s.summary)}</p>
 ${s.why_it_matters ? `<p style="margin:0 0 4px"><b>Por qué importa:</b> ${esc(s.why_it_matters)}</p>` : ""}
 ${s.reading ? `<p style="margin:0 0 4px"><b>Lectura RELEVO</b> <i>(inferencia)</i>: ${esc(s.reading)}</p>` : ""}
+${s.verify ? `<p style="margin:0 0 4px"><b>Qué falta comprobar:</b> ${esc(s.verify)}</p>` : ""}
+${s.talk_to ? `<p style="margin:0 0 4px"><b>Con quién hablar:</b> ${esc(s.talk_to)}</p>` : ""}
+${s.ask ? `<p style="margin:0 0 4px"><b>Qué preguntar (AOG / campo):</b> ${esc(s.ask)}</p>` : ""}
 ${s.story_title ? `<p style="margin:0 0 4px;color:${C.muted};font-size:12px">Historia: ${esc(s.story_title)}</p>` : ""}
 ${s.source_url ? `<p style="margin:0;font-size:12px"><a href="${esc(s.source_url)}" style="color:${C.accent}">${esc(s.publisher || s.source_title || "fuente")}</a></p>` : `<p style="margin:0;font-size:12px;color:${C.muted}">sin fuente enlazable</p>`}
 </div>`;

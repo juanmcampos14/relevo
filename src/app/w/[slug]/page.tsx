@@ -364,6 +364,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
             <Link href={`${base}/explorar/actividades?de=mias`} className={linkCls}>Mis próximas acciones{actions.length ? ` (${actions.length})` : ""}</Link>
             <Link href={`${base}/mapa`} className={linkCls}>Mapa del territorio</Link>
             <Link href={`${base}/brief`} className={linkCls}>Morning Brief</Link>
+            <Link href={`${base}/investigacion`} className={linkCls}>Investigación</Link>
             <Link href={`${base}/noticias`} className={linkCls}>Noticias</Link>
           </p>
         </div>

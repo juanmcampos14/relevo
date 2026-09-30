@@ -49,8 +49,9 @@ test("importar el CRM: revisar, aprobar, escribir, abrir la ficha y reimportar s
 
   // Resumen antes de decidir: qué entra, qué revisar, qué no entra.
   if (!process.env.CRM_XLSX) {
-    await expect(page.getByText("3 sin conflicto", { exact: true })).toBeVisible();
-    await expect(page.getByText("1 requiere revisión")).toBeVisible();
+    // El cargo que el Sheet marca "persona por identificar" entra como canal institucional sin pedir revisión.
+    await expect(page.getByText("4 sin conflicto", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 requieren revisión")).toBeVisible();
     await expect(page.getByText(/1 · cargo o buzón/)).toBeVisible();
   }
   // Excepciones: se aplica la propuesta y se aprueba una por una. Lo normal va en lote.

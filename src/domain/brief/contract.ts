@@ -71,6 +71,9 @@ export const DraftSignal = z.object({
   related_campaign_ids: z.array(z.string()),
   related_asset_ids: z.array(z.string()),
   suggested_action: z.string().describe("'' si no corresponde"),
+  verify: z.string().describe("qué falta comprobar para que esto importe (o '' )"),
+  talk_to: z.string().describe("con quién hablar: rol, empresa o persona de la memoria (o '')"),
+  ask: z.string().describe("qué preguntar en AOG o en terreno (o '')"),
 });
 
 export const BriefDraft = z.object({

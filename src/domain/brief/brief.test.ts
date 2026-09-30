@@ -26,7 +26,7 @@ describe("Vaca Muerta News", () => {
 const sig = (o: Partial<BriefSignalView>): BriefSignalView => ({
   id: "s", key: "s1", headline: "H", summary: "S", happened_on: "", source_url: "", source_title: "", publisher: "", basis: "hecho", signal_type: "obra",
   section: "general", geography: "", vertical: "Logística + almacenamiento", subsector: "", roles: [], companies: [], people: [], why_it_matters: "", reading: "",
-  change: "nuevo", relevance: "media", suggested_action: "", story_id: null, story_title: null, company_ids: [], finding_ids: [], ...o,
+  change: "nuevo", relevance: "media", suggested_action: "", verify: "", talk_to: "", ask: "", story_id: null, story_title: null, company_ids: [], finding_ids: [], ...o,
 });
 
 describe("cruces y secciones derivadas", () => {

@@ -18,7 +18,7 @@ const signal = (o: Partial<DraftSignalT>): DraftSignalT => ({
   source_url: "https://www.vacamuertanews.com/actualidad/pecom-base.htm", source_title: "PECOM amplía", publisher: "Vaca Muerta News",
   basis: "declaracion", signal_type: "movimiento_empresa", section: "empresas", geography: "Añelo", vertical: "Servicios industriales", subsector: "",
   roles: ["contratista"], companies: ["PECOM"], people: [], why_it_matters: "Más personal en Añelo", reading: "Demanda de viandas y housing",
-  change: "nuevo", relevance: "alta", story_ref: "nueva:pecom-base", related_company_ids: [], related_finding_ids: [], related_campaign_ids: [], related_asset_ids: [], suggested_action: "Pedir intro a compras de PECOM",
+  change: "nuevo", relevance: "alta", story_ref: "nueva:pecom-base", related_company_ids: [], related_finding_ids: [], related_campaign_ids: [], related_asset_ids: [], suggested_action: "Pedir intro a compras de PECOM", verify: "Si abre compras locales", talk_to: "Compras de PECOM", ask: "¿Cuántas personas suma la base?",
   ...o,
 });
 

@@ -2,13 +2,14 @@
 // calcular o proponer, pero siempre se conserva de dónde partió.
 //
 // Canal de origen: de dónde viene.
-export type Channel = "campo" | "entrevista" | "crm" | "web" | "documento" | "relevo" | "sistema" | "desconocido";
+export type Channel = "campo" | "entrevista" | "encuesta" | "crm" | "web" | "documento" | "relevo" | "sistema" | "desconocido";
 // Base de la afirmación: qué grado tiene.
 export type Basis = "observado" | "declarado" | "documentado" | "calculado" | "inferido" | "propuesto_ia" | "no_determinado";
 
 export const CHANNEL: Record<Channel, string> = {
   campo: "Campo",
   entrevista: "Entrevista",
+  encuesta: "Encuesta (Voice)",
   crm: "CRM / importación",
   web: "Web / fuente externa",
   documento: "Documento",
@@ -38,6 +39,8 @@ export function evidenceProvenance(e: { origin_kind: string; verification_status
     case "interview":
     case "conversation":
       return { channel: "entrevista", basis: "declarado", detail: e.speaker ?? undefined };
+    case "survey":
+      return { channel: "encuesta", basis: "declarado", detail: "persona encuestada, autoseleccionada" };
     case "crm_import":
       return { channel: "crm", basis: "no_determinado", detail: "registro del CRM" };
     case "manual":
@@ -65,6 +68,7 @@ export function economicBasis(b: string): Basis {
 export const CHANNEL_ORIGINS: Partial<Record<Channel, string[]>> = {
   campo: ["field"],
   entrevista: ["interview", "conversation"],
+  encuesta: ["survey"],
   crm: ["crm_import"],
   web: ["website", "public_registry", "press", "aog", "ai_research"],
   documento: ["email"],

@@ -79,7 +79,50 @@ export async function normalizePackage(buffer: ArrayBuffer): Promise<ArrayBuffer
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
+const decodeXml = (s: string) =>
+  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&");
+
+/**
+ * Notas de celda por pestaña ("P30" → texto). exceljs no trae su texto; se leen del paquete.
+ * En el CRM ahí viven, p. ej., los borradores de mensajes para AOG de cada contacto.
+ */
+export async function readCellNotes(buffer: ArrayBuffer): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    const workbook = (await zip.file("xl/workbook.xml")?.async("string")) ?? "";
+    const wbRels = (await zip.file("xl/_rels/workbook.xml.rels")?.async("string")) ?? "";
+    const target = new Map([...wbRels.matchAll(/<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((m) => [m[1], m[2].replace(/^\/?xl\//, "")]));
+    for (const m of workbook.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)) {
+      const sheetPath = target.get(m[2]);
+      if (!sheetPath) continue;
+      const relsPath = `xl/${sheetPath.replace(/([^/]+)$/, "_rels/$1.rels")}`;
+      const rels = (await zip.file(relsPath)?.async("string")) ?? "";
+      const commentsTarget = rels.match(/Target="([^"]*comments\d*\.xml)"/)?.[1];
+      if (!commentsTarget) continue;
+      const commentsPath = commentsTarget.startsWith("/") ? commentsTarget.slice(1) : posix.normalize(posix.join(posix.dirname(`xl/${sheetPath}`), commentsTarget));
+      const xml = (await zip.file(commentsPath)?.async("string")) ?? "";
+      const notes = new Map<string, string>();
+      for (const c of xml.matchAll(/<comment\b[^>]*ref="([A-Z]+\d+)"[^>]*>([\s\S]*?)<\/comment>/g)) {
+        const text = decodeXml([...c[2].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join("")).trim();
+        if (text) notes.set(c[1], text);
+      }
+      out.set(decodeXml(m[1]), notes);
+    }
+  } catch {
+    // Sin notas legibles: se importa igual (las notas son un extra).
+  }
+  return out;
+}
+
+const colLetter = (n: number) => {
+  let s = "";
+  for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s;
+  return s;
+};
+
 export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkbook> {
+  const cellNotes = await readCellNotes(buffer);
   const wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(buffer);
@@ -114,6 +157,7 @@ export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkb
     }
 
     const out: RawRow[] = [];
+    const notes = cellNotes.get(ws.name);
     let idIsFormula = false;
     ws.eachRow({ includeEmpty: false }, (r, n) => {
       if (n <= headerRow) return;
@@ -127,6 +171,10 @@ export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkb
         if (link) values[`${h}#link`] = link;
         if (h === "ID" && formula) rowIdFormula = true;
       });
+      if (notes) hdr.forEach((h, i) => {
+        const note = h ? notes.get(`${colLetter(i)}${n}`) : undefined;
+        if (note) values[`${h}#nota`] = note;
+      });
       if (!values["ID"] && !values["ID anterior"]) return; // filas vacías o de plantilla (fórmula sin dato)
       // Solo cuenta si el registro tiene datos: las filas vacías de plantilla pueden tener la fórmula precargada.
       if (rowIdFormula) idIsFormula = true;
@@ -136,4 +184,37 @@ export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkb
     rows[key] = out;
   }
   return { rows, formulaIds };
+}
+
+/** Filas de una pestaña cualquiera (por nombre plegado), detectando el encabezado por una columna clave. */
+export async function parseTab(buffer: ArrayBuffer, sheetName: string, key: string): Promise<{ row: number; values: Record<string, string | null> }[]> {
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(buffer);
+  } catch {
+    await wb.xlsx.load(await normalizePackage(buffer));
+  }
+  const ws = wb.worksheets.find((w) => fold(w.name) === fold(sheetName));
+  if (!ws) return [];
+  let header: string[] | null = null;
+  let headerRow = 0;
+  const out: { row: number; values: Record<string, string | null> }[] = [];
+  ws.eachRow({ includeEmpty: false }, (r, n) => {
+    const vals = (r.values as Cell[]).map((c) => cellText(c).text ?? "");
+    if (!header) {
+      if (vals.includes(key)) {
+        header = vals;
+        headerRow = n;
+      }
+      return;
+    }
+    if (n <= headerRow) return;
+    const values: Record<string, string | null> = {};
+    (r.values as Cell[]).forEach((c, i) => {
+      const h = header![i];
+      if (h) values[h] = cellText(c).text;
+    });
+    if (Object.values(values).some(Boolean)) out.push({ row: n, values });
+  });
+  return out;
 }

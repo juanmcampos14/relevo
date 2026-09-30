@@ -56,6 +56,7 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
   propietario_sin_validar: "propietario mencionado: queda en notas, sin validar",
   sin_nombre: "sin nombre",
   sin_empresa: "persona sin empresa: queda en Calidad para vincularla",
+  duplicado_en_archivo: "misma empresa que otra fila del archivo",
 };
 
 /** Empresas nuevas del mismo archivo que parecen la misma (el cruce con RELEVO ya viene del staging). */
@@ -88,8 +89,8 @@ export function triageBatch(rows: TriageRow[]): Map<string, Triage> {
     }
     const reasons: Reason[] = [];
     for (const c of r.conflicts.conflicts ?? []) reasons.push({ key: "Cambió en RELEVO y en el Sheet", text: `Cambió en RELEVO y en el Sheet: ${FIELD[c.field] ?? c.field}.` });
-    for (const i of r.issues) if (i.severity === "revisar") reasons.push({ key: i.code === "posible_duplicado" ? "Posible duplicado de una empresa de RELEVO" : cap(ISSUE_LABEL[i.code]), text: i.message });
-    const d = dupes.get(r.id);
+    for (const i of r.issues) if (i.severity === "revisar") reasons.push({ key: i.code === "posible_duplicado" ? "Posible duplicado de una empresa de RELEVO" : i.code === "duplicado_en_archivo" ? "Posible duplicado dentro del archivo" : cap(ISSUE_LABEL[i.code]), text: i.message });
+    const d = r.issues.some((i) => i.code === "duplicado_en_archivo") ? undefined : dupes.get(r.id);
     if (d) reasons.push({ key: "Posible duplicado dentro del archivo", text: `Otra fila del archivo parece la misma empresa: ${d.join(", ")}.` });
     const material = (r.conflicts.updates ?? []).filter((u) => MATERIAL_FIELDS[r.entity_type]?.includes(u.field));
     if (material.length) reasons.push({ key: "Cambio en un dato que identifica al registro", text: `Cambia un dato que lo identifica: ${material.map((u) => FIELD[u.field] ?? u.field).join(", ")}.` });

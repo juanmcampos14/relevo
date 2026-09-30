@@ -23,11 +23,21 @@ export const MAX_STEP_ATTEMPTS = 4;
 const MAX_SEND_ATTEMPTS = 5;
 
 export type BriefRecipient = { name: string; email: string };
-export type BriefSettings = { enabled: boolean; recipients: BriefRecipient[] };
+export type BriefSettings = { enabled: boolean; recipients: BriefRecipient[]; monthlyCapUsd: number };
+/** Tope mensual de IA del brief (USD). Alcanzado, el brief sale igual en modo reducido: sin investigación web. */
+export const DEFAULT_MONTHLY_CAP_USD = 60;
 export function briefSettings(settings: unknown): BriefSettings {
   const b = (settings as { brief?: Partial<BriefSettings> } | null)?.brief;
   const recipients = Array.isArray(b?.recipients) ? b.recipients.filter((r): r is BriefRecipient => !!r && typeof r.email === "string" && r.email.includes("@")) : [];
-  return { enabled: b?.enabled === true, recipients };
+  const cap = typeof b?.monthlyCapUsd === "number" && b.monthlyCapUsd > 0 ? b.monthlyCapUsd : DEFAULT_MONTHLY_CAP_USD;
+  return { enabled: b?.enabled === true, recipients, monthlyCapUsd: cap };
+}
+
+/** Costo de IA de los briefs del mes (por fecha del brief). */
+export async function monthSpendUsd(db: Db, workspaceId: string, briefDate: string): Promise<number> {
+  const month = briefDate.slice(0, 7);
+  const { data } = await db.from("briefs").select("usage").eq("workspace_id", workspaceId).gte("brief_date", `${month}-01`).lte("brief_date", `${month}-31`);
+  return (data ?? []).reduce((acc, b) => acc + Object.values((b.usage ?? {}) as Record<string, { costUsd?: number }>).reduce((a, u) => a + (u?.costUsd ?? 0), 0), 0);
 }
 
 export type Engines = { research: ResearchEngine; synthesis: SynthesisEngine; email: EmailProvider | null };
@@ -87,6 +97,15 @@ export async function advanceBrief(db: Db, briefId: string, engines: Engines, op
     const memory = await loadBriefMemory(db, b.workspace_id);
     const digest = memoryDigest(memory);
     if (b.status === "investigando") {
+      const { monthlyCapUsd } = briefSettings(ws.settings);
+      const spent = await monthSpendUsd(db, b.workspace_id, b.brief_date);
+      if (spent >= monthlyCapUsd) {
+        // Tope alcanzado: sin investigación web; la síntesis trabaja solo con las notas recolectadas.
+        const memo = `MODO REDUCIDO: se alcanzó el tope mensual de IA (USD ${spent.toFixed(2)} de ${monthlyCapUsd}). Sin investigación web: usar solo las notas recolectadas y decirlo en quiet_day_note.\n\n${items.map((i) => `- ${i.publisher} · ${i.publishedAt ?? "s/f"} · ${i.title} · ${i.url}\n${(i.body ?? i.description ?? "").slice(0, 1500)}`).join("\n\n")}`;
+        const research = { ...((b.research as object) ?? {}), memo, sources: items.map((i) => ({ url: i.url, title: i.title })), capped: { spent, cap: monthlyCapUsd } };
+        await db.from("briefs").update({ research: research as unknown as J, status: "sintetizando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
+        return { briefId, did: `modo reducido (tope USD ${monthlyCapUsd})`, status: "sintetizando", more: true };
+      }
       const r = await engines.research.research({ briefDate: b.brief_date, period, items, memory: digest });
       const research = { ...((b.research as object) ?? {}), memo: r.memo, sources: r.sources };
       await db.from("briefs").update({ research: research as unknown as J, engines: { research: r.engine } as unknown as J, usage: { research: r.usage } as unknown as J, status: "sintetizando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);

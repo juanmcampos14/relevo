@@ -19,7 +19,8 @@ export type IssueCode =
   | "posible_duplicado"
   | "propietario_sin_validar"
   | "sin_nombre"
-  | "sin_empresa";
+  | "sin_empresa"
+  | "duplicado_en_archivo";
 
 export type Proposal = { label: string; patch: Record<string, unknown> };
 export type Issue = { code: IssueCode; severity: Severity; field?: string; message: string; proposal?: Proposal };
@@ -56,6 +57,8 @@ export type ContactValues = {
   preferred_channel: "presencial" | "telefono" | "whatsapp" | "email" | "otro" | null;
   relationship_status: string | null;
   contact_permission: "sin_definir" | "no_contactar";
+  /** Borrador de mensaje (AOG) guardado como nota de celda en "Notas": propuesta, no enviada. */
+  outreach_draft: string | null;
   owner_name: string | null;
   notes: string | null;
   company_ref: string | null;
@@ -324,6 +327,7 @@ export function mapContact(r: RawRow): Mapped<ContactValues> {
       contact_permission: noContact && /^(s[ií]|x|true|1)$/i.test(noContact) ? "no_contactar" : "sin_definir",
       owner_name: txt(v["Responsable"]),
       notes: [txt(v["Notas"]), access ? `Acceso: ${access}` : null].filter(Boolean).join("\n") || null,
+      outreach_draft: txt(v["Notas#nota"]),
       company_ref: txt(v["Empresa ID"]),
       source_ref: txt(v["Fuente / referencia"]),
     },

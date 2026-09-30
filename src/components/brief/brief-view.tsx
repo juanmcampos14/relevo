@@ -28,6 +28,9 @@ function SignalCard({ s, base }: { s: BriefSignalView; base: string }) {
       <p className="text-sm">{s.summary}</p>
       {s.why_it_matters && <p className="text-sm"><span className="font-medium">Por qué importa:</span> {s.why_it_matters}</p>}
       {s.reading && <p className="text-sm"><span className="font-medium">Lectura RELEVO</span> <span className="text-muted-foreground italic">(inferencia)</span>: {s.reading}</p>}
+      {s.verify && <p className="text-sm"><span className="font-medium">Qué falta comprobar:</span> {s.verify}</p>}
+      {s.talk_to && <p className="text-sm"><span className="font-medium">Con quién hablar:</span> {s.talk_to}</p>}
+      {s.ask && <p className="text-sm"><span className="font-medium">Qué preguntar (AOG / campo):</span> {s.ask}</p>}
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
         {s.source_url ? (
           <a href={s.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{s.publisher || s.source_title || "fuente"}</a>

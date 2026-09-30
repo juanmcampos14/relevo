@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // /api/ingest y /api/cron se autentican con token propio (no con sesión de usuario).
+// /r/ y /api/r/: formularios públicos de investigación (sin sesión; validan todo en el servidor).
 // /offline, /sw.js, manifest e íconos: la app instalable y el modo sin señal (sin datos privados).
-const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest", "/api/cron", "/offline", "/sw.js", "/manifest.webmanifest", "/icon", "/apple-icon", "/api/version"];
+const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest", "/api/cron", "/api/r/", "/r/", "/offline", "/sw.js", "/manifest.webmanifest", "/icon", "/apple-icon", "/api/version"];
 
 // Refresca la sesión en cada request y exige login fuera de las rutas públicas.
 // La autorización real vive en RLS; esto solo evita renderizar páginas sin sesión.

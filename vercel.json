@@ -1,9 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["pdx1"],
+  "regions": [
+    "pdx1"
+  ],
   "crons": [
-    { "path": "/api/cron/brief", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/brief", "schedule": "30 9 * * *" },
-    { "path": "/api/cron/brief", "schedule": "0 11 * * *" }
+    {
+      "path": "/api/cron/brief",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/brief",
+      "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/brief",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/mantenimiento",
+      "schedule": "30 6 * * *"
+    }
   ]
 }

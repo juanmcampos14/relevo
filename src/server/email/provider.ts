@@ -17,7 +17,7 @@ export function resendProvider(apiKey: string, from: string): EmailProvider {
       try {
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
-          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "idempotency-key": msg.idempotencyKey },
+          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "idempotency-key": msg.idempotencyKey, "user-agent": "RELEVO-OS/1.0" },
           body: JSON.stringify({ from, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
           signal: AbortSignal.timeout(20_000),
         });

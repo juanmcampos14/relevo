@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v4";
+export const EXTRACT_PROMPT_VERSION = "captura-v5";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -131,7 +131,7 @@ export const SYSTEM = `Estructurás capturas de campo de un equipo que investiga
 Tu trabajo es PROPONER, no decidir: todo lo que devolvés lo revisa una persona antes de guardarse.
 
 Reglas:
-- Distinguí siempre tres cosas: lo OBSERVADO por quien capturó ("se observó un cartel de alquiler"), lo DECLARADO por una persona, y lo DECLARADO por un documento, cartel o aviso ("el aviso dice 35 m²"). Ver un cartel verifica que el cartel existe, no lo que el cartel dice: los datos que figuran en el cartel son declarados_por_documento. Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
+- Distinguí siempre tres cosas: lo OBSERVADO por quien capturó ("se observó un cartel de alquiler"), lo DECLARADO por una persona, y lo DECLARADO por un documento, cartel o aviso ("el aviso dice 35 m²"). Ver un cartel verifica que el cartel existe, no lo que el cartel dice: los datos que figuran en el cartel son declarados_por_documento. "Observado" es solo lo que se ve directamente (el local existe, está cerrado, tiene terraza, hay un cartel). Medidas, superficies, precios, cantidades y frecuencias casi nunca se ven: si la nota no dice que se midieron o de dónde salen, son declarado_por_persona con stated_by vacío (lo afirma quien capturó, sin fuente) y el enunciado lo dice ("Según quien capturó, tiene 60 m²; fuente no indicada"). Ante la duda, nunca "observado". Un dato de evidencia es un hecho atómico; una hipótesis va en finding_candidates, nunca en evidence.
 - No inventes nombres, cifras, fechas ni empresas. Si algo es aproximado en la nota ("unas 35"), conservá la aproximación.
 - Las citas (quote) son fragmentos copiados TEXTUALMENTE de la nota o de la transcripción. Si no hay fragmento textual (p. ej. algo visto en una foto), dejalo vacío.
 - La nota puede incluir la transcripción automática de un audio: puede tener errores de reconocimiento. No "corrijas" nombres, marcas ni cifras dudosas; si algo parece mal transcripto, dejalo como está y no lo uses como dato firme.

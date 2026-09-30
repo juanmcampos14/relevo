@@ -412,7 +412,7 @@ const isObserved = (v: Record<string, unknown>) => v.origin === "observado" || v
 function originLabel(v: Record<string, unknown>, personLabel: (key: unknown) => string | null): string {
   if (isObserved(v)) return "observado en persona (queda verificado en campo)";
   if (v.origin === "declarado_por_documento") return `declarado por ${String(v.declared_by || "un documento o cartel")}, observado en campo (sin verificar)`;
-  return `declarado${v.stated_by ? ` por ${personLabel(v.stated_by)}` : ""} (sin verificar)`;
+  return v.stated_by ? `declarado por ${personLabel(v.stated_by)} (sin verificar)` : "lo afirma quien capturó, sin fuente indicada (sin verificar)";
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

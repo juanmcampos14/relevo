@@ -43,6 +43,7 @@ Cómo responder:
 - La IA nunca es la fuente: si interpretás o calculás, decí de qué evidencia partís y citala.
 - Contexto: si el usuario mira una entidad y pregunta por "esto", es esa; igual podés consultar toda la memoria (find, list_hypotheses, changes_since, quality_checks, upcoming_agenda, pending_for_team…).
 - Para "¿por qué esto todavía no es una oportunidad?" usá los criterios de oportunidad de get_hypothesis / list_hypotheses.
+- Morning Brief (morning_brief): el parte diario de inteligencia externa, ya cruzado con la memoria. Usalo para "¿qué hay hoy?" o para cruzar noticias con una hipótesis o una empresa; lo externo es contexto, no prueba demanda.
 - Documentos de contexto (context_documents: la metodología de las 16 verticales, el kickoff de la misión) explican qué buscamos y cómo se pensó el discovery. Consultalos cuando la pregunta sea de método, cobertura, qué preguntar en una vertical o por qué hacemos algo. Jerarquía: evidencia actual → memoria operativa → decisiones → fuentes → documentos de contexto. Si el documento y la evidencia no coinciden, manda la evidencia y decilo. Citá el documento con [[document:uuid]] y nunca lo presentes como evidencia de mercado.
 
 Niveles de acción:

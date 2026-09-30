@@ -102,10 +102,11 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("help_requests").select("id, ask, finding_id").eq("assignee_id", ctx.user.id).in("status", ["abierto", "en_curso"]).limit(3),
   ]);
   // Oportunidades activas: proyectos, casos en estudio y oportunidades del equipo (no son la misión).
-  const [{ data: projects }, { data: cases }, { data: opps }] = await Promise.all([
+  const [{ data: projects }, { data: cases }, { data: opps }, { data: lastBrief }] = await Promise.all([
     supabase.from("campaigns").select("id, name, objective, status, campaign_targets(count), findings(count)").eq("kind", "proyecto").in("status", ["activa", "borrador", "pausada"]).order("updated_at", { ascending: false }),
     supabase.from("findings").select("id, statement").eq("maturity", "caso").eq("case_status", "activo").eq("review_status", "aprobado").limit(10),
     supabase.from("opportunities").select("id, title, status, stage, next_action").neq("status", "rechazada").order("updated_at", { ascending: false }).limit(10),
+    supabase.from("briefs").select("id, brief_date, content").eq("status", "generado").order("brief_date", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
@@ -228,6 +229,15 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   for (const a of latestByFinding.values()) for (const g of a.gaps as Gap[]) gapCount.set(g, (gapCount.get(g) ?? 0) + 1);
   const topUnknowns = [...gapCount].sort((a, b) => b[1] - a[1]).slice(0, 3);
   const disputed = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).includes("contradiccion_sin_resolver"));
+  // Morning Brief: lo que importa hoy afuera (el brief completo vive en su página y llega por email).
+  const briefPoints = ((lastBrief?.content as { headline_points?: { text: string }[]; quiet_day_note?: string } | null)?.headline_points ?? []).slice(0, 5);
+  const Brief = lastBrief ? (
+    <Section title={lastBrief.brief_date === today ? "Morning Brief de hoy" : `Último Morning Brief (${formatDate(lastBrief.brief_date)})`} actions={<Link href={`${base}/brief/${lastBrief.id}`} className={linkCls}>Abrir</Link>}>
+      <List>
+        {briefPoints.length ? briefPoints.map((p, i) => <Row key={i} href={`${base}/brief/${lastBrief.id}`} title={p.text} />) : <Row href={`${base}/brief/${lastBrief.id}`} title={(lastBrief.content as { quiet_day_note?: string }).quiet_day_note || "Sin cambios relevantes"} />}
+      </List>
+    </Section>
+  ) : null;
   const Watching = (
     <Section title="RELEVO está viendo" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hipótesis</Link>}>
       {changes.effects.length || changes.newFindings.length || disputed.length || latestByFinding.size || evaluating.length ? (
@@ -340,6 +350,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       </section>
       {view === "operativa" ? (
         <div className="space-y-8">
+          {Brief}
           <div className="grid gap-8 lg:grid-cols-2">
             {Watching}
             {Priorities}
@@ -352,6 +363,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
             <Link href={`${base}/agenda`} className={linkCls}>Agenda de campo</Link>
             <Link href={`${base}/explorar/actividades?de=mias`} className={linkCls}>Mis próximas acciones{actions.length ? ` (${actions.length})` : ""}</Link>
             <Link href={`${base}/mapa`} className={linkCls}>Mapa del territorio</Link>
+            <Link href={`${base}/brief`} className={linkCls}>Morning Brief</Link>
             <Link href={`${base}/noticias`} className={linkCls}>Noticias</Link>
           </p>
         </div>

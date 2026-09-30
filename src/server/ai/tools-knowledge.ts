@@ -120,6 +120,11 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: strict({ lat: { type: "number" }, lng: { type: "number" }, radius_m: { type: "integer", minimum: 100, maximum: 25000 }, category: { type: "string", enum: [...PLACE_CATEGORY_KEYS] } }),
   },
   {
+    name: "morning_brief",
+    description: "El Morning Brief de RELEVO (parte diario de inteligencia externa: Vaca Muerta News, medios regionales, oficiales y corporativos, cruzado con la memoria). Sin 'date' trae el último generado; incluye señales (hecho/declaración/inferencia, fuente, vertical, empresa), acciones sugeridas, preguntas para campo, historias vivas y watchlist. Usalo para '¿qué hay hoy?', '¿qué dijo el brief?', '¿qué pasó con X en las noticias?' o para cruzar noticias con una hipótesis. Lo externo es contexto: no prueba demanda.",
+    input_schema: strict({ date: { type: "string", description: "YYYY-MM-DD (opcional)" } }),
+  },
+  {
     name: "context_documents",
     description: "Documentos de contexto del equipo (p. ej. la presentación de las 16 verticales: metodología, ficha común por vertical, preguntas de campo; el kickoff de la misión). Sin 'document_ref' lista los vigentes con su resumen; con 'document_ref' devuelve el texto completo (o los párrafos que contienen 'query'). Usalo para entender por qué y cómo se pensó el trabajo, qué preguntas hacer en una vertical o cómo encaja algo en el mapa. NO es evidencia: si la evidencia o la memoria dicen otra cosa, mandan ellas.",
     input_schema: strict({ document_ref: { type: "string", description: "document:uuid" }, query: { type: "string" } }),
@@ -322,6 +327,25 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           captures: (caps ?? []).map((c) => ({ ref: ref("capture", c.id), at: c.captured_at, status: c.status, summary: clip(c.ai_summary, 160) })),
           decisions: (dec ?? []).map((d) => ({ ref: ref("decision", d.id), question: d.question, status: d.status })),
           help_requests: helps ?? [],
+        }),
+      };
+    }
+    case "morning_brief": {
+      let q = db.from("briefs").select("id, brief_date, status, content, generated_at").eq("status", "generado").order("brief_date", { ascending: false }).limit(1);
+      if (typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.date)) q = db.from("briefs").select("id, brief_date, status, content, generated_at").eq("brief_date", a.date).limit(1);
+      const [{ data: briefs }, { data: stories }] = await Promise.all([
+        q,
+        db.from("brief_stories").select("id, title, summary, status, watch_reason, first_seen_on, last_seen_on").neq("status", "cerrada").order("last_seen_on", { ascending: false }).limit(20),
+      ]);
+      const b = briefs?.[0];
+      if (!b) return { content: JSON.stringify({ note: "Todavía no hay un Morning Brief generado.", stories: stories ?? [] }) };
+      const c = b.content as { headline_points?: unknown; signals?: { id: string; headline: string; summary: string; basis: string; change: string; source_url: string; publisher: string; vertical: string; companies: string[]; company_ids: string[]; finding_ids: string[]; reading: string; story_title: string | null }[]; actions?: unknown; field_questions?: unknown; watchlist?: unknown; connections?: unknown; quiet_day_note?: string };
+      return {
+        content: track(ctx, {
+          brief_date: b.brief_date, generated_at: b.generated_at, page: `${base}/brief/${b.id}`, quiet_day_note: c.quiet_day_note || null,
+          headline_points: c.headline_points, connections: c.connections, actions: c.actions, field_questions: c.field_questions, watchlist: c.watchlist,
+          signals: (c.signals ?? []).map((s) => ({ headline: s.headline, summary: s.summary, basis: s.basis, change: s.change, vertical: s.vertical, companies: s.companies, source: s.source_url || null, publisher: s.publisher, reading_inference: s.reading, story: s.story_title, memory: [...s.company_ids.map((id) => ({ ref: `company:${id}` })), ...s.finding_ids.map((id) => ({ ref: `finding:${id}` }))] })),
+          stories: stories ?? [],
         }),
       };
     }

@@ -204,6 +204,137 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"brief_candidates": {
+                  Row: {
+                    "brief_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"detail": string | null,"entity_ref": string | null,"id": string,"kind": string,"name": string,"source_url": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "brief_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"detail"?: string | null,"entity_ref"?: string | null,"id"?: string,"kind": string,"name": string,"source_url"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "brief_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"detail"?: string | null,"entity_ref"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"source_url"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "brief_candidates_workspace_id_brief_id_fkey"
+      columns: ["workspace_id","brief_id"]
+isOneToOne: false
+      referencedRelation: "briefs"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "brief_candidates_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"brief_deliveries": {
+                  Row: {
+                    "attempts": number,"brief_id": string,"created_at": string,"error": string | null,"id": string,"last_attempt_at": string | null,"provider": string | null,"provider_message_id": string | null,"recipient_email": string,"recipient_name": string | null,"sent_at": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "attempts"?: number,"brief_id": string,"created_at"?: string,"error"?: string | null,"id"?: string,"last_attempt_at"?: string | null,"provider"?: string | null,"provider_message_id"?: string | null,"recipient_email": string,"recipient_name"?: string | null,"sent_at"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "attempts"?: number,"brief_id"?: string,"created_at"?: string,"error"?: string | null,"id"?: string,"last_attempt_at"?: string | null,"provider"?: string | null,"provider_message_id"?: string | null,"recipient_email"?: string,"recipient_name"?: string | null,"sent_at"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "brief_deliveries_workspace_id_brief_id_fkey"
+      columns: ["workspace_id","brief_id"]
+isOneToOne: false
+      referencedRelation: "briefs"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "brief_deliveries_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"brief_signals": {
+                  Row: {
+                    "asset_ids": (string)[],"basis": string,"brief_id": string,"campaign_ids": (string)[],"change": string,"companies": (string)[],"company_ids": (string)[],"created_at": string,"finding_ids": (string)[],"geography": string | null,"happened_on": string | null,"headline": string,"id": string,"people": (string)[],"position": number,"publisher": string | null,"reading": string | null,"relevance": string,"roles": (string)[],"section": string,"signal_type": string,"source_title": string | null,"source_url": string | null,"status": string,"story_id": string | null,"subsector": string | null,"suggested_action": string | null,"summary": string | null,"vertical": string | null,"why_it_matters": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "asset_ids"?: (string)[],"basis": string,"brief_id": string,"campaign_ids"?: (string)[],"change": string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline": string,"id"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance": string,"roles"?: (string)[],"section": string,"signal_type": string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "asset_ids"?: (string)[],"basis"?: string,"brief_id"?: string,"campaign_ids"?: (string)[],"change"?: string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline"?: string,"id"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance"?: string,"roles"?: (string)[],"section"?: string,"signal_type"?: string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "brief_signals_workspace_id_brief_id_fkey"
+      columns: ["workspace_id","brief_id"]
+isOneToOne: false
+      referencedRelation: "briefs"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "brief_signals_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "brief_signals_workspace_id_story_id_fkey"
+      columns: ["workspace_id","story_id"]
+isOneToOne: false
+      referencedRelation: "brief_stories"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"brief_source_items": {
+                  Row: {
+                    "first_brief_id": string | null,"id": string,"published_at": string | null,"publisher": string | null,"seen_at": string,"title": string | null,"url": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "first_brief_id"?: string | null,"id"?: string,"published_at"?: string | null,"publisher"?: string | null,"seen_at"?: string,"title"?: string | null,"url": string,"workspace_id": string
+                  }
+                  Update: {
+                    "first_brief_id"?: string | null,"id"?: string,"published_at"?: string | null,"publisher"?: string | null,"seen_at"?: string,"title"?: string | null,"url"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "brief_source_items_workspace_id_first_brief_id_fkey"
+      columns: ["workspace_id","first_brief_id"]
+isOneToOne: false
+      referencedRelation: "briefs"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "brief_source_items_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"brief_stories": {
+                  Row: {
+                    "created_at": string,"first_seen_on": string,"id": string,"last_brief_id": string | null,"last_seen_on": string,"status": string,"summary": string | null,"title": string,"updated_at": string,"vertical": string | null,"watch_reason": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"first_seen_on": string,"id"?: string,"last_brief_id"?: string | null,"last_seen_on": string,"status"?: string,"summary"?: string | null,"title": string,"updated_at"?: string,"vertical"?: string | null,"watch_reason"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"first_seen_on"?: string,"id"?: string,"last_brief_id"?: string | null,"last_seen_on"?: string,"status"?: string,"summary"?: string | null,"title"?: string,"updated_at"?: string,"vertical"?: string | null,"watch_reason"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "brief_stories_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "brief_stories_workspace_id_last_brief_id_fkey"
+      columns: ["workspace_id","last_brief_id"]
+isOneToOne: false
+      referencedRelation: "briefs"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"briefings": {
                   Row: {
                     "audience_user_id": string | null,"content": NonNullable<Json>,"created_at": string,"created_by": string | null,"id": string,"period_end": string,"period_start": string,"published_at": string | null,"scope": string,"status": string,"title": string,"updated_at": string,"workspace_id": string
@@ -217,6 +348,25 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "briefings_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"briefs": {
+                  Row: {
+                    "attempts": number,"brief_date": string,"collected": NonNullable<Json>,"content": NonNullable<Json>,"created_at": string,"engines": NonNullable<Json>,"error": string | null,"generated_at": string | null,"id": string,"period_end": string,"period_start": string,"research": NonNullable<Json>,"status": string,"step_started_at": string | null,"usage": NonNullable<Json>,"version": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "attempts"?: number,"brief_date": string,"collected"?: NonNullable<Json>,"content"?: NonNullable<Json>,"created_at"?: string,"engines"?: NonNullable<Json>,"error"?: string | null,"generated_at"?: string | null,"id"?: string,"period_end": string,"period_start": string,"research"?: NonNullable<Json>,"status"?: string,"step_started_at"?: string | null,"usage"?: NonNullable<Json>,"version": string,"workspace_id": string
+                  }
+                  Update: {
+                    "attempts"?: number,"brief_date"?: string,"collected"?: NonNullable<Json>,"content"?: NonNullable<Json>,"created_at"?: string,"engines"?: NonNullable<Json>,"error"?: string | null,"generated_at"?: string | null,"id"?: string,"period_end"?: string,"period_start"?: string,"research"?: NonNullable<Json>,"status"?: string,"step_started_at"?: string | null,"usage"?: NonNullable<Json>,"version"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "briefs_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
       referencedRelation: "workspaces"

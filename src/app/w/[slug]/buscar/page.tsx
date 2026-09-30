@@ -18,25 +18,24 @@ export default async function SearchPage({ params, searchParams }: PageProps<"/w
 
   const results: { href: string; label: string; kind: string }[] = [];
   if (q.length >= 2) {
-    const [c, e, a, ct] = await Promise.all([
+    const [c, e, a, ct, f, ev, u] = await Promise.all([
       supabase.from("companies").select("id, trade_name, legal_name").or(`trade_name.ilike.${term},legal_name.ilike.${term}`).limit(20),
       supabase.from("establishments").select("id, name").or(`name.ilike.${term},address_text.ilike.${term}`).limit(20),
       supabase.from("assets").select("id, title").or(`title.ilike.${term},address_text.ilike.${term}`).limit(20),
-      supabase.from("contacts").select("id, full_name, contact_links(company_id, establishment_id, asset_id)").ilike("full_name", term).limit(20),
+      supabase.from("contacts").select("id, full_name, role_title").or(`full_name.ilike.${term},role_title.ilike.${term},email.ilike.${term}`).limit(20),
+      supabase.from("findings").select("id, statement, maturity").ilike("statement", term).neq("review_status", "rechazado").limit(15),
+      supabase.from("evidence").select("id, statement, capture_id, company_id, asset_id").ilike("statement", term).limit(15),
+      supabase.from("unresolved_entities").select("id, label").ilike("label", term).is("resolved_at", null).limit(10),
     ]);
     c.data?.forEach((x) => results.push({ href: entityHref(slug, "company", x.id), label: companyName(x), kind: "Empresa" }));
     e.data?.forEach((x) => results.push({ href: entityHref(slug, "establishment", x.id), label: x.name, kind: "Establecimiento" }));
     a.data?.forEach((x) => results.push({ href: entityHref(slug, "asset", x.id), label: x.title, kind: "Activo" }));
-    ct.data?.forEach((x) => {
-      const l = x.contact_links[0];
-      const href = l?.company_id
-        ? entityHref(slug, "company", l.company_id)
-        : l?.establishment_id
-          ? entityHref(slug, "establishment", l.establishment_id)
-          : l?.asset_id
-            ? entityHref(slug, "asset", l.asset_id)
-            : null;
-      if (href) results.push({ href, label: x.full_name, kind: "Contacto" });
+    ct.data?.forEach((x) => results.push({ href: `/w/${slug}/explorar/personas/${x.id}`, label: x.role_title ? `${x.full_name} · ${x.role_title}` : x.full_name, kind: "Persona" }));
+    u.data?.forEach((x) => results.push({ href: `/w/${slug}/explorar/sin-identificar`, label: x.label, kind: "Sin identificar" }));
+    f.data?.forEach((x) => results.push({ href: `/w/${slug}/hallazgos/${x.id}`, label: x.statement, kind: x.maturity === "finding" ? "Finding" : x.maturity === "idea" ? "Idea" : "Hipótesis" }));
+    ev.data?.forEach((x) => {
+      const href = x.capture_id ? `/w/${slug}/capturas/${x.capture_id}` : x.company_id ? entityHref(slug, "company", x.company_id) : x.asset_id ? entityHref(slug, "asset", x.asset_id) : `/w/${slug}/explorar/evidencia?q=${encodeURIComponent(q)}`;
+      results.push({ href, label: x.statement, kind: "Evidencia" });
     });
   }
 

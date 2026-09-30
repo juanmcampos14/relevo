@@ -107,13 +107,14 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
       {children}
       {canEdit && (
         <>
+          {/* Teléfono: botón redondo compacto sobre la barra inferior (tapa lo mínimo). En escritorio va en la barra superior. */}
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="fixed right-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 items-center gap-2 rounded-full bg-primary pr-5 pl-4 text-base font-semibold text-primary-foreground shadow-lg active:scale-95 md:right-6 md:bottom-6"
+            aria-label="Capturar"
+            className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 md:hidden"
           >
-            <Plus className="size-6" aria-hidden="true" />
-            Capturar
+            <Plus className="size-7" aria-hidden="true" />
           </button>
           <CaptureSheet
             open={open}
@@ -385,5 +386,17 @@ export function PhonePendingNote() {
     <span className="font-medium text-amber-700 dark:text-amber-400">
       {items.length === 1 ? "1 sigue en este teléfono sin subir" : `${items.length} siguen en este teléfono sin subir`}
     </span>
+  );
+}
+
+/** Botón "Capturar" de la barra superior (escritorio): no flota sobre el contenido. */
+export function CaptureTopButton() {
+  const ctx = useContext(CaptureContext);
+  if (!ctx) return null;
+  return (
+    <button type="button" onClick={ctx.open} className="hidden h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 md:inline-flex">
+      <Plus className="size-4" aria-hidden="true" />
+      Capturar
+    </button>
   );
 }

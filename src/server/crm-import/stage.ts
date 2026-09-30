@@ -17,7 +17,7 @@ import {
   type Member,
 } from "@/domain/crm-import/map";
 import { threeWay, type DiffResult } from "@/domain/crm-import/diff";
-import { findCandidates } from "@/domain/crm-import/dedupe";
+import { findCandidates, findContactCandidates } from "@/domain/crm-import/dedupe";
 import type { ParsedWorkbook } from "./parse";
 
 type Db = SupabaseClient<Database>;
@@ -194,6 +194,11 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
   const { data: existing } = await db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone, tax_id");
   const pool = (existing ?? []).filter((c) => !importedIds.has(c.id)).map((c) => ({ id: c.id, name: c.trade_name ?? c.legal_name ?? "", locality: c.locality, website: c.website, phone: c.public_phone, tax_id: c.tax_id }));
 
+  // Personas que ya están en RELEVO sin venir de este CRM (p. ej. creadas desde una captura).
+  const importedContacts = new Set([...ctx.refs.values()].filter((r) => r.entity_type === "contact").map((r) => r.entity_id));
+  const { data: existingContacts } = await db.from("contacts").select("id, full_name, email, phone").eq("contact_kind", "persona");
+  const contactPool = (existingContacts ?? []).filter((c) => !importedContacts.has(c.id)).map((c) => ({ id: c.id, name: c.full_name, email: c.email, phone: c.phone }));
+
   const staged: Staged[] = [];
   const stage = async (entity_type: EntityType, m: Mapped<Record<string, unknown>>, extra: Issue[], current: (ref: Ref) => Promise<Record<string, unknown> | null>) => {
     m.issues.push(...extra);
@@ -243,6 +248,16 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
     const extra: Issue[] = [];
     if (!inBatch("company", c.values.company_ref)) {
       extra.push({ code: "referencia_rota", severity: "bloquea", field: "Empresa ID", message: `La empresa "${c.values.company_ref ?? "—"}" no está en el archivo ni en RELEVO.` });
+    }
+    if (!ctx.refs.has(refKey("contact", c.externalId)) && c.values.contact_kind !== "canal_institucional") {
+      for (const cand of findContactCandidates({ id: "", name: c.values.full_name, email: c.values.email, phone: c.values.phone }, contactPool)) {
+        extra.push({
+          code: "posible_duplicado",
+          severity: "revisar",
+          message: `Parece la misma persona que "${cand.name}" en RELEVO (${cand.reason.replace(/_/g, " ")}).`,
+          proposal: { label: `Vincular con "${cand.name}" en vez de crear otra`, patch: { _link_to: cand.id } },
+        });
+      }
     }
     await stage("contact", c as Mapped<Record<string, unknown>>, extra, (r) => currentContact(db, r));
   }

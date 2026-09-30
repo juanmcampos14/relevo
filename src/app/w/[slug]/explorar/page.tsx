@@ -10,7 +10,7 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { CheckboxGroup, SelectField, TextAreaField, TextField } from "@/components/app/fields";
 import { createCampaign } from "./actions";
 
-export const metadata: Metadata = { title: "Explorar" };
+export const metadata: Metadata = { title: "Red · Misiones" };
 
 export default async function ExplorarPage({ params }: PageProps<"/w/[slug]/explorar">) {
   const { slug } = await params;

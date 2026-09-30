@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BriefcaseBusiness, CalendarDays, Compass, House, Sparkles } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, House, Network, Sparkles } from "lucide-react";
 import { cn } from "cn";
 
 const items = [
   { href: "", label: "Inicio", icon: House },
-  { href: "/explorar", label: "Explorar", icon: Compass },
+  // CRM / red / ecosistema: la memoria estructurada (empresas, personas, activos, actividades, evidencia).
+  { href: "/explorar", label: "Red", icon: Network },
   { href: "/agenda", label: "Agenda y mapa", short: "Agenda", icon: CalendarDays },
   { href: "/oportunidades", label: "Oportunidades", short: "Oportun.", icon: BriefcaseBusiness },
   { href: "/ai", label: "RELEVO AI", short: "AI", icon: Sparkles },

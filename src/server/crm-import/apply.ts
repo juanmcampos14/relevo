@@ -281,8 +281,19 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
       } else if (row.entity_type === "contact") {
         const company = refOf("company", v.company_ref);
         const src = typeof v.source_ref === "string" && SRC_ID.test(v.source_ref) ? refOf("source", v.source_ref)?.entity_id ?? crmSource : crmSource;
-        const contactId = entityId ?? ids.contact!;
-        if (creating) {
+        const linkTo = creating && typeof v._link_to === "string" ? v._link_to : null;
+        const contactId = linkTo ?? entityId ?? ids.contact!;
+        if (linkTo) {
+          // Duplicado confirmado: el ID del CRM queda apuntando a la persona existente (sin pisar sus datos)
+          // y se suma la relación con la empresa del CRM.
+          if (company) {
+            const { error } = await db.from("contact_links").upsert(
+              { workspace_id: workspaceId, contact_id: contactId, company_id: company.entity_id, relation: "otro" },
+              { onConflict: "contact_id,company_id,establishment_id,asset_id", ignoreDuplicates: true },
+            );
+            if (error) throw error;
+          }
+        } else if (creating) {
           await upsertIgnore(db, "contacts", { id: contactId, workspace_id: workspaceId, ...pick(v, CONTACT_COLS), full_name: v.full_name as string, source_id: src });
           if (company) {
             const { error } = await db.from("contact_links").upsert(

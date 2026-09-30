@@ -225,7 +225,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     pendingCaptures ? { href: `${base}/capturas`, title: `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}`, meta: "Material de campo que todavía no es evidencia" } : null,
     captureErrors ? { href: `${base}/capturas`, title: `${captureErrors} ${captureErrors === 1 ? "captura con error" : "capturas con error"}`, meta: "Reintentar el procesamiento", danger: true } : null,
     (findings.count ?? 0) + (drafts.count ?? 0) ? { href: `${base}/oportunidades`, title: `${(findings.count ?? 0) + (drafts.count ?? 0)} hallazgos o borradores por revisar`, meta: `${findings.count ?? 0} hallazgos · ${drafts.count ?? 0} borradores de RELEVO AI` } : null,
-    unresolvedCount ? { href: `${base}/sin-identificar`, title: `${unresolvedCount} ${unresolvedCount === 1 ? "organización o persona" : "organizaciones o personas"} sin identificar`, meta: "Ya aportan evidencia: resolvelas cuando sepas quiénes son" } : null,
+    unresolvedCount ? { href: `${base}/explorar/sin-identificar`, title: `${unresolvedCount} ${unresolvedCount === 1 ? "organización o persona" : "organizaciones o personas"} sin identificar`, meta: "Ya aportan evidencia: resolvelas cuando sepas quiénes son" } : null,
     overdueAdmin.length ? { href: overdueAdmin[0].href, title: `${overdueAdmin.length} ${overdueAdmin.length === 1 ? "pendiente vencido" : "pendientes vencidos"}`, meta: overdueAdmin.slice(0, 2).map((a) => a.title).join(" · "), danger: true } : null,
   ].filter((x): x is { href: string; title: string; meta: string; danger?: boolean } => !!x);
   const Hygiene = (

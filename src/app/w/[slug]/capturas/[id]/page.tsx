@@ -249,7 +249,7 @@ function resultLink(p: Proposal, slug: string): ReactNode {
   if (!p.result_id) return null;
   const base = `/w/${slug}`;
   const href =
-    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "asset" ? entityHref(slug, "asset", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : p.result_type === "unresolved" ? `${base}/sin-identificar` : null;
+    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "asset" ? entityHref(slug, "asset", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : p.result_type === "unresolved" ? `${base}/explorar/sin-identificar` : null;
   return href ? <Link href={href} className="text-sm text-primary hover:underline">Abrir</Link> : null;
 }
 

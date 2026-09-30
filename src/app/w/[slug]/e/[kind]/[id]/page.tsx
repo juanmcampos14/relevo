@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ProvenanceTag } from "@/components/app/provenance-tag";
+import { evidenceProvenance } from "@/domain/provenance";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -99,7 +101,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
       .eq(fk, id),
     supabase
       .from("evidence")
-      .select("id, statement, quote, evidence_type, verification_status, origin_kind, observed_at, revalidate_after, next_verification_step, created_at, created_by, is_demo, capture_id, visit_id, declared_by, sources(id, title, url), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(id, full_name)")
+      .select("id, statement, quote, evidence_type, verification_status, origin_kind, observed_at, revalidate_after, next_verification_step, created_at, created_by, is_demo, capture_id, visit_id, declared_by, sources(id, title, url), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(id, full_name), about_u:unresolved_entities!evidence_about_unresolved_fk(label), said_u:unresolved_entities!evidence_stated_by_unresolved_fk(label)")
       .eq(fk, id)
       .order("observed_at", { ascending: false, nullsFirst: false }),
     supabase
@@ -274,9 +276,10 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           <VerificationBadge status={isStale(e, today) && e.verification_status !== "stale" ? "stale" : e.verification_status} />
                           <DemoBadge show={e.is_demo} />
+                          <ProvenanceTag {...evidenceProvenance({ origin_kind: e.origin_kind, verification_status: e.verification_status, declared_by: e.declared_by, speaker: e.stated_by?.full_name ?? e.said_u?.label ?? null })} />
                           <span>{evidenceType.label(e.evidence_type)} · {evidenceOrigin.label(e.origin_kind)}</span>
-                          {e.stated_by && <span>· dicho por {e.stated_by.full_name}</span>}
-                          {e.declared_by && <span>· declarado por {e.declared_by}</span>}
+                          {e.stated_by && <Link href={`${base}/explorar/personas/${e.stated_by.id}`} className="text-primary hover:underline">· {e.stated_by.full_name}</Link>}
+                          {(e.about_u || e.said_u) && <span>· antes sin identificar: {[e.about_u?.label, e.said_u?.label].filter(Boolean).join(" / ")}</span>}
                           {e.sources ? (
                             e.sources.url ? (
                               <a href={e.sources.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">· {e.sources.title}</a>
@@ -520,7 +523,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                   l.contacts ? (
                     <li key={l.contacts.id} className="rounded-lg border p-3 text-sm">
                       <div className="flex flex-wrap items-center gap-2 font-medium">
-                        {l.contacts.full_name}
+                        <Link href={`${base}/explorar/personas/${l.contacts.id}`} className="hover:underline">{l.contacts.full_name}</Link>
                         {l.contacts.contact_kind === "canal_institucional" && <Pill>{contactKind.label(l.contacts.contact_kind)}</Pill>}
                         <DemoBadge show={l.contacts.is_demo} />
                       </div>

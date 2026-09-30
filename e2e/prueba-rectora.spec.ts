@@ -20,7 +20,7 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   await login(page, USERS.tano);
   await expect(page.getByRole("button", { name: "Ver vista ejecutivo" })).toBeVisible();
   await expect(page.getByText("Qué hacer ahora")).toBeVisible();
-  await page.getByRole("link", { name: "Explorar" }).first().click();
+  await page.getByRole("link", { name: "Red", exact: true }).first().click();
   await page.getByRole("link", { name: /Añelo — Discovery 2026/ }).click();
 
   let form = await openDetails(page, "+ Agregar objetivo");
@@ -138,7 +138,7 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
 
 test("@mobile registrar visita desde el teléfono en pocos toques", async ({ page }) => {
   await login(page, USERS.tano);
-  await page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: "Explorar" }).click();
+  await page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: "Red", exact: true }).click();
   await page.getByRole("link", { name: /Añelo — Discovery 2026/ }).click();
   await page.getByRole("link", { name: "Registrar visita" }).first().click();
   await expect(page.getByRole("heading", { name: "Registrar visita" })).toBeVisible();

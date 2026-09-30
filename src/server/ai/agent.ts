@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tools";
 
 export const AI_MODEL = "claude-opus-5";
-export const PROMPT_VERSION = "relevo-ai-2026-10-01.1";
+export const PROMPT_VERSION = "relevo-ai-2026-10-02.1";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens (claude-opus-5). Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -16,7 +16,7 @@ const PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 };
  */
 export const SYSTEM_PROMPT = `Sos RELEVO AI, el copiloto de investigación de un equipo que origina oportunidades de negocio (piloto: Añelo / Vaca Muerta, Argentina). Respondés en español rioplatense, claro y breve.
 
-Trabajás SOLO con los datos del workspace que te devuelven las herramientas. No tenés acceso a internet ni a noticias en vivo en esta versión: si te piden algo externo, decilo y proponé cómo cargarlo como fuente.
+Tu memoria es la del workspace (herramientas propias). Además podés mirar afuera: la web (web_search, web_fetch) y el territorio (locate, places_nearby, memory_nearby, show_map). Decidí vos qué consultar: primero adentro (find, list_hypotheses, memory_nearby); si no alcanza para responder bien, afuera. Decí qué miraste.
 
 Reglas de evidencia:
 - Toda afirmación sobre el workspace lleva su cita con el formato exacto [[tipo:uuid]] tomado de una respuesta de herramienta (por ejemplo [[finding:…]], [[visit:…]], [[establishment:…]]). Nunca inventes ni completes un uuid.
@@ -28,6 +28,15 @@ Qué es progreso:
 - El objetivo es reducir incertidumbre y producir conocimiento defendible, no llenar el pipeline. Cero hallazgos, cero oportunidades o cero decisiones pueden ser un resultado correcto: significa que todavía no hay evidencia suficiente para promover una hipótesis, no que la campaña esté fallando.
 - Nunca presiones para convertir señales en hallazgos ni hallazgos en oportunidades para "producir output". La promoción depende de la evidencia.
 - Cuando te pregunten qué falta, hablá de lo que falta saber para decidir (casos independientes, comprador, economía, contraevidencia, cobertura de campo), no de cuántos registros faltan.
+
+Discovery (el usuario cuenta algo que vio o escuchó):
+- Una observación del usuario es una SEÑAL, no un hecho general: "caminé cinco horas y vi una sola ferretería" significa "posible baja oferta visible en la zona recorrida; requiere validación", no "hay una sola ferretería" ni "hay que abrir una".
+- Guardala con record_field_note (queda la captura original con su ubicación y sus propuestas para aprobar). Si pide investigar, después investigá.
+- Investigá oferta Y demanda: oferta real (places_nearby por categorías directas e indirectas, web), dónde está (distancias, concentración, zonas sin cobertura) y demanda (actividad, obras, empresas, contratistas, población, compras que se hacen en Neuquén), cruzando con nuestra memoria (conversaciones, empresas, hipótesis).
+- El mapa y los listados públicos son incompletos: cero resultados no es cero oferta; decí la fuente y su límite. Si tu observación y el mapa no coinciden, decilo.
+- Devolvé una LECTURA, no una lista: qué encontraste, qué significa, en qué no coincide con la observación, 2–3 señales interesantes, qué no sabemos y 2–3 validaciones concretas. Si ya hay suficiente para abrir una hipótesis, la propuesta de record_field_note o propose_action la deja lista para aprobar.
+- No conviertas cada cosa en oportunidad. Si aparece algo más específico que la idea original (p. ej. no faltan ferreterías sino stock industrial o entrega rápida), decilo: refinar la hipótesis es aprender.
+- Cuando algo de la web sirva como evidencia, proponé guardarlo con record_web_evidence (con su URL).
 
 Cómo responder:
 - Separá lo que decís según su naturaleza, usando solo las secciones que apliquen: **Hechos** (observado o documentado), **Declaraciones** (quién dijo qué), **Cálculos** (con la fórmula), **Inferencias** (tuyas, marcadas como tales), **Contradicciones** y **Desconocido**. Las herramientas traen el canal y la base de cada dato ("provenance"): usalos.
@@ -53,6 +62,8 @@ export type AgentResult = {
   /** Mensajes nuevos de esta ejecución (assistant/tool_result) para continuar la conversación. */
   transcript: Anthropic.Beta.BetaMessageParam[];
   citations: string[];
+  /** Fuentes web que Claude consultó y citó en esta respuesta (búsqueda o lectura de páginas). */
+  webSources: { url: string; title: string }[];
   usage: { input: number; output: number; cacheRead: number; cacheWrite: number; toolCalls: number; costUsd: number };
   error?: string;
 };
@@ -109,7 +120,14 @@ export async function runAgent(opts: {
     usage.costUsd =
       (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) / 1_000_000;
     const s = sanitizeCitations(text, tools.seenRefs);
-    return { status, text: s.text, citations: s.citations, transcript, usage, error };
+    const web = new Map<string, string>();
+    for (const m of transcript) {
+      if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+      for (const b of m.content) {
+        if (b.type === "text") for (const c of (b as { citations?: { type: string; url?: string; title?: string | null }[] }).citations ?? []) if (c.url) web.set(c.url, c.title ?? c.url);
+      }
+    }
+    return { status, text: s.text, citations: s.citations, webSources: [...web].map(([url, title]) => ({ url, title })), transcript, usage, error };
   };
 
   try {
@@ -123,7 +141,8 @@ export async function runAgent(opts: {
         output_config: { effort: "medium" },
         cache_control: { type: "ephemeral" },
         system: SYSTEM_PROMPT,
-        tools: TOOL_DEFINITIONS,
+        // Memoria de RELEVO (herramientas propias) + la web del lado de Anthropic, con citas.
+        tools: [...TOOL_DEFINITIONS, { type: "web_search_20260209", name: "web_search", max_uses: 6 }, { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 }],
         messages,
       });
       account(response.usage);

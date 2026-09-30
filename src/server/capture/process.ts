@@ -32,7 +32,7 @@ function formatAR(iso: string) {
 export async function processCapture(
   db: Db,
   /** force: procesar aunque parezca un duplicado (la persona confirmó que es otra conversación). */
-  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic; transcriber?: Transcriber | null; force?: boolean },
+  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string; client?: Anthropic; transcriber?: Transcriber | null; force?: boolean; focus?: string },
 ): Promise<ProcessResult> {
   if ((opts.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent !== true) {
     return { ok: false, message: "El workspace no habilitó el procesamiento con IA (Miembros → Procesamiento con IA)." };
@@ -177,6 +177,7 @@ export async function processCapture(
       contacts: contactList,
       findings: findingList,
       unresolved: unresolvedList,
+      focus: opts.focus ?? null,
     });
 
     const { data: run } = await db

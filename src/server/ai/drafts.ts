@@ -15,7 +15,7 @@ import { companyName } from "@/server/entities";
 type Db = SupabaseClient<Database>;
 const REF = (types: string) => new RegExp(`^(${types}):[0-9a-f-]{36}$`);
 
-export const DRAFT_ACTIONS = ["create_task", "prepare_validation", "link_evidence", "update_next_action", "request_help", "draft_finding", "request_decision"] as const;
+export const DRAFT_ACTIONS = ["create_task", "prepare_validation", "link_evidence", "update_next_action", "request_help", "draft_finding", "request_decision", "record_web_evidence"] as const;
 export type DraftAction = (typeof DRAFT_ACTIONS)[number];
 export const HELP_KINDS = ["contacto", "introduccion", "acceso", "validacion", "aprobacion", "capital", "conocimiento"] as const;
 
@@ -36,6 +36,8 @@ export const ProposeActionInput = z.object({
   help_kind: z.enum(HELP_KINDS).optional(),
   help_target: z.string().trim().max(200).optional(),
   due_on: z.iso.date().optional(),
+  url: z.url().max(2000).optional(),
+  source_title: z.string().trim().max(300).optional(),
   rationale: z.string().trim().min(1).max(2000),
   evidence_refs: z.array(z.string()).max(20),
 }).superRefine((v, ctx) => {
@@ -46,6 +48,7 @@ export const ProposeActionInput = z.object({
   if (v.action === "link_evidence") need(v.evidence_ref && v.finding_ref && v.stance, "link_evidence requiere evidence_ref, finding_ref y stance");
   if (v.action === "update_next_action") need(v.entity_ref && v.next_action, "update_next_action requiere entity_ref y next_action");
   if (v.action === "request_help") need(v.assignee_ref && v.help_kind && v.title, "request_help requiere assignee_ref, help_kind y title (qué se pide)");
+  if (v.action === "record_web_evidence") need(v.url && v.statement, "record_web_evidence requiere url y statement (qué dice la fuente)");
 });
 export type ProposeAction = z.infer<typeof ProposeActionInput>;
 
@@ -127,6 +130,23 @@ export async function previewDraft(db: Db, p: ProposeAction): Promise<Preview> {
         why, evidence_refs: [p.source_ref!, ...evidence_refs],
         duplicate_risk: similarFindings(p.statement!, fs ?? []).map((x) => `Parecida a una existente: «${x.statement}»`),
         expected: "Queda en Hallazgos pendiente de revisión; no es evidencia ni oportunidad.",
+      };
+    }
+    case "record_web_evidence": {
+      const [{ data: src }, { data: same }] = await Promise.all([
+        db.from("sources").select("id, title").eq("url", p.url!).limit(1),
+        db.from("evidence").select("statement").ilike("statement", p.statement!.slice(0, 120)).limit(1),
+      ]);
+      return {
+        summary: `Guardar lo que dice ${p.source_title ?? new URL(p.url!).hostname} como evidencia${p.finding_ref ? " de la hipótesis" : ""}`,
+        changes: [
+          { entity: src?.length ? `Fuente existente: ${src[0].title}` : `Fuente nueva: ${p.source_title ?? p.url}`, field: "URL", before: null, after: p.url! },
+          { entity: "Evidencia (canal web · base documentado, sin verificar)", field: "dato", before: null, after: p.statement! },
+          ...(p.finding_ref ? [{ entity: await entityName(db, p.finding_ref), field: "evidencia", before: null, after: p.stance ?? "contextual" }] : []),
+        ],
+        why, evidence_refs,
+        duplicate_risk: same?.length ? [`Ya hay evidencia parecida: «${same[0].statement}»`] : [],
+        expected: "Queda como fuente externa con su URL; no se presenta como verificado en campo.",
       };
     }
     case "request_decision": {
@@ -213,6 +233,26 @@ export async function executeDraft(
         .single();
       if (error && error.code === "23505") return { resultRef: null, error: null, before: null, after: null };
       return error ? fail(error.message) : { resultRef: `finding:${data.id}`, error: null, before: null, after: data };
+    }
+    case "record_web_evidence": {
+      const { data: existing } = await db.from("sources").select("id").eq("url", p.url!).limit(1);
+      let sourceId = existing?.[0]?.id ?? null;
+      if (!sourceId) {
+        const { data: src, error: e1 } = await db.from("sources").insert({ workspace_id: ctx.workspaceId, kind: "research_externo", title: (p.source_title ?? new URL(p.url!).hostname).slice(0, 300), url: p.url!, notes: "Encontrada por RELEVO en la web y guardada con aprobación." }).select("id").single();
+        if (e1) return fail(e1.message);
+        sourceId = src.id;
+      }
+      const { data: ev, error: e2 } = await db
+        .from("evidence")
+        .insert({ workspace_id: ctx.workspaceId, statement: p.statement!, evidence_type: "publicacion", origin_kind: "ai_research", verification_status: "unverified", source_id: sourceId, observed_at: new Date().toISOString() })
+        .select("id, statement")
+        .single();
+      if (e2) return fail(e2.message);
+      if (p.finding_ref) {
+        const { error: e3 } = await db.from("finding_evidence").upsert({ workspace_id: ctx.workspaceId, finding_id: idOf(p.finding_ref)!, evidence_id: ev.id, stance: p.stance ?? "contextual" }, { onConflict: "finding_id,evidence_id", ignoreDuplicates: true });
+        if (e3) return fail(e3.message);
+      }
+      return { resultRef: p.finding_ref ?? `evidence:${ev.id}`, error: null, before: null, after: { source_id: sourceId, evidence: ev } };
     }
     case "request_decision": {
       const { data, error } = await db

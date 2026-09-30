@@ -10,6 +10,16 @@ import { BASIS, CHANNEL, evidenceProvenance, isStrongSource } from "@/domain/pro
 import { companyName } from "@/server/entities";
 import { qualityChecks } from "@/server/quality";
 import type { ToolContext } from "./tools";
+import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type PlaceCategory, type Point } from "@/domain/geo";
+import { geocode, memoryNearby, placesNearby } from "@/server/geo";
+import { processCapture } from "@/server/capture/process";
+
+/** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
+function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
+  if (typeof a.lat === "number" && typeof a.lng === "number") return { point: { lat: a.lat, lng: a.lng }, label: `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` };
+  if (ctx.here) return { point: { lat: ctx.here.lat, lng: ctx.here.lng }, label: "donde está el usuario (GPS del teléfono)" };
+  return { point: ANELO, label: "centro de Añelo" };
+}
 
 // Herramientas de conocimiento del asistente: la memoria completa (no solo la pantalla actual), con la
 // procedencia de cada dato. Todas son de lectura; open_page solo navega.
@@ -73,6 +83,41 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     name: "list_members",
     description: "Miembros del workspace con su referencia 'member:uuid' (para proponer un pedido de ayuda).",
     input_schema: strict({}),
+  },
+  {
+    name: "record_field_note",
+    description: "Guarda lo que el usuario cuenta de campo (una observación, una conversación, cifras) como CAPTURA original con su ubicación, y la procesa: propone persona, empresa, activo, evidencia (observado ≠ declarado), hipótesis y próximas acciones para que el usuario apruebe. Usala cuando el usuario relata algo que vio, escuchó o le dijeron (\"hoy vi…\", \"hablé con…\", \"me dijeron…\"). No la uses para preguntas. Pasá el relato tal cual en text; en focus, la hipótesis o el tema de la conversación si viene de antes.",
+    input_schema: strict({ text: { type: "string" }, focus: { type: "string", description: "Hipótesis o tema del que se viene hablando (opcional)" } }, ["text"]),
+  },
+  {
+    name: "project_status",
+    description: "¿Dónde quedamos? Estado de un proyecto 'campaign:uuid' (o de la misión): objetivo, entidades, hipótesis y su estado, capturas recientes, tareas hechas y pendientes, decisiones, pedidos de ayuda y lo que cambió últimamente.",
+    input_schema: strict({ ref: { type: "string" } }, ["ref"]),
+  },
+  {
+    name: "locate",
+    description: "Ubica un lugar por nombre o dirección (\"Añelo\", \"Ruta 7 y 17, Añelo\", \"parque industrial de Añelo\") y devuelve coordenadas.",
+    input_schema: strict({ query: { type: "string" } }, ["query"]),
+  },
+  {
+    name: "places_nearby",
+    description: "Lugares reales alrededor de un punto (por defecto, donde está el usuario o el centro de Añelo): por categoría (ferreteria, corralon, electricidad, sanitarios, seguridad_industrial, alojamiento, gastronomia, gimnasio, lavadero, combustible, supermercado, taller, industria) o por texto. Devuelve nombre, distancia, dirección, horarios y la FUENTE (Google Places u OpenStreetMap) con sus límites: cero resultados no significa cero oferta. Complementá con la búsqueda web.",
+    input_schema: strict({
+      category: { type: "string", enum: [...PLACE_CATEGORY_KEYS] },
+      query: { type: "string", description: "Texto libre si no hay categoría" },
+      lat: { type: "number" }, lng: { type: "number" },
+      radius_m: { type: "integer", minimum: 100, maximum: 25000 },
+    }),
+  },
+  {
+    name: "memory_nearby",
+    description: "Lo que RELEVO ya tiene alrededor de un punto: activos, empresas (establecimientos) y capturas con coordenadas, con distancias. Por defecto, donde está el usuario o el centro de Añelo.",
+    input_schema: strict({ lat: { type: "number" }, lng: { type: "number" }, radius_m: { type: "integer", minimum: 100, maximum: 50000 } }),
+  },
+  {
+    name: "show_map",
+    description: "Abre el mapa para el usuario centrado en un punto con un radio, con nuestra memoria y, si se indica, una categoría de lugares reales (p. ej. ferreteria). Usala cuando pide ver algo en el mapa o después de un análisis territorial.",
+    input_schema: strict({ lat: { type: "number" }, lng: { type: "number" }, radius_m: { type: "integer", minimum: 100, maximum: 25000 }, category: { type: "string", enum: [...PLACE_CATEGORY_KEYS] } }),
   },
   {
     name: "open_page",
@@ -312,12 +357,119 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const { data } = await db.from("profiles").select("user_id, display_name, email");
       return { content: track(ctx, (data ?? []).map((p) => ({ ref: ref("member", p.user_id), name: p.display_name || p.email }))) };
     }
+    case "record_field_note": {
+      const text = Str.min(3).max(8000).safeParse(a.text);
+      if (!text.success) return { content: "La nota está vacía.", isError: true };
+      if (!ctx.workspaceId || !ctx.userId) return { content: "No se puede guardar la captura en este contexto.", isError: true };
+      const here = ctx.here;
+      const { data: id, error } = await db.rpc("create_capture", {
+        p: {
+          workspace_id: ctx.workspaceId, client_id: crypto.randomUUID(), body: text.data, captured_at: new Date().toISOString(), ai_consent: true, media: [],
+          campaign_id: ctx.campaignId ?? null,
+          ...(here ? { latitude: here.lat, longitude: here.lng, location_accuracy_m: here.accuracy ?? null } : {}),
+        },
+      });
+      if (error || !id) return { content: `No se pudo guardar la captura: ${error?.message ?? "sin id"}`, isError: true };
+      const captureId = id as string;
+      ctx.onCapture?.(captureId);
+      ctx.seenRefs.add(ref("capture", captureId));
+      const res = await processCapture(db, { workspaceId: ctx.workspaceId, settings: ctx.settings, userId: ctx.userId, captureId, focus: typeof a.focus === "string" ? a.focus : undefined });
+      if (!res.ok) return { content: track(ctx, { ref: ref("capture", captureId), saved: true, processed: false, note: res.message }) };
+      const [{ data: c }, { data: props }] = await Promise.all([
+        db.from("captures").select("ai_summary, ai_unknowns").eq("id", captureId).single(),
+        db.from("proposals").select("kind, payload, matches").eq("capture_id", captureId).order("position"),
+      ]);
+      return {
+        content: track(ctx, {
+          ref: ref("capture", captureId),
+          saved: true,
+          location: here ? "con la ubicación del teléfono" : "sin ubicación",
+          summary: c?.ai_summary,
+          unknowns: c?.ai_unknowns,
+          proposals: (props ?? []).map((p) => {
+            const v = p.payload as Record<string, unknown>;
+            return { kind: p.kind, what: String(v.statement ?? v.name ?? v.title ?? v.role ?? ""), origin: v.origin ?? null, relation: v.relation ?? null, refines: v.refined_statement ?? null, existing: v.link_to ? { ref: ref("finding", String(v.link_to)) } : null, is_idea: v.is_idea ?? null };
+          }),
+          note: "Quedó guardada y estructurada como propuesta: el usuario la aprueba desde la tarjeta del panel. No afirmes nada como verificado.",
+        }),
+      };
+    }
+    case "project_status": {
+      const m = Str.regex(/^campaign:([0-9a-f-]{36})$/).safeParse(a.ref);
+      if (!m.success) return { content: "Referencia inválida: usá 'campaign:uuid' (buscá el proyecto con find o campaign_overview).", isError: true };
+      const id = m.data.split(":")[1];
+      const since14 = since(14);
+      const [{ data: c }, { data: targets }, { data: fs }, { data: caps }, { data: helps }] = await Promise.all([
+        db.from("campaigns").select("id, name, kind, objective, zone, status, created_at").eq("id", id).maybeSingle(),
+        db.from("campaign_targets").select("id, status, next_action, next_action_due, companies(id, trade_name, legal_name), establishments(id, name), assets(id, title, price_amount, price_currency, surface_m2), tasks(id, title, status, due_on, completed_at)").eq("campaign_id", id).limit(100),
+        db.from("findings").select("id, statement, maturity, case_status, finding_assessments(created_at, summary, gaps)").eq("campaign_id", id).neq("review_status", "rechazado").limit(50),
+        db.from("captures").select("id, captured_at, ai_summary, status").eq("campaign_id", id).order("captured_at", { ascending: false }).limit(10),
+        db.from("help_requests").select("kind, ask, status, result, finding_id").in("status", ["abierto", "en_curso", "resuelto"]).limit(50),
+      ]);
+      if (!c) return { content: "No encontrado o sin acceso", isError: true };
+      const findingIds = new Set((fs ?? []).map((f) => f.id));
+      return {
+        content: track(ctx, {
+          ref: ref("campaign", id), name: c.name, kind: c.kind === "proyecto" ? "proyecto" : "misión", objective: c.objective, status: c.status, since: c.created_at,
+          entities: (targets ?? []).map((t) => ({
+            ref: t.companies ? ref("company", t.companies.id) : t.establishments ? ref("establishment", t.establishments.id) : t.assets ? ref("asset", t.assets.id) : null,
+            name: t.companies ? companyName(t.companies) : t.establishments?.name ?? t.assets?.title,
+            price: t.assets?.price_amount ? `${t.assets.price_currency} ${t.assets.price_amount}` : null,
+            surface_m2: t.assets?.surface_m2 ?? null,
+            status: t.status, next_action: t.next_action, next_action_due: t.next_action_due,
+            done: t.tasks.filter((k) => k.status === "done").map((k) => ({ title: k.title, at: k.completed_at })),
+            pending: t.tasks.filter((k) => k.status !== "done").map((k) => ({ ref: ref("task", k.id), title: k.title, due_on: k.due_on })),
+          })),
+          hypotheses: (fs ?? []).map((f) => {
+            const as = [...f.finding_assessments].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];
+            return { ref: ref("finding", f.id), statement: f.statement, maturity: f.maturity, case_status: f.case_status, summary: as?.summary ?? null, gaps: ((as?.gaps ?? []) as Gap[]).map((g) => GAPS[g]?.label ?? g) };
+          }),
+          recent_captures: (caps ?? []).map((k) => ({ ref: ref("capture", k.id), at: k.captured_at, summary: clip(k.ai_summary, 200), status: k.status, recent: k.captured_at >= since14 })),
+          help_requests: (helps ?? []).filter((h) => h.finding_id && findingIds.has(h.finding_id)),
+        }),
+      };
+    }
+    case "locate": {
+      const q = Str.min(2).safeParse(a.query);
+      if (!q.success) return { content: "Decime qué lugar ubicar.", isError: true };
+      const g = await geocode(q.data);
+      return { content: g ? JSON.stringify({ ...g, source: "OpenStreetMap / Nominatim" }) : "No encontré ese lugar en el mapa." };
+    }
+    case "places_nearby": {
+      const center = centerOf(a, ctx);
+      const category = typeof a.category === "string" && a.category in PLACE_CATEGORIES ? (a.category as PlaceCategory) : null;
+      const radius = typeof a.radius_m === "number" ? a.radius_m : 5000;
+      const r = await placesNearby(center.point, radius, category, typeof a.query === "string" ? a.query : undefined);
+      return {
+        content: JSON.stringify({
+          center: center.label, radius_m: radius, category: category ? PLACE_CATEGORIES[category].label : a.query ?? "comercios y servicios",
+          source: r.source, error: r.error ?? null, count: r.places.length,
+          places: r.places.slice(0, 40).map((p) => ({ ...p, distance: formatDistance(p.distance_m) })),
+          provenance: "Canal: web / fuente externa · Base: documentado (listado público), no verificado en campo",
+        }),
+      };
+    }
+    case "memory_nearby": {
+      const center = centerOf(a, ctx);
+      const radius = typeof a.radius_m === "number" ? a.radius_m : 5000;
+      const pts = await memoryNearby(db, ctx.slug, center.point, radius);
+      return { content: track(ctx, { center: center.label, radius_m: radius, count: pts.length, items: pts.slice(0, 60).map((p) => ({ ref: p.ref, kind: p.kind, name: p.name, distance: formatDistance(p.distance_m), detail: p.detail })) }) };
+    }
+    case "show_map": {
+      const center = centerOf(a, ctx);
+      const params = new URLSearchParams({ lat: String(center.point.lat), lng: String(center.point.lng), r: String(typeof a.radius_m === "number" ? a.radius_m : 5000) });
+      if (typeof a.category === "string" && a.category in PLACE_CATEGORIES) params.set("cat", a.category);
+      const href = `${base}/mapa?${params}`;
+      ctx.navigate?.(href);
+      return { content: `Listo: se abre el mapa (${href}).` };
+    }
     case "open_page": {
       const target = String(a.target ?? "").trim();
       const q = typeof a.query === "string" && a.query.trim() ? `?q=${encodeURIComponent(a.query.trim())}` : "";
       const views: Record<string, string> = {
         hoy: base, ejecutiva: base, red: `${base}/explorar`, personas: `${base}/explorar/personas${q}`, evidencia: `${base}/explorar/evidencia${q}`, calidad: `${base}/explorar/calidad`,
         actividades: `${base}/explorar/actividades`, capturas: `${base}/capturas`, sin_identificar: `${base}/explorar/sin-identificar`, empresas: `${base}/explorar/registros${q}`,
+        mapa: `${base}/mapa`, proyectos: `${base}/explorar`,
       };
       let href: string | null = views[target] ?? null;
       const m = target.match(/^([a-z]+):([0-9a-f-]{36})$/);

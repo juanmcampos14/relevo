@@ -18,20 +18,23 @@ const scopeLabel: Record<string, string> = {
   establishment: "el establecimiento",
   asset: "el activo",
   opportunity: "la oportunidad",
-  campaign: "la campaña",
+  campaign: "el proyecto o la misión",
   finding: "la hipótesis",
   capture: "la captura",
   contact: "la persona",
 };
-const scopeTool: Record<string, string> = { finding: "get_hypothesis", capture: "get_capture", contact: "get_person" };
+const scopeTool: Record<string, string> = { finding: "get_hypothesis", capture: "get_capture", contact: "get_person", campaign: "project_status" };
 
 export type TurnResult =
-  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null }
+  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null; captureIds: string[]; webSources: { url: string; title: string }[] }
   | { ok: false; conversationId: string | null; message: string };
 
 export async function runTurn(
   db: Db,
-  opts: { slug: string; workspaceId: string; workspaceName: string; userId: string; conversationId: string | null; text: string; scope: string; screen?: string; client?: Pick<Anthropic, "beta"> },
+  opts: {
+    slug: string; workspaceId: string; workspaceName: string; userId: string; settings?: unknown; conversationId: string | null; text: string; scope: string; screen?: string;
+    here?: { lat: number; lng: number; accuracy?: number } | null; client?: Pick<Anthropic, "beta">;
+  },
 ): Promise<TurnResult> {
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, conversationId: opts.conversationId, message: "RELEVO AI no está configurado en este entorno (falta ANTHROPIC_API_KEY)." };
   const since = new Date(Date.now() - 86_400_000).toISOString();
@@ -64,13 +67,19 @@ export async function runTurn(
   const context = [
     `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.`,
     opts.screen ? `Pantalla actual: ${opts.screen}.` : null,
+    opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m). "Acá" o "donde estoy" es ese punto.` : null,
     opts.scope && scopeLabel[scopeType]
       ? `El usuario está mirando ${scopeLabel[scopeType]} [[${opts.scope}]]: si la pregunta se refiere a "esto", "acá" o no nombra otra cosa, es sobre eso (consultalo primero con ${scopeTool[scopeType] ?? "get_record"}). Podés consultar el resto de la memoria cuando haga falta.`
       : "Alcance: todo el workspace.",
   ].filter(Boolean).join(" ");
 
   const draftIds: string[] = [];
+  const captureIds: string[] = [];
   let navigate: string | null = null;
+  // Una nota de campo alimenta el proyecto que se está mirando; si no, la misión.
+  const campaignId = scopeType === "campaign"
+    ? opts.scope.split(":")[1]
+    : (await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle()).data?.id ?? null;
   const started = Date.now();
   const result = await runAgent({
     client: opts.client ?? new Anthropic(),
@@ -82,6 +91,12 @@ export async function runTurn(
       slug: opts.slug,
       seenRefs,
       navigate: (href) => { navigate = href; },
+      here: opts.here ?? null,
+      workspaceId: opts.workspaceId,
+      userId: opts.userId,
+      settings: opts.settings,
+      campaignId,
+      onCapture: (id) => captureIds.push(id),
       saveDraft: async (input) => {
         const { action, rationale, evidence_refs, ...payload } = input;
         const preview = await previewDraft(db, input);
@@ -119,5 +134,5 @@ export async function runTurn(
   }
   await db.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
   if (result.status === "error") return { ok: false, conversationId: convId, message: result.error ?? "No se pudo completar la consulta." };
-  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate };
+  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources };
 }

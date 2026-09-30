@@ -9,6 +9,9 @@ import { APP_VERSION } from "@/lib/build";
 import { AssistantButton, AssistantPanel } from "@/components/ai/assistant-panel";
 import { CaptureProvider, CaptureTopButton, PendingCapturesBadge } from "@/components/app/capture/capture-dock";
 
+// RELEVO (panel en todas las pantallas) puede investigar en la web y procesar una nota en el mismo turno.
+export const maxDuration = 300;
+
 export default async function WorkspaceLayout({ children, params }: LayoutProps<"/w/[slug]">) {
   const { slug } = await params;
   const ctx = await getWorkspaceContext(slug);
@@ -16,7 +19,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
   const [{ data: profile }, { data: mission }] = await Promise.all([
     supabase.from("profiles").select("display_name").eq("user_id", ctx.user.id).maybeSingle(),
     // Las capturas se asocian a la misión activa más reciente (Añelo · Viaje 01).
-    supabase.from("campaigns").select("id").eq("status", "activa").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle(),
   ]);
   const aiAllowed = (ctx.workspace.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent === true;
 

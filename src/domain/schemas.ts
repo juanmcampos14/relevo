@@ -104,6 +104,7 @@ export const campaignSchema = z.object({
   starts_on: optDate,
   ends_on: optDate,
   status: z.enum(campaignStatus.values).default("activa"),
+  kind: z.enum(["mision", "proyecto"]).default("proyecto"),
   vertical_ids: ids,
 });
 

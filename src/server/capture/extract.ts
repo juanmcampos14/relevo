@@ -157,6 +157,8 @@ export type ExtractionContext = {
   contacts: { id: string; name: string; role: string | null; company: string | null }[];
   findings: { id: string; statement: string }[];
   unresolved: { id: string; kind: "organization" | "actor"; label: string }[];
+  /** Tema de la conversación en la que se contó esto (contexto; no es parte de la nota ni se cita). */
+  focus?: string | null;
 };
 
 export type ExtractionResult =
@@ -181,8 +183,9 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
   ].join("\n");
   const capture = [
     `CAPTURA · ${ctx.capturedAt} · por ${ctx.capturedBy}${ctx.missionName ? ` · misión ${ctx.missionName}` : ""}${ctx.location ? ` · ubicación ${ctx.location}` : ""}`,
+    ctx.focus ? `TEMA DE LA CONVERSACIÓN (contexto, no es parte de la nota; probablemente la nota se relaciona con esto): ${ctx.focus}` : null,
     `NOTA:\n${ctx.body?.trim() || "(sin texto; ver fotos)"}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   try {
     const response = await client.beta.messages.parse({

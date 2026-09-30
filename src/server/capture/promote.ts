@@ -5,6 +5,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { freshnessFor, revalidateAfter } from "@/domain/evidence";
 import type { evidenceType } from "@/domain/catalogs";
 import { approvalOrder, captureExceptions, type ReviewProposal } from "@/domain/capture-review";
+import { mainQuantity } from "@/domain/quantities";
 
 type Db = SupabaseClient<Database>;
 type EvidenceType = (typeof evidenceType.values)[number];
@@ -218,6 +219,8 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
         const origin = p.origin === "observacion_directa" ? "observado" : p.origin === "declaracion" ? "declarado_por_persona" : String(p.origin);
         const direct = origin === "observado";
         const type = (String(p.evidence_type) || "dato") as EvidenceType;
+        // La cifra principal con su unidad (para calcular sin IA: USD/m², variación contra referencias).
+        const q = mainQuantity(String(p.statement)) ?? (prop.quote ? mainQuantity(prop.quote) : null);
         const { error } = await db.from("evidence").upsert(
           {
             id: prop.id,
@@ -242,10 +245,18 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             asset_id: about === "asset" && decided(asset) ? asset!.result_id : null,
             stated_by_contact_id: decided(speaker) && !unresolved(speaker) ? speaker!.result_id : null,
             stated_by_unresolved_id: unresolved(speaker) ? speaker!.result_id : null,
+            value_number: q?.value ?? null,
+            value_unit: q?.unit ?? null,
+            value_currency: q?.currency ?? null,
           },
           { onConflict: "id", ignoreDuplicates: true },
         );
         if (error) throw error;
+        // Un precio aprobado sobre un activo sin precio completa el dato del activo (la historia queda en la evidencia).
+        if (about === "asset" && decided(asset) && q?.unit === "moneda" && (type === "precio" || /precio|piden|pide|vale|cuesta|alquiler/i.test(String(p.statement)))) {
+          const priceSource = await captureSource(db, ws, capture);
+          await db.from("assets").update({ price_amount: q.value, price_currency: q.currency ?? "ARS", price_observed_on: capture.captured_at.slice(0, 10), price_source_id: priceSource }).eq("id", asset!.result_id!).is("price_amount", null);
+        }
         const related = (p.related_findings as { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[] | undefined) ?? [];
         if (related.length) {
           const { error: e2 } = await db.from("finding_evidence").upsert(

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -101,6 +102,9 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
   }, [canEdit, sync]);
 
   const value = useMemo(() => ({ open: () => setOpen(true), slug, sync }), [slug, sync]);
+  // Capturar desde la página de un proyecto alimenta ese proyecto; si no, la misión.
+  const pathname = usePathname();
+  const projectId = pathname.match(/\/explorar\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
 
   return (
     <CaptureContext.Provider value={value}>
@@ -120,7 +124,7 @@ export function CaptureProvider({ children, slug, workspaceId, campaignId, aiAll
             open={open}
             onOpenChange={setOpen}
             workspaceId={workspaceId}
-            campaignId={campaignId}
+            campaignId={projectId ?? campaignId}
             aiAllowed={aiAllowed}
             onSaved={() => void sync()}
           />

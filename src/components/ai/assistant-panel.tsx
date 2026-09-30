@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, Loader2, Mic, Plus, Sparkles, Square, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, ExternalLink, Loader2, MapPin, Mic, Plus, Sparkles, Square, X } from "lucide-react";
 import { cn } from "cn";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { RichText } from "@/components/ai/rich-text";
 import { useCapture } from "@/components/app/capture/capture-dock";
 import { useRecorder } from "@/lib/capture/media";
 import type { RefLabel } from "@/server/ai/labels";
-import { askRelevo, decideFromPanel, transcribeQuestion, type PanelDraft } from "@/app/w/[slug]/ai/panel-actions";
+import { approveFromPanel, askRelevo, decideFromPanel, ignoreFromPanel, transcribeQuestion, type PanelCapture, type PanelDraft } from "@/app/w/[slug]/ai/panel-actions";
 
 // RELEVO en todas las pantallas: entiende lo que estás mirando, consulta toda la memoria, navega y
 // propone cambios que solo se ejecutan con tu aprobación.
@@ -41,7 +41,7 @@ function contextOf(pathname: string, slug: string): { scope: string; screen: str
   return { scope: "", screen };
 }
 
-type Msg = { role: "user" | "assistant"; text: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: string };
+type Msg = { role: "user" | "assistant"; text: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; captures?: PanelCapture[]; web?: { url: string; title: string }[]; note?: string };
 
 const CONV_KEY = "relevo-panel-conversation";
 const read = (k: string) => { try { return sessionStorage.getItem(k); } catch { return null; } };
@@ -61,6 +61,17 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
   const [executing, startExec] = useTransition();
   const [transcribing, setTranscribing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  // Ubicación del teléfono: "estoy acá", capturas con lugar y análisis territorial. Se puede apagar.
+  const [here, setHere] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [useLocation, setUseLocation] = useState(true);
+  useEffect(() => {
+    if (!open || !useLocation || typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => setHere({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      () => setHere(null),
+      { enableHighAccuracy: true, maximumAge: 120_000, timeout: 10_000 },
+    );
+  }, [open, useLocation]);
   const ctx = contextOf(pathname, slug);
 
   useEffect(() => {
@@ -89,7 +100,7 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
     setText("");
     setMessages((m) => [...m, { role: "user", text: q }]);
     start(async () => {
-      const res = await askRelevo(slug, { conversationId, scope: ctx.scope, screen: ctx.screen, text: q });
+      const res = await askRelevo(slug, { conversationId, scope: ctx.scope, screen: ctx.screen, text: q, here: useLocation ? here : null });
       if (!res.ok) {
         setError(res.message);
         if (res.conversationId) { setConversationId(res.conversationId); write(CONV_KEY, res.conversationId); }
@@ -97,7 +108,7 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
       }
       setConversationId(res.conversationId);
       write(CONV_KEY, res.conversationId);
-      setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts, note: res.navigate ? "Te llevé ahí." : undefined }]);
+      setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts, captures: res.captures, web: res.webSources, note: res.navigate ? "Te llevé ahí." : undefined }]);
       if (res.navigate) router.push(res.navigate);
     });
   };
@@ -108,6 +119,10 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
       if (d) setMessages((ms) => ms.map((m) => (m.drafts ? { ...m, drafts: m.drafts.map((x) => (x.id === draftId ? d : x)) } : m)));
       router.refresh();
     });
+
+  const replaceCapture = (card: PanelCapture | null) => card && setMessages((ms) => ms.map((m) => (m.captures ? { ...m, captures: m.captures.map((c) => (c.id === card.id ? card : c)) } : m)));
+  const approveCapture = (id: string) => startExec(async () => { const r = await approveFromPanel(slug, id); replaceCapture(r.card); router.refresh(); });
+  const ignoreCapture = (id: string) => startExec(async () => { const r = await ignoreFromPanel(slug, id); replaceCapture(r.card); });
 
   const reset = () => { setMessages([]); setConversationId(null); write(CONV_KEY, null); setError(null); };
 
@@ -142,6 +157,15 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
             ) : (
               <div key={i} className="space-y-3">
                 <div className="text-sm"><RichText text={m.text} labels={new Map(Object.entries(m.labels ?? {}))} /></div>
+                {m.captures?.map((c) => <CaptureCard key={c.id} c={c} canEdit={canEdit} busy={pending || executing} onApprove={approveCapture} onIgnore={ignoreCapture} />)}
+                {m.web && m.web.length > 0 && (
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">Fuentes web consultadas ({m.web.length})</summary>
+                    <ul className="mt-1 space-y-0.5">
+                      {m.web.map((w) => <li key={w.url}><a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><ExternalLink className="size-3" aria-hidden="true" />{w.title}</a></li>)}
+                    </ul>
+                  </details>
+                )}
                 {m.note && <p className="text-xs text-muted-foreground">{m.note}</p>}
                 {m.drafts?.map((d) => <DraftCard key={d.id} d={d} canEdit={canEdit} busy={pending || executing} onDecide={decide} />)}
               </div>
@@ -181,6 +205,15 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
                 <Plus className="size-4" aria-hidden="true" />Capturar
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setUseLocation((v) => !v)}
+              title={useLocation ? (here ? `Usando tu ubicación (±${Math.round(here.accuracy)} m)` : "Buscando tu ubicación…") : "Ubicación apagada"}
+              aria-label={useLocation ? "Apagar ubicación" : "Usar mi ubicación"}
+              className={cn("flex size-10 items-center justify-center rounded-full border", useLocation && here ? "border-primary/40 text-primary" : "text-muted-foreground")}
+            >
+              <MapPin className="size-4" />
+            </button>
             <span className="flex-1" />
             <button type="submit" disabled={!text.trim() || pending} aria-label="Enviar" className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-50">
               <ArrowUp className="size-4" />
@@ -196,6 +229,7 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
 const ACTION_LABEL: Record<string, string> = {
   create_task: "Crear tarea", prepare_validation: "Agendar validación", link_evidence: "Vincular evidencia", update_next_action: "Actualizar próxima acción",
   request_help: "Pedir ayuda", draft_finding: "Registrar hipótesis (queda pendiente de revisión)", request_decision: "Pedir una decisión",
+  record_web_evidence: "Guardar fuente web como evidencia",
 };
 
 function DraftCard({ d, canEdit, busy, onDecide }: { d: PanelDraft; canEdit: boolean; busy: boolean; onDecide: (id: string, v: "aprobar" | "rechazar") => void }) {
@@ -241,5 +275,36 @@ export function AssistantButton() {
       <Sparkles className="size-4 text-primary" aria-hidden="true" />
       Preguntar a RELEVO
     </button>
+  );
+}
+
+function CaptureCard({ c, canEdit, busy, onApprove, onIgnore }: { c: PanelCapture; canEdit: boolean; busy: boolean; onApprove: (id: string) => void; onIgnore: (id: string) => void }) {
+  const done = c.pending === 0;
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-3 text-sm">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Guardé tu nota · RELEVO entendió esto</p>
+      {c.summary && <p>{c.summary}</p>}
+      {c.items.length > 0 && (
+        <ul className="space-y-0.5 text-xs">
+          {c.items.map((it, i) => (
+            <li key={i} className={cn(it.status === "rechazada" && "text-muted-foreground line-through")}>
+              <span className="text-muted-foreground">{it.kind}:</span> {it.text}
+              {it.exception && it.status === "propuesta" && <span className="block text-amber-800 dark:text-amber-300">{it.exception}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {c.unknowns.length > 0 && <p className="text-xs"><span className="text-muted-foreground">Todavía no sabemos:</span> {c.unknowns.join(" · ")}</p>}
+      {!done && canEdit ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" disabled={busy || c.pending === c.exceptions} onClick={() => onApprove(c.id)} className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">Aprobar{c.exceptions ? " lo demás" : ""}</button>
+          <Link href={c.href} className="inline-flex h-9 items-center rounded-md border px-3 text-sm">Revisar detalle</Link>
+          <button type="button" disabled={busy} onClick={() => onIgnore(c.id)} className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50">Ignorar</button>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">{done ? "Decidido: lo aprobado quedó guardado y relacionado." : "Tu rol es de solo lectura."} <Link href={c.href} className="text-primary hover:underline">Ver captura</Link></p>
+      )}
+      {!done && c.exceptions > 0 && <p className="text-xs text-amber-800 dark:text-amber-300">{c.exceptions} {c.exceptions === 1 ? "cosa requiere" : "cosas requieren"} tu decisión en el detalle.</p>}
+    </div>
   );
 }

@@ -61,7 +61,7 @@ const refKey = (type: string, ext: string) => `${type}:${ext.toUpperCase()}`;
 export async function loadStageContext(db: Db, workspaceId: string): Promise<StageContext> {
   const [{ data: memberships }, { data: mission }, { data: refs }] = await Promise.all([
     db.from("memberships").select("user_id").eq("workspace_id", workspaceId).eq("status", "active"),
-    db.from("campaigns").select("id").eq("status", "activa").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle(),
     db.from("external_refs").select("external_id, entity_type, entity_id, last_values").eq("source_system", "google_sheets"),
   ]);
   const ids = (memberships ?? []).map((m) => m.user_id);

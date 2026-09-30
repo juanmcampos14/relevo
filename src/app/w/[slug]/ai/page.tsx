@@ -19,6 +19,7 @@ const actionLabel: Record<string, string> = {
   request_help: "Pedir ayuda",
   draft_finding: "Registrar hipótesis (queda pendiente de revisión)",
   request_decision: "Pedir decisión",
+  record_web_evidence: "Guardar fuente web como evidencia",
 };
 const draftStatus: Record<string, string> = { propuesta: "Propuesta", aprobada: "Aprobada", rechazada: "Rechazada", ejecutada: "Ejecutada", error: "Error" };
 

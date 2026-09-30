@@ -8,12 +8,24 @@ import { runTurn } from "@/server/ai/turn";
 import { configuredTranscriber } from "@/server/capture/transcribe";
 import type { Preview } from "@/server/ai/drafts";
 import { decideDraft } from "./actions";
+import { approveCaptureAction } from "../capturas/actions";
+import { decideProposal } from "@/server/capture/promote";
+import { captureExceptions, type ReviewProposal } from "@/domain/capture-review";
 
 // Panel persistente de RELEVO: mismo motor que la página de RELEVO AI, con el contexto de la pantalla.
 
 export type PanelDraft = { id: string; action: string; status: string; rationale: string | null; preview: Preview | null; error: string | null; resultHref: string | null };
+export type PanelCapture = {
+  id: string;
+  href: string;
+  summary: string | null;
+  unknowns: string[];
+  items: { kind: string; text: string; exception: string | null; status: string }[];
+  pending: number;
+  exceptions: number;
+};
 export type PanelReply =
-  | { ok: true; conversationId: string; text: string; labels: Record<string, RefLabel>; drafts: PanelDraft[]; navigate: string | null }
+  | { ok: true; conversationId: string; text: string; labels: Record<string, RefLabel>; drafts: PanelDraft[]; navigate: string | null; captures: PanelCapture[]; webSources: { url: string; title: string }[] }
   | { ok: false; conversationId: string | null; message: string };
 
 async function draftsView(slug: string, ids: string[]): Promise<PanelDraft[]> {
@@ -32,7 +44,50 @@ async function draftsView(slug: string, ids: string[]): Promise<PanelDraft[]> {
   }));
 }
 
-export async function askRelevo(slug: string, input: { conversationId: string | null; scope: string; screen: string; text: string }): Promise<PanelReply> {
+const KIND: Record<string, string> = { company: "Organización", asset: "Activo", person: "Persona", evidence: "Dato", finding: "Hipótesis", next_action: "Próxima acción" };
+
+async function captureCard(slug: string, id: string): Promise<PanelCapture | null> {
+  const supabase = await createClient();
+  const [{ data: c }, { data: props }] = await Promise.all([
+    supabase.from("captures").select("id, ai_summary, ai_unknowns, status").eq("id", id).maybeSingle(),
+    supabase.from("proposals").select("id, kind, status, payload, matches").eq("capture_id", id).order("position"),
+  ]);
+  if (!c) return null;
+  const exceptions = captureExceptions((props ?? []) as unknown as ReviewProposal[]);
+  return {
+    id,
+    href: `/w/${slug}/capturas/${id}`,
+    summary: c.ai_summary,
+    unknowns: c.ai_unknowns ?? [],
+    items: (props ?? []).map((p) => {
+      const v = p.payload as Record<string, unknown>;
+      const refined = typeof v.refined_statement === "string" && v.refined_statement ? ` → reformula: «${v.refined_statement}»` : "";
+      const text = String(v.statement ?? v.name ?? v.title ?? v.role ?? "") + refined;
+      return { kind: KIND[p.kind] ?? p.kind, text, exception: exceptions.get(p.id) ?? null, status: p.status };
+    }),
+    pending: (props ?? []).filter((p) => p.status === "propuesta").length,
+    exceptions: exceptions.size,
+  };
+}
+
+/** "Aprobar" desde el panel: lo normal se guarda y relaciona; lo que requiere decisión queda para la captura. */
+export async function approveFromPanel(slug: string, captureId: string): Promise<{ card: PanelCapture | null; message: string }> {
+  const res = await approveCaptureAction(slug, captureId);
+  return { card: await captureCard(slug, captureId), message: res.message ?? "" };
+}
+
+/** "Ignorar": no se guarda nada de lo propuesto; la captura original queda como material crudo. */
+export async function ignoreFromPanel(slug: string, captureId: string): Promise<{ card: PanelCapture | null }> {
+  const ctx = await getWorkspaceContext(slug);
+  if (ctx.canEdit) {
+    const supabase = await createClient();
+    const { data: props } = await supabase.from("proposals").select("id").eq("capture_id", captureId).eq("status", "propuesta");
+    for (const p of props ?? []) await decideProposal(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, proposalId: p.id, decision: { action: "rechazar" } });
+  }
+  return { card: await captureCard(slug, captureId) };
+}
+
+export async function askRelevo(slug: string, input: { conversationId: string | null; scope: string; screen: string; text: string; here?: { lat: number; lng: number; accuracy?: number } | null }): Promise<PanelReply> {
   const ctx = await getWorkspaceContext(slug);
   const text = z.string().trim().min(1).max(4000).safeParse(input.text);
   if (!text.success) return { ok: false, conversationId: input.conversationId, message: "Escribí una pregunta." };
@@ -41,10 +96,13 @@ export async function askRelevo(slug: string, input: { conversationId: string | 
   const res = await runTurn(supabase, {
     slug, workspaceId: ctx.workspace.id, workspaceName: ctx.workspace.name, userId: ctx.user.id,
     conversationId: input.conversationId, text: text.data, scope, screen: input.screen.slice(0, 120),
+    settings: ctx.workspace.settings,
+    here: input.here && Number.isFinite(input.here.lat) && Number.isFinite(input.here.lng) ? input.here : null,
   });
   if (!res.ok) return res;
   const labels = await labelRefs(supabase, slug, res.citations);
-  return { ok: true, conversationId: res.conversationId, text: res.text, labels: Object.fromEntries(labels), drafts: await draftsView(slug, res.draftIds), navigate: res.navigate };
+  const captures = (await Promise.all(res.captureIds.map((id) => captureCard(slug, id)))).filter((c): c is PanelCapture => !!c);
+  return { ok: true, conversationId: res.conversationId, text: res.text, labels: Object.fromEntries(labels), drafts: await draftsView(slug, res.draftIds), navigate: res.navigate, captures, webSources: res.webSources };
 }
 
 /** Aprobar o rechazar una propuesta desde el panel; devuelve cómo quedó (con enlace al resultado). */

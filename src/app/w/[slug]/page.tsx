@@ -6,7 +6,7 @@ import { cn } from "cn";
 import { workspaceCover } from "@/domain/photos";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
-import { dealflowStage, taskStatus } from "@/domain/catalogs";
+import { taskStatus } from "@/domain/catalogs";
 import { addDays, missionDay } from "@/domain/today";
 import { GAPS, valueOfInformation, type Dimension, type Gap } from "@/domain/readiness";
 import { changesSince } from "@/server/findings/effects";
@@ -14,9 +14,6 @@ import { entityHref, resolveTargetEntity, targetEntitySelect } from "@/server/en
 import { Section, formatDate } from "@/components/app/bits";
 import { PhonePendingNote } from "@/components/app/capture/capture-dock";
 import { setHomeView } from "./home-actions";
-import { loadNews } from "@/server/news/queries";
-import { ago } from "@/components/app/news-list";
-import { NewsAutoRefresh } from "@/components/app/news-auto-refresh";
 import { ExecutiveView } from "./executive";
 
 function todayAR() {
@@ -63,19 +60,18 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   const supabase = await createClient();
   const today = todayAR();
   const soon = addDays(today, 7);
-  const weekAgo = addDays(today, -7);
   const base = `/w/${slug}`;
 
   const [{ data: profile }, { data: pref }, { data: mission }] = await Promise.all([
     supabase.from("profiles").select("display_name").eq("user_id", ctx.user.id).maybeSingle(),
     supabase.from("user_preferences").select("home").eq("user_id", ctx.user.id).eq("workspace_id", ctx.workspace.id).maybeSingle(),
-    supabase.from("campaigns").select("id, name, starts_on, ends_on").eq("status", "activa").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("campaigns").select("id, name, objective, starts_on, ends_on").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle(),
   ]);
   const stored = (pref?.home as { view?: string } | null)?.view;
   const view: "operativa" | "ejecutiva" = stored === "ejecutiva" || stored === "operativa" ? stored : ctx.role === "admin" ? "ejecutiva" : "operativa";
   const other = view === "operativa" ? "ejecutiva" : "operativa";
 
-  const [tasks, targets, plansToday, captures, drafts, findings, decisions, changed, news, proposalsPending] = await Promise.all([
+  const [tasks, targets, plansToday, captures, drafts, findings, decisions, proposalsPending] = await Promise.all([
     supabase.from("tasks").select("id, title, status, due_on, opportunity_id, finding_id, findings(statement)").eq("assignee_id", ctx.user.id).neq("status", "done").or(`due_on.lte.${soon},due_on.is.null`).order("due_on", { nullsFirst: false }).limit(8),
     supabase
       .from("campaign_targets")
@@ -91,8 +87,6 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("ai_action_drafts").select("id", { count: "exact", head: true }).eq("status", "propuesta"),
     supabase.from("findings").select("id", { count: "exact", head: true }).eq("review_status", "pendiente_revision"),
     supabase.from("decisions").select("id, question, due_on, opportunity_id, opportunities(title)").eq("status", "requested").order("due_on", { nullsFirst: false }).order("created_at", { ascending: false }).limit(5),
-    supabase.from("opportunities").select("id, title, status, stage, next_action, next_action_due, updated_at").gte("updated_at", weekAgo).order("updated_at", { ascending: false }).limit(4),
-    loadNews(supabase, ctx.workspace.id, 3),
     supabase.from("proposals").select("capture_id").eq("status", "propuesta").not("capture_id", "is", null),
   ]);
   // D/E: último estado de cada finding, validaciones propuestas y agendadas, errores y qué cambió desde ayer.
@@ -106,6 +100,12 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     supabase.from("findings").select("id, statement, maturity").eq("review_status", "aprobado").eq("case_status", "activo").order("created_at", { ascending: false }).limit(20),
     supabase.from("unresolved_entities").select("id", { count: "exact", head: true }).is("resolved_at", null),
     supabase.from("help_requests").select("id, ask, finding_id").eq("assignee_id", ctx.user.id).in("status", ["abierto", "en_curso"]).limit(3),
+  ]);
+  // Oportunidades activas: proyectos, casos en estudio y oportunidades del equipo (no son la misión).
+  const [{ data: projects }, { data: cases }, { data: opps }] = await Promise.all([
+    supabase.from("campaigns").select("id, name, objective, status, campaign_targets(count), findings(count)").eq("kind", "proyecto").in("status", ["activa", "borrador", "pausada"]).order("updated_at", { ascending: false }),
+    supabase.from("findings").select("id, statement").eq("maturity", "caso").eq("case_status", "activo").eq("review_status", "aprobado").limit(10),
+    supabase.from("opportunities").select("id, title, status, stage, next_action").neq("status", "rechazada").order("updated_at", { ascending: false }).limit(10),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
@@ -219,18 +219,67 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     </Section>
   );
 
-  const Changes24 = changes.effects.length || changes.newFindings.length ? (
-    <Section title="Qué cambió desde ayer">
-      <List>
-        {changes.effects.map((e) => (
-          <Row key={e.findingId} href={`${base}/hallazgos/${e.findingId}`} title={e.text} tone={e.kinds.includes("contradice") ? "danger" : undefined} />
-        ))}
-        {changes.newFindings.map((f) => (
-          <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.proposed ? `Nueva hipótesis propuesta: ${quote(f.statement)}` : `Nueva hipótesis: ${quote(f.statement)}`} meta={f.proposed ? "Pendiente de revisión: todavía no es una hipótesis abierta" : undefined} />
-        ))}
-      </List>
+  const findingsToValidate = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).length).slice(0, 4);
+  // Recién aceptada: ya es una hipótesis abierta aunque la evaluación (unos segundos) no haya terminado.
+  const evaluating = (approvedFindings ?? []).filter((f) => !latestByFinding.has(f.id)).slice(0, 2);
+  // RELEVO está viendo: qué cambió en lo que sabemos (no actividad): se fortaleció, se debilitó, contradice,
+  // hipótesis nuevas, qué frena a las abiertas y lo que todavía no sabemos.
+  const gapCount = new Map<Gap, number>();
+  for (const a of latestByFinding.values()) for (const g of a.gaps as Gap[]) gapCount.set(g, (gapCount.get(g) ?? 0) + 1);
+  const topUnknowns = [...gapCount].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const disputed = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).includes("contradiccion_sin_resolver"));
+  const Watching = (
+    <Section title="RELEVO está viendo" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hipótesis</Link>}>
+      {changes.effects.length || changes.newFindings.length || disputed.length || latestByFinding.size || evaluating.length ? (
+        <List>
+          {changes.effects.map((e) => (
+            <Row key={e.findingId} href={`${base}/hallazgos/${e.findingId}`} title={e.text} tone={e.kinds.includes("contradice") ? "danger" : undefined} meta={e.kinds.includes("contradice") ? "Perdió fuerza: contraevidencia nueva" : "Ganó fuerza desde ayer"} />
+          ))}
+          {changes.newFindings.map((f) => (
+            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.proposed ? `Nueva hipótesis propuesta: ${quote(f.statement)}` : `Nueva hipótesis: ${quote(f.statement)}`} meta={f.proposed ? "Pendiente de revisión: todavía no es una hipótesis abierta" : undefined} />
+          ))}
+          {evaluating.map((f) => (
+            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.statement} meta={`${MATURITY[f.maturity]} · evaluando qué falta saber…`} />
+          ))}
+          {disputed.filter((a) => !changes.effects.some((e) => e.findingId === a.finding_id)).slice(0, 3).map((a) => (
+            <Row key={a.finding_id} href={`${base}/hallazgos/${a.finding_id}`} title={a.findings.statement} tone="danger" meta={`En disputa: hay evidencia en contra sin resolver · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}`} />
+          ))}
+          {!changes.effects.length && !changes.newFindings.length && findingsToValidate.filter((a) => !disputed.includes(a)).slice(0, 3).map((a) => {
+            const gap = (a.gaps as Gap[])[0];
+            return <Row key={a.finding_id} href={`${base}/hallazgos/${a.finding_id}`} title={a.findings.statement} meta={`${MATURITY[a.findings.maturity]} · ${GAPS[gap].label.toLowerCase()} · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}`} />;
+          })}
+          {topUnknowns.length > 0 && (
+            <li className="px-4 py-3 text-sm">
+              <span className="font-medium">Lo que todavía no sabemos: </span>
+              <span className="text-muted-foreground">{topUnknowns.map(([g, n]) => `${GAPS[g].label.toLowerCase()} (${n} ${n === 1 ? "hipótesis" : "hipótesis"})`).join(" · ")}</span>
+            </li>
+          )}
+        </List>
+      ) : (
+        <NextStep text="Todavía no hay hipótesis abiertas: surgen de lo que contás en campo. Contale algo a RELEVO." href={`${base}/capturas`} cta="Ver capturas" />
+      )}
     </Section>
-  ) : null;
+  );
+
+  const Projects = (
+    <Section title="Oportunidades activas" actions={<Link href={`${base}/explorar`} className={linkCls}>Misión y proyectos</Link>}>
+      {(projects ?? []).length || (cases ?? []).length || (opps ?? []).length ? (
+        <List>
+          {(projects ?? []).map((pj) => (
+            <Row key={pj.id} href={`${base}/explorar/c/${pj.id}`} title={pj.name} meta={["Proyecto", pj.objective, `${pj.campaign_targets[0]?.count ?? 0} entidades`, `${pj.findings[0]?.count ?? 0} hipótesis`].filter(Boolean).join(" · ")} />
+          ))}
+          {(cases ?? []).map((c) => (
+            <Row key={c.id} href={`${base}/hallazgos/${c.id}`} title={c.statement} meta="Caso en estudio" />
+          ))}
+          {(opps ?? []).map((o) => (
+            <Row key={o.id} href={`${base}/oportunidades/o/${o.id}`} title={o.title} meta={[o.status === "candidata" ? "Oportunidad candidata" : "Oportunidad en dealflow", o.next_action ? `sigue: ${o.next_action}` : null].filter(Boolean).join(" · ")} />
+          ))}
+        </List>
+      ) : (
+        <p className="text-sm text-muted-foreground">Todavía no hay proyectos ni oportunidades: aparecen cuando una señal tiene evidencia suficiente. Cero también es un resultado válido.</p>
+      )}
+    </Section>
+  );
 
   // Higiene del sistema: necesario, pero no desplaza a las validaciones de mayor valor.
   const hygiene = [
@@ -253,132 +302,6 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     </Section>
   );
 
-  const Actions = (
-    <Section title="Próximas acciones" actions={<Link href={`${base}/explorar`} className={linkCls}>Objetivos</Link>}>
-      {actions.length ? (
-        <List>
-          {actions.slice(0, 6).map((a) => {
-            const overdue = !!a.due && a.due < today;
-            return (
-              <Row
-                key={a.id}
-                href={a.href}
-                title={a.title}
-                tone={overdue ? "danger" : undefined}
-                meta={[a.entity, a.due ? `${overdue ? "vencida " : ""}${formatDate(a.due)}` : "sin fecha"].filter(Boolean).join(" · ")}
-              />
-            );
-          })}
-        </List>
-      ) : (
-        <NextStep text="Sin acciones vencidas ni para esta semana." href={`${base}/explorar`} cta="Registrar próxima acción" />
-      )}
-    </Section>
-  );
-
-  const Visits = (
-    <Section title="Visitas y reuniones de hoy" actions={<Link href={`${base}/agenda`} className={linkCls}>Agenda</Link>}>
-      {plansToday.data?.length ? (
-        <List>
-          {plansToday.data.map((p) => (
-            <Row key={p.id} href={`${base}/agenda/${p.id}`} title={p.title} meta={`${p.visit_stops.length} paradas · ${p.visit_stops.filter((s) => s.status === "realizada").length} hechas`} />
-          ))}
-        </List>
-      ) : (
-        <NextStep text="No hay visitas planificadas para hoy." href={`${base}/agenda`} cta="Planificar visita" />
-      )}
-    </Section>
-  );
-
-  const Decisions = (
-    <Section title={ctx.canApprove ? "Decisiones que esperan tu voto" : "Decisiones pendientes"} actions={<Link href={`${base}/oportunidades/decisiones`} className={linkCls}>Todas</Link>}>
-      {decisions.data?.length ? (
-        <List>
-          {decisions.data.map((d) => (
-            <Row
-              key={d.id}
-              href={d.opportunity_id ? `${base}/oportunidades/o/${d.opportunity_id}` : `${base}/oportunidades/decisiones`}
-              title={d.question}
-              tone={d.due_on && d.due_on < today ? "danger" : undefined}
-              meta={[d.opportunities?.title, d.due_on ? `vence ${formatDate(d.due_on)}` : null].filter(Boolean).join(" · ")}
-            />
-          ))}
-        </List>
-      ) : (
-        <NextStep text="No hay decisiones pendientes." href={`${base}/oportunidades/candidatas`} cta="Ver candidatas" />
-      )}
-    </Section>
-  );
-
-  const findingsToValidate = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).length).slice(0, 4);
-  // Recién aceptada: ya es una hipótesis abierta aunque la evaluación (unos segundos) no haya terminado.
-  const evaluating = (approvedFindings ?? []).filter((f) => !latestByFinding.has(f.id)).slice(0, 2);
-  const Validate = (
-    <Section title="Hipótesis abiertas" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hallazgos</Link>}>
-      {findingsToValidate.length || evaluating.length ? (
-        <List>
-          {evaluating.map((f) => (
-            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.statement} meta={`${MATURITY[f.maturity]} · evaluando qué falta saber…`} />
-          ))}
-          {findingsToValidate.map((a) => {
-            const gap = (a.gaps as Gap[])[0];
-            const v = (validations ?? []).find((x) => x.finding_id === a.finding_id)?.payload as { title: string } | undefined;
-            return (
-              <Row
-                key={a.finding_id}
-                href={`${base}/hallazgos/${a.finding_id}`}
-                title={a.findings.statement}
-                tone={gap === "contradiccion_sin_resolver" ? "danger" : undefined}
-                meta={`${MATURITY[a.findings.maturity]} · ${GAPS[gap].label.toLowerCase()} · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}${a.contradicts ? ` · ${a.contradicts} en contra` : ""}${v ? ` · sugerido: ${v.title}` : ""}`}
-              />
-            );
-          })}
-        </List>
-      ) : (
-        <NextStep text="Sin hipótesis abiertas todavía. Surgen de lo que capturás en campo." href={`${base}/capturas`} cta="Ver capturas" />
-      )}
-    </Section>
-  );
-
-  const Changes = (
-    <Section title="Cambios en oportunidades (7 días)" actions={<Link href={`${base}/oportunidades/dealflow`} className={linkCls}>Pipeline</Link>}>
-      {changed.data?.length ? (
-        <List>
-          {changed.data.map((o) => (
-            <Row
-              key={o.id}
-              href={`${base}/oportunidades/o/${o.id}`}
-              title={o.title}
-              meta={[o.stage ? dealflowStage.label(o.stage) : o.status, o.next_action ? `sigue: ${o.next_action}` : "sin próxima acción", `actualizada ${ago(o.updated_at)}`].join(" · ")}
-            />
-          ))}
-        </List>
-      ) : (
-        <NextStep text="Sin cambios esta semana." href={`${base}/oportunidades`} cta="Ver hallazgos" />
-      )}
-    </Section>
-  );
-
-  const Pulse = (
-    <Section title="Market Pulse" actions={<Link href={`${base}/noticias`} className={linkCls}>Todas las noticias</Link>}>
-      <NewsAutoRefresh active={news.refreshing} />
-      {news.rows.length ? (
-        <List>
-          {news.rows.slice(0, 3).map((n) => (
-            <li key={n.id}>
-              <a href={n.url} target="_blank" rel="noopener noreferrer" className="flex min-h-12 flex-col justify-center px-4 py-3 text-sm hover:bg-muted/50">
-                <span className="line-clamp-2 font-medium">{n.title}</span>
-                <span className="text-xs text-muted-foreground">{n.source_name ?? "Medio sin identificar"} · {ago(n.published_at)}</span>
-              </a>
-            </li>
-          ))}
-        </List>
-      ) : (
-        <p className="text-sm text-muted-foreground">{news.refreshing ? "Buscando noticias…" : "Sin noticias recientes."}</p>
-      )}
-    </Section>
-  );
-
   const day = mission ? missionDay(today, mission.starts_on, mission.ends_on) : null;
 
   return (
@@ -395,11 +318,12 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
         <div className="absolute inset-0 bg-gradient-to-r from-[oklch(0.18_0.03_248/0.88)] via-[oklch(0.18_0.03_248/0.55)] to-[oklch(0.18_0.03_248/0.2)]" />
         <div className="relative flex flex-col gap-3 p-5 text-white sm:flex-row sm:items-end sm:justify-between sm:p-6">
           <div className="space-y-0.5">
-            <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">Hoy · {formatDate(today)}</p>
-            <h1 className="text-2xl font-semibold tracking-tight">Hola, {profile?.display_name || ctx.user.email}</h1>
+            <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">Hoy · {formatDate(today)} · {profile?.display_name || ctx.user.email}</p>
+            <h1 className="text-2xl font-semibold tracking-tight">RELEVO — {mission?.name ?? "Añelo / Vaca Muerta"}</h1>
+            <p className="max-w-2xl text-sm text-white/85">{mission?.objective || MISSION}</p>
             {mission && (
               <p className="text-sm text-white/85">
-                <Link href={`${base}/explorar/c/${mission.id}`} className="underline-offset-2 hover:underline">{mission.name}</Link>
+                <Link href={`${base}/explorar/c/${mission.id}`} className="underline-offset-2 hover:underline">Misión</Link>
                 {day && ` · ${day.label}`}
                 {day?.phase === "despues" && (
                   <Link href={`${base}/oportunidades/briefings`} className="ml-2 font-medium text-white underline underline-offset-2">Sintetizar</Link>
@@ -415,16 +339,21 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
         </div>
       </section>
       {view === "operativa" ? (
-        <div className="grid gap-8 lg:grid-cols-2">
-          {Priorities}
-          {Changes24}
-          {Visits}
-          {Validate}
-          {Hygiene}
-          {Actions}
-          {Decisions}
-          {Changes}
-          {Pulse}
+        <div className="space-y-8">
+          <div className="grid gap-8 lg:grid-cols-2">
+            {Watching}
+            {Priorities}
+          </div>
+          <div className="grid gap-8 lg:grid-cols-2">
+            {Projects}
+            {Hygiene}
+          </div>
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <Link href={`${base}/agenda`} className={linkCls}>Agenda de campo</Link>
+            <Link href={`${base}/explorar/actividades?de=mias`} className={linkCls}>Mis próximas acciones{actions.length ? ` (${actions.length})` : ""}</Link>
+            <Link href={`${base}/mapa`} className={linkCls}>Mapa del territorio</Link>
+            <Link href={`${base}/noticias`} className={linkCls}>Noticias</Link>
+          </p>
         </div>
       ) : (
         <ExecutiveView supabase={supabase} slug={slug} userId={ctx.user.id} canApprove={ctx.canApprove} since={`${addDays(today, -14)}T00:00:00-03:00`} />
@@ -433,4 +362,5 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   );
 }
 
-const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding" };
+const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding", caso: "Caso en estudio" };
+const MISSION = "Descubrir, validar y desarrollar oportunidades de inversión y negocio a partir de necesidades reales, evidencia de campo e inteligencia de mercado.";

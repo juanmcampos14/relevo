@@ -53,7 +53,7 @@ export default async function AgendaPage({ params }: PageProps<"/w/[slug]/agenda
 
   return (
     <>
-      <PageHeader title="Agenda y mapa" subtitle="Jornadas de campo con paradas en orden manual y salida a Google Maps." />
+      <PageHeader title="Agenda y mapa" subtitle="Jornadas de campo con paradas en orden manual y salida a Google Maps." actions={<Link href={`/w/${slug}/mapa`} className="inline-flex h-9 items-center rounded-lg border px-3 text-sm hover:bg-muted">Ver mapa del territorio</Link>} />
       <h2 className="mb-2 text-sm font-semibold text-muted-foreground uppercase">Próximas</h2>
       {upcoming.length ? <PlanList slug={slug} items={upcoming} /> : <EmptyState title="No hay jornadas próximas" />}
 

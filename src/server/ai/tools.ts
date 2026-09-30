@@ -88,7 +88,7 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
   {
     name: "propose_action",
     description:
-      "Registra una PROPUESTA de cambio para que una persona la vea (qué cambia, por qué, evidencia, riesgo de duplicado) y la apruebe o rechace. No ejecuta nada. Acciones: create_task, prepare_validation (validación de una hipótesis: finding_ref), link_evidence (evidence_ref + finding_ref + stance), update_next_action (entity_ref + next_action), request_help (assignee_ref de list_members + help_kind + title con lo concreto que se pide; finding_ref si es sobre un caso), draft_finding (source_ref + statement; queda pendiente de revisión), request_decision (title). NO existen acciones para promover oportunidades, fusionar personas, confirmar reuniones, enviar mensajes, cambiar economía ni descartar casos: eso lo hace una persona.",
+      "Registra una PROPUESTA de cambio para que una persona la vea (qué cambia, por qué, evidencia, riesgo de duplicado) y la apruebe o rechace. No ejecuta nada. Acciones: create_task, prepare_validation (validación de una hipótesis: finding_ref), link_evidence (evidence_ref + finding_ref + stance), update_next_action (entity_ref + next_action), request_help (assignee_ref de list_members + help_kind + title con lo concreto que se pide; finding_ref si es sobre un caso), draft_finding (source_ref + statement; queda pendiente de revisión), request_decision (title), record_web_evidence (url + source_title + statement con lo que dice esa fuente; finding_ref + stance si apoya o contradice una hipótesis). NO existen acciones para promover oportunidades, fusionar personas, confirmar reuniones, enviar mensajes, cambiar economía ni descartar casos: eso lo hace una persona.",
     input_schema: strict(
       {
         action: { type: "string", enum: [...DRAFT_ACTIONS] },
@@ -107,6 +107,8 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
         help_kind: { type: "string", enum: [...HELP_KINDS] },
         help_target: { type: "string", description: "A quién se busca (request_help, opcional)" },
         due_on: { type: "string", description: "AAAA-MM-DD (opcional)" },
+        url: { type: "string", description: "URL de la fuente web (record_web_evidence)" },
+        source_title: { type: "string", description: "Título de la fuente web (record_web_evidence)" },
         rationale: { type: "string", description: "Por qué se propone" },
         evidence_refs: { type: "array", items: { type: "string" }, description: "Referencias 'tipo:uuid' que la sustentan" },
       },
@@ -127,6 +129,15 @@ export type ToolContext = {
   slug: string;
   /** Si una herramienta lleva al usuario a otra pantalla (open_page). */
   navigate?: (href: string) => void;
+  /** Dónde está el usuario ahora (GPS del teléfono), si lo compartió. */
+  here?: { lat: number; lng: number; accuracy?: number } | null;
+  workspaceId?: string;
+  userId?: string;
+  settings?: unknown;
+  /** Proyecto o misión en el que se está trabajando (para que una nota de campo alimente ese proyecto). */
+  campaignId?: string | null;
+  /** Una nota de campo quedó guardada como captura (el panel muestra lo que entendió RELEVO). */
+  onCapture?: (captureId: string) => void;
   /** Referencias devueltas por las herramientas en esta conversación: únicas citables. */
   seenRefs: Set<string>;
   /** Registra un borrador; devuelve su id. */

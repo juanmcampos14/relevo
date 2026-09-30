@@ -23,7 +23,7 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, zone, objective, status, starts_on, ends_on, campaign_verticals(vertical_id, verticals(id, name))")
+    .select("id, name, zone, objective, kind, status, starts_on, ends_on, campaign_verticals(vertical_id, verticals(id, name))")
     .eq("id", campaignId)
     .maybeSingle();
   if (!campaign) notFound();
@@ -72,13 +72,14 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
   return (
     <>
       <PageHeader
-        back={<Link href={`/w/${slug}/explorar`} className="hover:underline">← Campañas</Link>}
+        back={<Link href={`/w/${slug}/explorar`} className="hover:underline">← Misión y proyectos</Link>}
         title={campaign.name}
-        subtitle={[campaignStatus.label(campaign.status), campaign.zone, campaign.starts_on && `${formatDate(campaign.starts_on)} → ${formatDate(campaign.ends_on)}`]
+        subtitle={[campaign.kind === "mision" ? "Misión" : "Proyecto", campaignStatus.label(campaign.status), campaign.zone, campaign.starts_on && `${formatDate(campaign.starts_on)} → ${formatDate(campaign.ends_on)}`]
           .filter(Boolean)
           .join(" · ")}
       />
       {campaign.objective && <p className="-mt-3 mb-5 max-w-2xl text-sm">{campaign.objective}</p>}
+      {campaign.kind === "proyecto" && <ProjectMemory slug={slug} campaignId={campaign.id} />}
 
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar por vertical">
         <Link href={href("", sFilter)} className={chip(!vFilter)}>Todas las verticales</Link>
@@ -173,5 +174,37 @@ export default async function CampaignPage({ params, searchParams }: PageProps<"
         </div>
       )}
     </>
+  );
+}
+
+/** Memoria del proyecto: sus hipótesis y lo último que se capturó. "¿Dónde quedamos?" se le pregunta a RELEVO desde acá. */
+async function ProjectMemory({ slug, campaignId }: { slug: string; campaignId: string }) {
+  const supabase = await createClient();
+  const base = `/w/${slug}`;
+  const [{ data: findings }, { data: captures }] = await Promise.all([
+    supabase.from("findings").select("id, statement, maturity, case_status").eq("campaign_id", campaignId).neq("review_status", "rechazado").order("created_at", { ascending: false }).limit(10),
+    supabase.from("captures").select("id, captured_at, ai_summary, body, status").eq("campaign_id", campaignId).order("captured_at", { ascending: false }).limit(5),
+  ]);
+  const M: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding", caso: "Caso en estudio" };
+  return (
+    <div className="mb-6 grid gap-4 md:grid-cols-2">
+      <div className="space-y-2 rounded-xl border bg-card p-4 shadow-xs">
+        <p className="text-sm font-semibold">Hipótesis del proyecto</p>
+        {findings?.length ? (
+          <ul className="space-y-1 text-sm">
+            {findings.map((f) => <li key={f.id}><Link href={`${base}/hallazgos/${f.id}`} className="hover:underline">{f.statement}</Link> <span className="text-xs text-muted-foreground">· {M[f.maturity]}{f.case_status !== "activo" ? ` · ${f.case_status}` : ""}</span></li>)}
+          </ul>
+        ) : <p className="text-sm text-muted-foreground">Todavía ninguna. Contale a RELEVO lo que vas viendo desde este proyecto.</p>}
+      </div>
+      <div className="space-y-2 rounded-xl border bg-card p-4 shadow-xs">
+        <p className="text-sm font-semibold">Lo último que se capturó</p>
+        {captures?.length ? (
+          <ul className="space-y-1 text-sm">
+            {captures.map((c) => <li key={c.id}><Link href={`${base}/capturas/${c.id}`} className="hover:underline">{(c.ai_summary ?? c.body ?? "Captura").slice(0, 110)}</Link> <span className="text-xs text-muted-foreground">· {formatDate(c.captured_at)}</span></li>)}
+          </ul>
+        ) : <p className="text-sm text-muted-foreground">Sin capturas en este proyecto. Lo que captures desde acá lo alimenta.</p>}
+        <p className="text-xs text-muted-foreground">Para un resumen de dónde quedamos, abrí RELEVO y preguntá “¿Dónde quedamos con este proyecto?”.</p>
+      </div>
+    </div>
   );
 }

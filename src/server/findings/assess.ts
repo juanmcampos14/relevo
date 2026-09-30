@@ -5,6 +5,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
+import { ECONOMIC_KEYS, sanitizeEconomics } from "@/domain/economics";
 import {
   DIMENSIONS,
   DIMENSION_KEYS,
@@ -20,7 +21,7 @@ import {
 
 type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
-const PROMPT_VERSION = "finding-estado-v2";
+const PROMPT_VERSION = "finding-estado-v3";
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60;
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
@@ -43,6 +44,15 @@ export const AssessmentSchema = z.object({
       who: z.string().nullable().describe("Con quién (persona, rol o tipo de empresa), si se puede decir."),
     }),
   ).describe("Entre 1 y 3, de la más útil a la menos útil."),
+  economics: z.array(
+    z.object({
+      variable: z.enum(ECONOMIC_KEYS),
+      value: z.string().describe("El valor tal como surge: \"hasta $18.000 por comida\", \"unas 35 personas\"."),
+      basis: z.enum(["observado", "declarado", "calculado", "estimado"]).describe("observado/declarado: sale de la evidencia citada. calculado: derivado de otros valores (con fórmula). estimado: supuesto razonable, no evidencia."),
+      formula: z.string().nullable().describe("Solo si es calculado: \"35 personas × $18.000\"."),
+      evidence_ids: z.array(z.string()),
+    }),
+  ).describe("Solo las variables económicas que la evidencia permite conocer o calcular. Lo que no está, no se inventa."),
 });
 
 const SYSTEM = `Evaluás el estado de una hipótesis (finding) de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta, a partir de la evidencia vinculada. Tu trabajo es decir qué sabemos, qué creemos, qué lo contradice y qué falta saber, y proponer la validación más útil. Una persona decide.
@@ -59,6 +69,7 @@ Reglas:
 - La contraevidencia pesa tanto como la evidencia a favor; si hay, las validaciones deben ayudar a resolverla.
 - Un finding no es una oportunidad: no propongas avanzar comercialmente, proponé validar.
 - Las validaciones son concretas y realizables en campo o por teléfono (a quién, qué preguntar, qué dato conseguir).
+- Economía: registrá solo lo que la evidencia dice (declarado u observado, citando ids) o lo que se calcula de eso (con la fórmula). Una estimación se marca como estimada. No completes variables por completar.
 - Español rioplatense, breve.`;
 
 export type AssessResult = { ok: true; assessmentId: string; proposals: number } | { ok: false; message: string };
@@ -154,6 +165,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
       finding_id: finding.id,
       evidence_ids: links.map((l) => l.id),
       dimensions: dims as unknown as NonNullable<Json>,
+      economics: sanitizeEconomics(parsed.economics ?? [], new Set(links.map((l) => l.id))) as unknown as NonNullable<Json>,
       gaps,
       summary: parsed.summary,
       supports: m.supports,

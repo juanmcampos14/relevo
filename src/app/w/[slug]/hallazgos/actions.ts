@@ -41,7 +41,7 @@ export async function linkEvidence(slug: string, findingId: string, _: ActionSta
 }
 
 /** Idea → hipótesis → finding: promoción humana, registrada en la historia de la hipótesis. */
-export async function promoteMaturity(slug: string, findingId: string, to: "hipotesis" | "finding"): Promise<ActionState> {
+export async function promoteMaturity(slug: string, findingId: string, to: "hipotesis" | "finding" | "caso"): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   const supabase = await createClient();
@@ -51,5 +51,22 @@ export async function promoteMaturity(slug: string, findingId: string, to: "hipo
   if (error) return { message: dbErrorMessage(error) };
   await supabase.from("finding_revisions").insert({ workspace_id: ctx.workspace.id, finding_id: findingId, kind: "madurez", previous_value: f.maturity, new_value: to });
   revalidatePath(`/w/${slug}`, "layout");
-  return { ok: true, message: to === "finding" ? "Promovido a finding." : "Ahora es una hipótesis a validar." };
+  return { ok: true, message: to === "caso" ? "Ahora es un caso en estudio." : to === "finding" ? "Promovido a finding." : "Ahora es una hipótesis a validar." };
+}
+
+/** Pedido de ayuda sobre un caso (contacto, introducción, acceso, validación): una tarea para esa persona. */
+export async function requestHelp(slug: string, findingId: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  const assignee = String(fd.get("assignee") ?? "");
+  const ask = String(fd.get("ask") ?? "").trim();
+  if (!assignee || !ask) return { message: "Elegí a quién y escribí qué necesitás." };
+  const supabase = await createClient();
+  const { data: f } = await supabase.from("findings").select("statement").eq("id", findingId).single();
+  const { error } = await supabase.from("tasks").insert({
+    workspace_id: ctx.workspace.id, title: ask, description: f ? `Sobre: ${f.statement}` : null, assignee_id: assignee, finding_id: findingId, kind: "Ayuda",
+  });
+  if (error) return { message: dbErrorMessage(error) };
+  revalidatePath(`/w/${slug}`, "layout");
+  return { ok: true, message: "Pedido de ayuda enviado: aparece en su vista." };
 }

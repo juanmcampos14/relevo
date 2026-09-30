@@ -15,7 +15,9 @@ import { PageHeader, Pill, Section, VerificationBadge, formatDate } from "@/comp
 import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { decideProposalAction } from "../../capturas/actions";
-import { assessFindingNow, linkEvidence, promoteMaturity } from "../actions";
+import { assessFindingNow, linkEvidence, promoteMaturity, requestHelp } from "../actions";
+import { BASIS_LABEL, ECONOMICS, unknownEconomics, type EconomicFact } from "@/domain/economics";
+import { STAGE_LABEL, caseStage, opportunityCriteria } from "@/domain/case";
 
 export const metadata: Metadata = { title: "Estado del finding" };
 // El análisis con IA corre en una Server Action de esta página.
@@ -50,12 +52,14 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
     .maybeSingle();
   if (!f) notFound();
 
-  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }, { data: revisions }] = await Promise.all([
-    supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
+  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }, { data: revisions }, { data: opps }, { data: members }] = await Promise.all([
+    supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases, economics").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("proposals").select("id, status, payload, result_id").eq("finding_id", id).order("created_at", { ascending: false }).order("position"),
     supabase.from("tasks").select("id, title, status, due_on, description, created_at, completed_at").eq("finding_id", id).order("created_at", { ascending: false }),
     supabase.from("evidence").select("id, statement, companies(trade_name, legal_name), observed_at").order("created_at", { ascending: false }).limit(60),
     supabase.from("finding_revisions").select("kind, relation, previous_value, new_value, created_at").eq("finding_id", id).order("created_at"),
+    supabase.from("opportunity_findings").select("opportunities(id, title, status)").eq("finding_id", id),
+    supabase.from("profiles").select("user_id, display_name, email"),
   ]);
 
   const assessment = history?.[0] ?? null;
@@ -79,6 +83,12 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
     validations: (tasks ?? []).map((t) => ({ title: t.title, createdAt: t.created_at, completedAt: t.completed_at })),
     revisions: (revisions ?? []).map((r) => ({ at: r.created_at, kind: r.kind as "enunciado" | "madurez", relation: r.relation, previous: r.previous_value, next: r.new_value })),
   });
+  // Como posible negocio: etapa, economía y criterios de oportunidad (sin puntaje).
+  const economics = ((assessment?.economics ?? []) as unknown as EconomicFact[]);
+  const openValidation = (tasks ?? []).find((t) => t.status !== "done")?.title ?? pending.map((p) => String((p.payload as { title?: string }).title ?? "")).find(Boolean) ?? null;
+  const stage = caseStage({ maturity: f.maturity, independentCases: m.independentCases, hasOpportunity: (opps ?? []).some((o) => o.opportunities && o.opportunities.status !== "rechazada") });
+  const criteria = opportunityCriteria({ dims, gaps, metrics: m, economics, nextMilestone: openValidation });
+  const dimOf = (...keys: string[]) => keys.map((k) => dims.find((d) => d.key === k)).find((d) => d && d.status !== "falta") ?? dims.find((d) => keys.includes(d.key));
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
   const sinceYesterday = timeline.filter((e) => e.at >= yesterday && e.kind !== "apertura");
   const trend = trendSince(timeline, yesterday);
@@ -103,19 +113,86 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
         title={f.statement}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <Pill className={f.maturity === "finding" ? "border-emerald-500/40 text-emerald-800 dark:text-emerald-300" : undefined}>{MATURITY[f.maturity]}</Pill>
+            <Pill className={f.maturity === "finding" || f.maturity === "caso" ? "border-emerald-500/40 text-emerald-800 dark:text-emerald-300" : undefined}>{MATURITY[f.maturity]}</Pill>
             <Pill>{findingKind.label(f.kind)}</Pill>
             <Pill>{reviewStatus.label(f.review_status)}</Pill>
             {f.companies && <Link href={entityHref(slug, "company", f.companies.id)} className="text-primary hover:underline">{companyName(f.companies)}</Link>}
             <span className="text-xs">{MATURITY_NOTE[f.maturity]}</span>
-            {ctx.canEdit && f.maturity !== "finding" && (
-              <ActionForm action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : "finding")} className="space-y-0">
-                <SubmitButton variant="outline">{f.maturity === "idea" ? "Tratar como hipótesis" : "Promover a finding"}</SubmitButton>
+            {ctx.canEdit && f.maturity !== "caso" && (
+              <ActionForm action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : f.maturity === "hipotesis" ? "finding" : "caso")} className="space-y-0">
+                <SubmitButton variant="outline">{f.maturity === "idea" ? "Tratar como hipótesis" : f.maturity === "hipotesis" ? "Promover a finding" : "Estudiar como caso"}</SubmitButton>
               </ActionForm>
             )}
           </span>
         }
       />
+
+      {(f.maturity === "finding" || f.maturity === "caso") && (
+        <Section title="Como posible negocio">
+          <div className="space-y-4 rounded-xl border bg-card p-4 shadow-xs">
+            <p className="text-sm"><span className="font-medium">Etapa:</span> {STAGE_LABEL[stage]}{stage !== "oportunidad" && " · todavía no es una oportunidad"}</p>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              {([["Problema observado", ["problema"]], ["Quién lo sufre", ["actor_afectado", "usuario"]], ["Quién podría pagar o decidir", ["comprador", "decisor"]], ["Solución actual", ["solucion_actual", "alternativas"]]] as const).map(([label, keys]) => {
+                const d = dimOf(...keys);
+                return (
+                  <div key={label}>
+                    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                    <dd>{d && d.status !== "falta" ? <>{d.summary} <span className="text-xs text-muted-foreground">({d.status === "sabido" ? "sabido" : d.status === "creido" ? "supuesto" : "en disputa"})</span>{ref(d.evidence_ids)}</> : <span className="text-muted-foreground">Desconocido</span>}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Economía conocida</p>
+              {economics.length ? (
+                <ul className="space-y-1 text-sm">
+                  {economics.map((e) => (
+                    <li key={e.variable} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-muted-foreground">{ECONOMICS[e.variable]}:</span>
+                      <span>{e.value}</span>
+                      <Pill className={e.basis === "estimado" ? "border-amber-500/40" : undefined}>{BASIS_LABEL[e.basis]}{e.formula ? ` · ${e.formula}` : ""}</Pill>
+                      {ref(e.evidence_ids)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin datos económicos todavía.</p>
+              )}
+              <p className="text-xs text-muted-foreground">Desconocido: {unknownEconomics(economics).map((k) => ECONOMICS[k].toLowerCase()).join(", ")}.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Para presentarse como oportunidad {criteria.met ? <span className="text-emerald-700 dark:text-emerald-400">(cumple los criterios: una persona decide)</span> : null}</p>
+              <ul className="space-y-1 text-sm">
+                {criteria.items.map((c) => (
+                  <li key={c.key} className="flex gap-2">
+                    {c.ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-label="Cumple" /> : <HelpCircle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-label="Falta" />}
+                    <span><span className="font-medium">{c.label}:</span> <span className="text-muted-foreground">{c.detail}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {ctx.canEdit && (
+              <details className="rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium text-primary">Pedir ayuda (contacto, introducción, acceso, validación…)</summary>
+                <ActionForm action={requestHelp.bind(null, slug, f.id)} className="mt-3 space-y-2">
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium">A quién</span>
+                    <select name="assignee" className="h-10 w-full rounded-lg border bg-background px-3 text-sm" defaultValue="">
+                      <option value="" disabled>Elegí…</option>
+                      {(members ?? []).filter((mm) => mm.user_id !== ctx.user.id).map((mm) => <option key={mm.user_id} value={mm.user_id}>{mm.display_name || mm.email}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium">Qué necesitás</span>
+                    <textarea name="ask" rows={2} required placeholder="¿Conocés a alguien en compras de contratistas de Añelo?" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  </label>
+                  <SubmitButton>Pedir ayuda</SubmitButton>
+                </ActionForm>
+              </details>
+            )}
+          </div>
+        </Section>
+      )}
 
       <Section title="Estado actual">
         <div className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
@@ -331,9 +408,10 @@ function Block({ title, icon, items, empty, renderRef }: { title: string; icon: 
   );
 }
 
-const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding" };
+const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding", caso: "Caso en estudio" };
 const MATURITY_NOTE: Record<string, string> = {
   idea: "Una idea de quien capturó: todavía sin evidencia de demanda.",
   hipotesis: "Hipótesis exploratoria: pasa a finding cuando la evidencia sostiene un patrón (decisión humana).",
   finding: "Un finding no es una oportunidad: primero se valida.",
+  caso: "Caso en estudio: se analiza como posible negocio; pasa a oportunidad cuando cumple los criterios (decisión humana).",
 };

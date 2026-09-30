@@ -682,13 +682,13 @@ isOneToOne: false
                   ]
                 },"finding_assessments": {
                   Row: {
-                    "ai_run_id": string | null,"contradicts": number,"created_at": string,"created_by": string | null,"dimensions": NonNullable<Json>,"evidence_ids": (string)[],"finding_id": string,"gaps": (string)[],"id": string,"independent_cases": number,"summary": string | null,"supports": number,"workspace_id": string
+                    "ai_run_id": string | null,"contradicts": number,"created_at": string,"created_by": string | null,"dimensions": NonNullable<Json>,"economics": NonNullable<Json>,"evidence_ids": (string)[],"finding_id": string,"gaps": (string)[],"id": string,"independent_cases": number,"summary": string | null,"supports": number,"workspace_id": string
                   }
                   Insert: {
-                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id": string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id": string
+                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id": string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id": string
                   }
                   Update: {
-                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id"?: string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id"?: string
+                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id"?: string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id"?: string
                   }
                   Relationships: [
                     {

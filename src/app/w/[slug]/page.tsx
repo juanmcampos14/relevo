@@ -17,6 +17,7 @@ import { setHomeView } from "./home-actions";
 import { loadNews } from "@/server/news/queries";
 import { ago } from "@/components/app/news-list";
 import { NewsAutoRefresh } from "@/components/app/news-auto-refresh";
+import { ExecutiveView } from "./executive";
 
 function todayAR() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
@@ -401,33 +402,21 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
           </form>
         </div>
       </section>
-      <div className="grid gap-8 lg:grid-cols-2">
-        {view === "operativa" ? (
-          <>
-            {Priorities}
-            {Changes24}
-            {Visits}
-            {Validate}
-            {Hygiene}
-            {Actions}
-            {Decisions}
-            {Changes}
-            {Pulse}
-          </>
-        ) : (
-          <>
-            {Priorities}
-            {Changes24}
-            {Decisions}
-            {Validate}
-            {Changes}
-            {Hygiene}
-            {Actions}
-            {Visits}
-            {Pulse}
-          </>
-        )}
-      </div>
+      {view === "operativa" ? (
+        <div className="grid gap-8 lg:grid-cols-2">
+          {Priorities}
+          {Changes24}
+          {Visits}
+          {Validate}
+          {Hygiene}
+          {Actions}
+          {Decisions}
+          {Changes}
+          {Pulse}
+        </div>
+      ) : (
+        <ExecutiveView supabase={supabase} slug={slug} userId={ctx.user.id} canApprove={ctx.canApprove} since={`${addDays(today, -14)}T00:00:00-03:00`} />
+      )}
     </>
   );
 }

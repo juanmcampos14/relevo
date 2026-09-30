@@ -107,8 +107,9 @@ test("de la campaña al dealflow con decisión de Fran", async ({ page }) => {
   // --- Fran: ve la decisión en su inicio, aprueba y comenta -------------------------
   await login(page, USERS.fran);
   await expect(page.getByRole("button", { name: "Ver vista operativo" })).toBeVisible();
-  // En HOY de Fran, su voto pendiente es la prioridad 1 y figura en "Decisiones que esperan tu voto".
-  await expect(page.getByRole("link", { name: new RegExp(`Pasamos .${OPP}. al dealflow`) })).toHaveCount(2);
+  // En la vista ejecutiva de Fran, su voto pendiente va primero ("Esperan tu decisión").
+  await expect(page.getByText("Esperan tu decisión")).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`Pasamos .${OPP}. al dealflow`) })).toHaveCount(1);
   await page.goto(oppUrl);
   await page.getByLabel("Fundamento (queda registrado)").fill("Vale la pena validar demanda con 3 campamentos.");
   await page.getByRole("button", { name: "Aprobar y pasar a dealflow" }).click();

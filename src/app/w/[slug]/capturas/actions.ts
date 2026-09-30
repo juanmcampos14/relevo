@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import type { ActionState } from "@/server/action-result";
 import { processCapture } from "@/server/capture/process";
-import { acceptGroup, decideProposal } from "@/server/capture/promote";
+import { acceptGroup, approveCapture, decideProposal, resolveEntity } from "@/server/capture/promote";
 
 export async function processCaptureNow(slug: string, captureId: string): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
@@ -18,7 +18,7 @@ export async function processCaptureNow(slug: string, captureId: string): Promis
   return res.ok ? { ok: true, message: res.proposals ? `${res.proposals} propuestas para revisar.` : "No encontré nada para estructurar." } : { message: res.message };
 }
 
-const EDITABLE = ["name", "role", "locality", "activity", "statement", "evidence_type", "verification_status", "title", "due", "kind", "rationale", "operation", "address_text", "surface_m2"];
+const EDITABLE = ["name", "role", "locality", "activity", "statement", "evidence_type", "verification_status", "title", "due", "kind", "rationale", "operation", "address_text", "surface_m2", "refined_statement"];
 
 /** Aceptar (tal cual o editada) o rechazar una propuesta. Los campos del formulario son la edición. */
 export async function decideProposalAction(slug: string, proposalId: string, _: ActionState, fd: FormData): Promise<ActionState> {
@@ -62,5 +62,41 @@ export async function decideProposalAction(slug: string, proposalId: string, _: 
       for (const findingId of ids) await assessFinding(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, findingId });
     });
   }
+  return res.ok ? { ok: true, message: res.message } : { message: res.message };
+}
+
+function reassess(ctx: Awaited<ReturnType<typeof getWorkspaceContext>>, supabase: Awaited<ReturnType<typeof createClient>>, ids: string[]) {
+  if (!ids.length) return;
+  after(async () => {
+    for (const findingId of new Set(ids)) await assessFinding(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, findingId });
+  });
+}
+
+/** "Aprobar propuesta": lo normal en una aprobación; lo que requiere decisión queda a la vista. */
+export async function approveCaptureAction(slug: string, captureId: string): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  const supabase = await createClient();
+  const res = await approveCapture(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, captureId });
+  revalidatePath(`/w/${slug}`, "layout");
+  reassess(ctx, supabase, res.affectedFindings);
+  const pending = [...new Set(res.pending)];
+  if (res.failed.length) return { message: `Se guardaron ${res.accepted}; ${res.failed.length} no se pudieron guardar: ${[...new Set(res.failed)].join(" · ")}` };
+  return pending.length
+    ? { ok: true, message: `Aprobado: ${res.accepted} elementos guardados. Queda${pending.length === 1 ? "" : "n"} ${pending.length} para decidir.` }
+    : { ok: true, message: `Aprobado: ${res.accepted} elementos guardados y relacionados.` };
+}
+
+/** Resolver una organización o persona sin identificar contra la real: su evidencia e historia pasan ahí. */
+export async function resolveEntityAction(slug: string, entityId: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  const target = String(fd.get("target") ?? "");
+  if (!target) return { message: "Elegí con quién se corresponde." };
+  const supabase = await createClient();
+  const [kind, id] = target.split(":");
+  const res = await resolveEntity(supabase, { workspaceId: ctx.workspace.id, userId: ctx.user.id, entityId, ...(kind === "company" ? { companyId: id } : { contactId: id }) });
+  revalidatePath(`/w/${slug}`, "layout");
+  reassess(ctx, supabase, res.affectedFindings);
   return res.ok ? { ok: true, message: res.message } : { message: res.message };
 }

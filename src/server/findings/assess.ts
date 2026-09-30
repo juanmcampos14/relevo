@@ -74,13 +74,13 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
 
   const { data: finding } = await db
     .from("findings")
-    .select("id, statement, kind, analysis, companies(trade_name, legal_name), finding_evidence(stance, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
+    .select("id, statement, kind, analysis, companies(trade_name, legal_name), finding_evidence(stance, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id, about_unresolved_id, stated_by_unresolved_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title), about_u:unresolved_entities!evidence_about_unresolved_fk(label), said_u:unresolved_entities!evidence_stated_by_unresolved_fk(label)))")
     .eq("id", opts.findingId)
     .maybeSingle();
   if (!finding) return { ok: false, message: "Finding no encontrado." };
 
   const rows = finding.finding_evidence.filter((fe) => fe.evidence).map((fe) => ({ stance: fe.stance as EvidenceLink["stance"], e: fe.evidence! }));
-  const links: EvidenceLink[] = rows.map(({ stance, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id }));
+  const links: EvidenceLink[] = rows.map(({ stance, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id, about_unresolved_id: e.about_unresolved_id, stated_by_unresolved_id: e.stated_by_unresolved_id }));
   const today = opts.today ?? new Date().toISOString().slice(0, 10);
   const m = metrics(links, today);
   const detGaps = deterministicGaps(m);
@@ -90,7 +90,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
         `- id ${e.id} · ${stance === "supports" ? "A FAVOR" : stance === "contradicts" ? "EN CONTRA" : "CONTEXTO"}`,
         `  "${e.statement}"${e.quote ? ` (cita: "${e.quote}")` : ""}`,
         `  verificación: ${e.verification_status} · origen: ${e.origin_kind}${e.observed_at ? ` · ${e.observed_at.slice(0, 10)}` : ""}`,
-        `  empresa: ${e.companies?.trade_name ?? e.companies?.legal_name ?? "sin identificar"} · dicho por: ${e.stated_by ? `${e.stated_by.full_name}${e.stated_by.role_title ? ` (${e.stated_by.role_title})` : ""}` : e.declared_by ? `${e.declared_by} (documento o cartel)` : "—"}`,
+        `  empresa: ${e.companies?.trade_name ?? e.companies?.legal_name ?? (e.about_u ? `${e.about_u.label} (organización sin identificar)` : "—")} · dicho por: ${e.stated_by ? `${e.stated_by.full_name}${e.stated_by.role_title ? ` (${e.stated_by.role_title})` : ""}` : e.said_u ? `${e.said_u.label} (persona sin identificar)` : e.declared_by ? `${e.declared_by} (documento o cartel)` : "—"}`,
       ].join("\n")).join("\n")
     : "(no hay evidencia vinculada)";
   const prompt = [

@@ -49,7 +49,7 @@ export async function captureEffects(db: Db, captureId: string, today: string): 
   const { data: linked } = acceptedEvidence.length ? await db.from("finding_evidence").select("finding_id").in("evidence_id", acceptedEvidence) : { data: [] };
   const findingIds = [...new Set([...(linked ?? []).map((l) => l.finding_id), ...hyp.map((h) => h.findingId)])];
   const { data: findings } = findingIds.length
-    ? await db.from("findings").select("id, statement, finding_evidence(stance, evidence(id, verification_status, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id))").in("id", findingIds)
+    ? await db.from("findings").select("id, statement, finding_evidence(stance, evidence(id, verification_status, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id, about_unresolved_id, stated_by_unresolved_id))").in("id", findingIds)
     : { data: [] };
   const real = (findings ?? []).map((f) => ({
     id: f.id,
@@ -81,7 +81,7 @@ export async function changesSince(db: Db, sinceIso: string, today: string): Pro
   if (!ids.length) return { effects: [], newFindings: news };
   const { data: findings } = await db
     .from("findings")
-    .select("id, statement, finding_evidence(stance, evidence(id, verification_status, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id))")
+    .select("id, statement, finding_evidence(stance, evidence(id, verification_status, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id, about_unresolved_id, stated_by_unresolved_id))")
     .in("id", ids);
   const effects = evidenceEffect(
     (findings ?? []).map((f) => ({ id: f.id, statement: f.statement, links: f.finding_evidence.filter((x) => x.evidence).map((x) => ({ ...x.evidence!, stance: x.stance as EvidenceLink["stance"] })) })),

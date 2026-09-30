@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { Building2, Check, CheckCircle2, CircleSlash, Landmark, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, ShieldAlert, TrendingUp, UserRound, X } from "lucide-react";
+import { AlertTriangle, Building2, Check, CheckCircle2, CircleSlash, Landmark, ListChecks, Lightbulb, ListTodo, MapPin, Mic, Quote, ScrollText, ShieldAlert, TrendingUp, UserRound, X } from "lucide-react";
 import { cn } from "cn";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
@@ -15,7 +15,9 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { AudioPlayer } from "@/components/app/audio-player";
 import { APP_VERSION } from "@/lib/build";
-import { decideProposalAction, processCaptureNow } from "../actions";
+import { approveCaptureAction, decideProposalAction, processCaptureNow } from "../actions";
+import { captureExceptions } from "@/domain/capture-review";
+import type { ActionState } from "@/server/action-result";
 import { captureEffects, type CaptureEffects } from "@/server/findings/effects";
 
 export const metadata: Metadata = { title: "Captura" };
@@ -55,7 +57,7 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
   const base = `/w/${slug}`;
   const { data: c } = await supabase
     .from("captures")
-    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, ai_summary, capture_media(id, kind, storage_path, duration_ms)")
+    .select("id, body, captured_at, captured_by, latitude, longitude, location_accuracy_m, ai_consent, status, status_error, ai_summary, ai_unknowns, capture_media(id, kind, storage_path, duration_ms)")
     .eq("id", id)
     .maybeSingle();
   if (!c) notFound();
@@ -66,13 +68,19 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
     .order("position");
   const proposals = (rawProposals ?? []) as unknown as Proposal[];
 
-  const findingIds = [...new Set(proposals.flatMap((p) => ((p.payload.related_findings as { finding_id: string }[] | undefined) ?? []).map((r) => r.finding_id)))];
-  const [{ data: signed }, { data: people }, { data: findings }, { data: transcripts }] = await Promise.all([
+  const findingIds = [...new Set(proposals.flatMap((p) => [
+    ...((p.payload.related_findings as { finding_id: string }[] | undefined) ?? []).map((r) => r.finding_id),
+    ...(p.kind === "finding" && typeof p.payload.link_to === "string" ? [p.payload.link_to] : []),
+  ]))];
+  const resolvesIds = proposals.map((p) => p.payload.resolves).filter((x): x is string => typeof x === "string" && !!x);
+  const [{ data: signed }, { data: people }, { data: findings }, { data: transcripts }, { data: unresolvedRows }] = await Promise.all([
     c.capture_media.length ? supabase.storage.from(CAPTURE_BUCKET).createSignedUrls(c.capture_media.map((m) => m.storage_path), 3600) : Promise.resolve({ data: [] }),
     supabase.from("profiles").select("user_id, display_name, email").in("user_id", [c.captured_by, ...proposals.map((p) => p.decided_by)].filter((x): x is string => !!x)),
     findingIds.length ? supabase.from("findings").select("id, statement").in("id", findingIds) : Promise.resolve({ data: [] }),
     supabase.from("transcripts").select("capture_media_id, status, text, utterances, error, provider, model").eq("capture_id", id),
+    resolvesIds.length ? supabase.from("unresolved_entities").select("id, label").in("id", resolvesIds) : Promise.resolve({ data: [] }),
   ]);
+  const unresolvedLabel = new Map((unresolvedRows ?? []).map((u) => [u.id, u.label]));
   const transcriptOf = new Map((transcripts ?? []).map((t) => [t.capture_media_id, t]));
   const mediaUrl = new Map(c.capture_media.map((m) => [m.id, urlOf_(m.storage_path)]));
   function urlOf_(path: string) {
@@ -86,6 +94,8 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
   const effects = proposals.length ? await captureEffects(supabase, id, today) : null;
   const canProcess = ctx.canEdit && c.ai_consent && (c.status === "guardado" || c.status === "error");
+  const exceptions = captureExceptions(proposals);
+  const cardProps = { slug, editable: ctx.canEdit, byKey, findingText, mediaUrl, unresolvedLabel };
 
   return (
     <div className="space-y-8">
@@ -96,7 +106,45 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
         subtitle={`${nameOf.get(c.captured_by ?? "") ?? "—"} · ${formatDate(c.captured_at, true)}`}
       />
 
-      <Section title="Original">
+      {(c.status === "procesando" || (c.status === "error" && c.status_error) || !c.ai_consent || canProcess) && (
+        <div className="space-y-3">
+          {c.status === "procesando" && <p className="rounded-xl border border-dashed p-4 text-sm">Procesando… la página se actualiza sola.</p>}
+          {c.status === "error" && c.status_error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{c.status_error}</p>}
+          {!c.ai_consent && <p className="text-sm text-muted-foreground">Esta captura se guardó sin &quot;Procesar con IA&quot;: queda como material crudo.</p>}
+          {canProcess && (
+            <ActionForm action={processCaptureNow.bind(null, slug, c.id)} className="space-y-0">
+              <SubmitButton>{c.status === "error" ? "Reintentar procesamiento" : "Procesar con IA"}</SubmitButton>
+            </ActionForm>
+          )}
+        </div>
+      )}
+
+      {proposals.length > 0 && (
+        <Executive
+          summary={c.ai_summary}
+          unknowns={c.ai_unknowns}
+          proposals={proposals}
+          exceptions={exceptions}
+          findingText={findingText}
+          unresolvedLabel={unresolvedLabel}
+          approve={ctx.canEdit && pending > exceptions.size ? approveCaptureAction.bind(null, slug, c.id) : null}
+          pendingNormal={pending - exceptions.size}
+        >
+          {[...exceptions].map(([pid, why]) => {
+            const p = proposals.find((x) => x.id === pid)!;
+            return (
+              <div key={pid} className="space-y-1">
+                <p className="flex gap-2 text-sm font-medium text-amber-800 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{why}</p>
+                <ul><ProposalCard p={p} decidedBy={undefined} {...cardProps} /></ul>
+              </div>
+            );
+          })}
+        </Executive>
+      )}
+
+      {effects && <EffectsSection effects={effects} base={base} />}
+
+      <Section title="Original (audio, fotos y nota)">
         <div className="space-y-3 rounded-xl border bg-card p-4 shadow-xs">
           {c.body ? <p className="text-base whitespace-pre-wrap">{c.body}</p> : <p className="text-sm text-muted-foreground">Sin texto.</p>}
           {c.capture_media.length > 0 && (
@@ -126,28 +174,15 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
         </div>
       </Section>
 
-      {effects && <EffectsSection effects={effects} base={base} />}
 
-      <Section title="Lo que propone RELEVO">
-        {c.status === "procesando" && <p className="rounded-xl border border-dashed p-4 text-sm">Procesando… la página se actualiza sola.</p>}
-        {c.status === "error" && c.status_error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{c.status_error}</p>}
-        {!c.ai_consent && <p className="text-sm text-muted-foreground">Esta captura se guardó sin &quot;Procesar con IA&quot;: queda como material crudo.</p>}
-        {canProcess && (
-          <ActionForm action={processCaptureNow.bind(null, slug, c.id)} className="space-y-0">
-            <SubmitButton>{c.status === "error" ? "Reintentar procesamiento" : "Procesar con IA"}</SubmitButton>
-          </ActionForm>
-        )}
-        {c.ai_summary && (
-          <p className="rounded-xl bg-muted/60 p-4 text-sm">
-            <span className="font-medium">Resumen (propuesta): </span>
-            {c.ai_summary}
-          </p>
-        )}
-        {proposals.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            {pending ? `${pending} por decidir. ` : "Todo decidido. "}Nada se guarda sin que lo aceptes; lo aceptado queda vinculado a esta captura.
-          </p>
-        )}
+      {proposals.length > 0 && (
+      <details className="group rounded-xl border bg-card/50" open={false}>
+        <summary className="flex min-h-12 cursor-pointer items-center gap-2 px-4 text-sm font-medium">
+          <ListChecks className="size-4 text-primary" aria-hidden="true" />
+          Revisar {proposals.length} elementos detectados
+          <span className="font-normal text-muted-foreground">({pending ? `${pending} por decidir` : "todo decidido"}; aceptar, editar o rechazar uno por uno)</span>
+        </summary>
+        <div className="space-y-6 p-3">
         {(["company", "asset"] as const).map((subject) => {
           const head = proposals.find((p) => p.kind === subject);
           if (!head) return null;
@@ -160,12 +195,12 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
                 {subject === "company" ? "Empresa propuesta" : "Activo propuesto"}
               </h3>
               <div className="rounded-xl border bg-card shadow-xs">
-                <ProposalCard as="div" p={head} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(head.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} groupSize={facts.filter((f) => f.status === "propuesta").length} />
+                <ProposalCard as="div" p={head} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(head.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} unresolvedLabel={unresolvedLabel} groupSize={facts.filter((f) => f.status === "propuesta").length} />
                 {facts.length > 0 && (
                   <ul className="divide-y border-t">
                     <li className="px-4 pt-3 pb-1 text-xs font-medium text-muted-foreground">RELEVO detectó {facts.length} {facts.length === 1 ? "dato" : "datos"}:</li>
                     {facts.map((f) => (
-                      <ProposalCard key={f.id} compact p={f} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(f.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} />
+                      <ProposalCard key={f.id} compact p={f} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(f.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} unresolvedLabel={unresolvedLabel} />
                     ))}
                   </ul>
                 )}
@@ -184,13 +219,15 @@ export default async function CapturePage({ params }: PageProps<"/w/[slug]/captu
               </h3>
               <ul className="space-y-3">
                 {items.map((p) => (
-                  <ProposalCard key={p.id} p={p} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(p.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} />
+                  <ProposalCard key={p.id} p={p} slug={slug} editable={ctx.canEdit} decidedBy={nameOf.get(p.decided_by ?? "")} byKey={byKey} findingText={findingText} mediaUrl={mediaUrl} unresolvedLabel={unresolvedLabel} />
                 ))}
               </ul>
             </div>
           );
         })}
-      </Section>
+        </div>
+      </details>
+      )}
       <p className="text-center text-xs text-muted-foreground">RELEVO versión {APP_VERSION}</p>
     </div>
   );
@@ -212,11 +249,11 @@ function resultLink(p: Proposal, slug: string): ReactNode {
   if (!p.result_id) return null;
   const base = `/w/${slug}`;
   const href =
-    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "asset" ? entityHref(slug, "asset", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : null;
+    p.result_type === "company" ? entityHref(slug, "company", p.result_id) : p.result_type === "asset" ? entityHref(slug, "asset", p.result_id) : p.result_type === "finding" ? `${base}/hallazgos/${p.result_id}` : p.result_type === "unresolved" ? `${base}/sin-identificar` : null;
   return href ? <Link href={href} className="text-sm text-primary hover:underline">Abrir</Link> : null;
 }
 
-function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaUrl, compact = false, groupSize, as = "li" }: {
+function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaUrl, unresolvedLabel, compact = false, groupSize, as = "li" }: {
   /** compact: fila dentro de un grupo. groupSize: datos pendientes del grupo (muestra "Aceptar todo"). */
   compact?: boolean;
   groupSize?: number;
@@ -228,6 +265,7 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
   byKey: Map<string, Proposal>;
   findingText: Map<string, string>;
   mediaUrl: Map<string, string | null>;
+  unresolvedLabel: Map<string, string>;
 }) {
   const audio = p.payload.audio as { capture_media_id: string; start_ms: number } | undefined;
   const audioUrl = audio ? mediaUrl.get(audio.capture_media_id) : null;
@@ -245,7 +283,11 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
         {resultLink(p, slug)}
       </div>
       {p.kind === "company" && (
-        <p className="text-base font-medium">{String(v.name)}{v.locality ? <span className="font-normal text-muted-foreground"> · {String(v.locality)}</span> : null}{v.activity ? <span className="font-normal text-muted-foreground"> · {String(v.activity)}</span> : null}</p>
+        <div className="space-y-1">
+          <p className="text-base font-medium">{String(v.name)}{v.locality ? <span className="font-normal text-muted-foreground"> · {String(v.locality)}</span> : null}{v.activity ? <span className="font-normal text-muted-foreground"> · {String(v.activity)}</span> : null}{v.identified === false ? <Pill className="ml-2">Sin identificar</Pill> : null}</p>
+          {v.identified === false && <p className="text-xs text-muted-foreground">Sabemos que existe, no cuál es: se guarda como organización sin identificar (no como empresa) y se resuelve cuando se sepa.</p>}
+          {typeof v.resolves === "string" && v.resolves && <p className="text-xs font-medium">Sería la organización sin identificar «{unresolvedLabel.get(v.resolves) ?? "de una captura anterior"}»: su evidencia pasaría a esta empresa.</p>}
+        </div>
       )}
       {p.kind === "asset" && (
         <p className="text-base font-medium">
@@ -259,7 +301,8 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
         <p className="text-base font-medium">
           {String(v.name ?? v.role ?? "")}
           {v.name && v.role ? <span className="font-normal text-muted-foreground"> · {String(v.role)}</span> : null}
-          {v.institutional ? <Pill className="ml-2">Canal institucional</Pill> : null}
+          {!v.name && (!v.institutional || byKey.get("c")?.payload.identified === false || !byKey.get("c")) ? <Pill className="ml-2">Sin identificar</Pill> : v.institutional ? <Pill className="ml-2">Canal institucional</Pill> : null}
+          {typeof v.resolves === "string" && v.resolves && <span className="block text-xs font-medium">Sería «{unresolvedLabel.get(v.resolves) ?? "una persona de una captura anterior"}»: lo que dijo pasaría a esta persona.</span>}
         </p>
       )}
       {p.kind === "evidence" && (
@@ -275,11 +318,24 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
       )}
       {p.kind === "finding" && (
         <div className="space-y-1">
-          <p className="text-base font-medium">{String(v.statement)}</p>
+          {typeof v.link_to === "string" && v.link_to ? (
+            <>
+              <p className="text-sm"><span className="font-medium">{RELATION[String(v.relation ?? "apoya")] ?? "Sobre"}</span> la hipótesis existente «{findingText.get(v.link_to) ?? "hipótesis"}»</p>
+              {typeof v.refined_statement === "string" && v.refined_statement && <p className="text-base font-medium">Nuevo enunciado: «{v.refined_statement}»</p>}
+            </>
+          ) : (
+            <p className="text-base font-medium">{v.is_idea ? <Pill className="mr-2">Idea</Pill> : <Pill className="mr-2">Hipótesis</Pill>}{String(v.statement)}</p>
+          )}
           <p className="text-sm text-muted-foreground">{String(v.rationale ?? "")}</p>
           {((v.supports as string[]) ?? []).length > 0 && <p className="text-xs text-muted-foreground">A favor: {((v.supports as string[]) ?? []).map((k) => `“${byKey.get(k)?.payload.statement ?? k}”`).join(" · ")}</p>}
           {((v.contradicts as string[]) ?? []).length > 0 && <p className="text-xs font-medium text-destructive">En contra: {((v.contradicts as string[]) ?? []).map((k) => `“${byKey.get(k)?.payload.statement ?? k}”`).join(" · ")}</p>}
-          <p className="text-xs text-muted-foreground">Aceptarlo lo promueve a finding ({findingKind.label(String(v.kind))}) con la evidencia que hayas aceptado.</p>
+          <p className="text-xs text-muted-foreground">
+            {typeof v.link_to === "string" && v.link_to
+              ? "Aceptarlo suma la evidencia aceptada a esa hipótesis (no crea otra)."
+              : v.is_idea
+                ? "Una idea de quien capturó: se guarda para investigar, no es evidencia de demanda."
+                : `Aceptarla abre una hipótesis exploratoria (${findingKind.label(String(v.kind))}); pasa a finding cuando la evidencia lo sostenga.`}
+          </p>
         </div>
       )}
       {p.kind === "next_action" && (
@@ -304,7 +360,7 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
       {open && p.matches.length > 0 && (p.kind === "company" || p.kind === "asset" || p.kind === "person" || p.kind === "finding") && (
         <fieldset className="space-y-1 rounded-lg border p-3 text-sm">
           <legend className="px-1 font-medium">¿Ya existe?</legend>
-          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked={!v.link_to} className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : p.kind === "asset" ? "un activo nuevo" : p.kind === "finding" ? "un finding nuevo" : "una persona nueva"}</label>
+          <label className="flex min-h-10 items-center gap-2"><input type="radio" name="link_to" value="nuevo" defaultChecked={!v.link_to} className="size-4 accent-primary" />Crear {p.kind === "company" ? "una empresa nueva" : p.kind === "asset" ? "un activo nuevo" : p.kind === "finding" ? "una hipótesis nueva" : "una persona nueva"}</label>
           {p.matches.map((m) => (
             <label key={m.id} className="flex min-h-10 items-start gap-2 py-1"><input type="radio" name="link_to" value={m.id} defaultChecked={v.link_to === m.id} className="mt-0.5 size-4 accent-primary" /><span>{p.kind === "finding" ? "Es la misma hipótesis que" : "Es"} “{m.name}” <span className="text-muted-foreground">({m.reason}{p.kind === "finding" ? "; la evidencia se suma ahí" : ""})</span></span></label>
           ))}
@@ -359,7 +415,11 @@ function ProposalCard({ p, slug, editable, decidedBy, byKey, findingText, mediaU
             )}
             {p.kind === "finding" && (
               <>
-                <Field label="Finding"><textarea name="statement" defaultValue={String(v.statement ?? "")} rows={2} className={cn(input, "h-auto py-2")} /></Field>
+                {typeof v.refined_statement === "string" && v.refined_statement ? (
+                  <Field label="Nuevo enunciado de la hipótesis"><textarea name="refined_statement" defaultValue={String(v.refined_statement)} rows={2} className={cn(input, "h-auto py-2")} /></Field>
+                ) : (
+                  <Field label="Hipótesis"><textarea name="statement" defaultValue={String(v.statement ?? "")} rows={2} className={cn(input, "h-auto py-2")} /></Field>
+                )}
                 <Field label="Por qué / qué falta"><textarea name="rationale" defaultValue={String(v.rationale ?? "")} rows={2} className={cn(input, "h-auto py-2")} /></Field>
               </>
             )}
@@ -477,5 +537,152 @@ function EffectsSection({ effects, base }: { effects: CaptureEffects; base: stri
         {noRelation && <li className="p-3 text-sm text-muted-foreground">Todavía no existe un finding relacionado con lo que capturaste: queda como evidencia en su empresa o activo.</li>}
       </ul>
     </Section>
+  );
+}
+
+const RELATION: Record<string, string> = { apoya: "Apoya", contradice: "Contradice", acota: "Acota", amplia: "Amplía", segmenta: "Segmenta" };
+const q = (x: unknown) => `«${String(x)}»`;
+
+/** Una línea en lenguaje llano por lo que RELEVO propone guardar o cambiar. */
+function proposalLine(p: Proposal, findingText: Map<string, string>, unresolvedLabel: Map<string, string>, companyUnresolved: boolean): string {
+  const v = { ...p.payload, ...(p.final_payload ?? {}) };
+  switch (p.kind) {
+    case "company":
+      if (typeof v.resolves === "string" && v.resolves) return `Identificar ${q(unresolvedLabel.get(v.resolves) ?? "la organización de antes")} como ${q(v.name)}`;
+      if (v.identified === false) return `Guardar ${q(v.name)} como organización sin identificar`;
+      return typeof v.link_to === "string" && v.link_to ? `Vincular con la empresa existente ${q(v.name)}` : `Guardar la empresa ${q(v.name)}`;
+    case "asset":
+      return `Guardar el activo ${q(v.title)}`;
+    case "person":
+      if (typeof v.resolves === "string" && v.resolves) return `Identificar ${q(unresolvedLabel.get(v.resolves) ?? "la persona de antes")} como ${v.name}`;
+      if (v.name) return `Guardar a ${v.name}${v.role ? ` (${v.role})` : ""}`;
+      return v.institutional && !companyUnresolved ? `Registrar el canal ${q(v.role)}` : `Guardar ${q(v.role)} como persona sin identificar`;
+    case "finding": {
+      const existing = typeof v.link_to === "string" && v.link_to ? findingText.get(v.link_to) ?? "una hipótesis existente" : null;
+      if (!existing) return v.is_idea ? `Guardar la idea ${q(v.statement)} para investigar` : `Abrir la hipótesis ${q(v.statement)}`;
+      if (typeof v.refined_statement === "string" && v.refined_statement) return `Reformular ${q(existing)} → ${q(v.refined_statement)}`;
+      return v.relation === "contradice" ? `Registrar evidencia en contra de ${q(existing)}` : `Sumar evidencia a ${q(existing)}`;
+    }
+    default:
+      return String(v.title ?? v.statement ?? "");
+  }
+}
+
+function LineIcon({ p, exception }: { p: Proposal; exception: boolean }) {
+  if (p.status === "aceptada" || p.status === "editada") return <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-label="Guardado" />;
+  if (p.status === "rechazada") return <CircleSlash className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="Rechazado" />;
+  if (exception) return <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-label="Requiere tu decisión" />;
+  return <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />;
+}
+
+/**
+ * Primera capa de la revisión: qué entendió RELEVO, qué propone y qué haría ahora, con una sola
+ * aprobación para lo normal. El detalle (cada elemento, su fuente y su segundo del audio) queda abajo.
+ */
+function Executive({ summary, unknowns, proposals, exceptions, findingText, unresolvedLabel, approve, pendingNormal, children }: {
+  summary: string | null;
+  unknowns: string[];
+  proposals: Proposal[];
+  exceptions: Map<string, string>;
+  findingText: Map<string, string>;
+  unresolvedLabel: Map<string, string>;
+  approve: (() => Promise<ActionState>) | null;
+  pendingNormal: number;
+  children: ReactNode;
+}) {
+  const company = proposals.find((p) => p.kind === "company");
+  const companyUnresolved = company?.payload.identified === false;
+  const people = proposals.filter((p) => p.kind === "person");
+  const talkedWith = [
+    ...people.map((p) => String(p.payload.name ?? p.payload.role ?? "")).filter(Boolean),
+  ];
+  const org = company ? `${String(company.payload.name)}${companyUnresolved ? " (sin identificar)" : ""}` : null;
+  const evidence = proposals.filter((p) => p.kind === "evidence" && p.status !== "rechazada");
+  const observed = evidence.filter((e) => isObserved(e.payload)).length;
+  const against = evidence.filter((e) => ((e.payload.related_findings as { stance: string }[] | undefined) ?? []).some((r) => r.stance === "contradicts")).length;
+  const structural = proposals.filter((p) => ["company", "asset", "person", "finding"].includes(p.kind));
+  const actions = proposals.filter((p) => p.kind === "next_action" && p.status !== "rechazada");
+  const allDone = proposals.every((p) => p.status !== "propuesta");
+
+  return (
+    <>
+      <Section title="RELEVO entendió esto">
+        <div className="space-y-4 rounded-xl border bg-card p-4 shadow-xs">
+          {summary && <p className="text-base">{summary}</p>}
+          {(talkedWith.length > 0 || org) && (
+            <p className="text-sm">
+              <span className="font-medium">Hablaste con: </span>
+              {[talkedWith.join(", "), org].filter(Boolean).join(talkedWith.length ? " · " : "")}
+            </p>
+          )}
+          {evidence.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Lo importante</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-sm">
+                {evidence.slice(0, 5).map((e) => (
+                  <li key={e.id}>
+                    {String(e.payload.statement)}
+                    <span className="text-xs text-muted-foreground"> · {isObserved(e.payload) ? "observado" : e.payload.origin === "declarado_por_documento" ? "lo dice un cartel o documento" : e.payload.stated_by ? "declarado" : "sin fuente indicada"}</span>
+                  </li>
+                ))}
+                {evidence.length > 5 && <li className="list-none text-xs text-muted-foreground">y {evidence.length - 5} datos más en el detalle.</li>}
+              </ul>
+            </div>
+          )}
+          {unknowns.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Todavía no sabemos</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+                {unknowns.map((u) => <li key={u}>{u}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section title="RELEVO propone">
+        <div className="space-y-4 rounded-xl border bg-card p-4 shadow-xs">
+          <ul className="space-y-1.5 text-sm">
+            {structural.map((p) => (
+              <li key={p.id} className={cn("flex gap-2", p.status === "rechazada" && "text-muted-foreground line-through")}>
+                <LineIcon p={p} exception={exceptions.has(p.id)} />
+                <span>{proposalLine(p, findingText, unresolvedLabel, companyUnresolved)}</span>
+              </li>
+            ))}
+            {evidence.length > 0 && (
+              <li className="flex gap-2">
+                <LineIcon p={evidence.every((e) => e.status !== "propuesta") ? evidence[0] : { ...evidence[0], status: "propuesta" }} exception={false} />
+                <span>
+                  Conservar {evidence.length} {evidence.length === 1 ? "dato" : "datos"} con su fuente
+                  <span className="text-muted-foreground"> ({[observed ? `${observed} observado${observed === 1 ? "" : "s"}` : null, evidence.length - observed ? `${evidence.length - observed} declarado${evidence.length - observed === 1 ? "" : "s"} sin verificar` : null, against ? `${against} en contra de una hipótesis` : null].filter(Boolean).join(", ")})</span>
+                </span>
+              </li>
+            )}
+          </ul>
+          {actions.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Qué haría ahora</p>
+              <ol className="list-decimal space-y-0.5 pl-5 text-sm">
+                {actions.map((a) => <li key={a.id} className={cn(a.status !== "propuesta" && "text-muted-foreground")}>{String(a.payload.title)}</li>)}
+              </ol>
+            </div>
+          )}
+          {exceptions.size > 0 && (
+            <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+              <p className="text-sm font-semibold">Esto requiere tu decisión ({exceptions.size})</p>
+              {children}
+            </div>
+          )}
+          {approve ? (
+            <ActionForm action={approve} className="space-y-1">
+              <SubmitButton className="h-12 w-full text-base">{exceptions.size ? `Aprobar lo demás (${pendingNormal})` : "Aprobar propuesta"}</SubmitButton>
+              <p className="text-center text-xs text-muted-foreground">Guarda y relaciona cada elemento con su fuente (y el segundo del audio). Podés revisarlos uno por uno abajo.</p>
+            </ActionForm>
+          ) : allDone ? (
+            <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="size-4" aria-hidden="true" />Todo decidido: lo aceptado quedó guardado y relacionado.</p>
+          ) : null}
+        </div>
+      </Section>
+    </>
   );
 }

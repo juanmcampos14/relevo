@@ -21,14 +21,15 @@ const NOTE = "Local en alquiler en Los Algarrobos, cartel en la vidriera: 35 m²
 const extraction: Extraction = {
   summary: "Local comercial en alquiler en Los Algarrobos.",
   company: null,
-  asset: { title: "Local comercial en Los Algarrobos", kind: "local", operation: "alquiler", address_text: "Los Algarrobos", locality: "Añelo", surface_m2: 35, quote: "Local en alquiler en Los Algarrobos" },
+  asset: { title: "Local comercial en Los Algarrobos", kind: "local", operation: "alquiler", address_text: "Los Algarrobos", locality: "Añelo", surface_m2: 35 },
   people: [],
   evidence: [
-    { key: "e1", statement: "Se observó un cartel de alquiler en la vidriera", quote: "cartel en la vidriera", evidence_type: "observacion", origin: "observado", stated_by: null, declared_by: null, about: "asset", related_findings: [] },
-    { key: "e2", statement: "Superficie de 35 m²", quote: "35 m²", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset", related_findings: [] },
-    { key: "e3", statement: "Medidas de 5 x 7 m", quote: "5 x 7", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset", related_findings: [] },
+    { key: "e1", statement: "Se observó un cartel de alquiler en la vidriera", quote: "cartel en la vidriera", evidence_type: "observacion", origin: "observado", stated_by: null, declared_by: null, about: "asset" },
+    { key: "e2", statement: "Superficie de 35 m²", quote: "35 m²", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset" },
+    { key: "e3", statement: "Medidas de 5 x 7 m", quote: "5 x 7", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset" },
   ],
   finding_candidates: [],
+  unknowns: [],
   next_actions: [],
 };
 const fakeClient = { beta: { messages: { parse: async () => ({ stop_reason: "end_turn", parsed_output: extraction, usage: { input_tokens: 1, output_tokens: 1 } }) } } } as unknown as Anthropic;

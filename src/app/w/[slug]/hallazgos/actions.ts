@@ -39,3 +39,17 @@ export async function linkEvidence(slug: string, findingId: string, _: ActionSta
   });
   return { ok: true, message: "Evidencia vinculada. El estado se actualiza en unos segundos." };
 }
+
+/** Idea → hipótesis → finding: promoción humana, registrada en la historia de la hipótesis. */
+export async function promoteMaturity(slug: string, findingId: string, to: "hipotesis" | "finding"): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  const supabase = await createClient();
+  const { data: f } = await supabase.from("findings").select("maturity").eq("id", findingId).single();
+  if (!f || f.maturity === to) return { message: "Ya estaba así." };
+  const { error } = await supabase.from("findings").update({ maturity: to }).eq("id", findingId);
+  if (error) return { message: dbErrorMessage(error) };
+  await supabase.from("finding_revisions").insert({ workspace_id: ctx.workspace.id, finding_id: findingId, kind: "madurez", previous_value: f.maturity, new_value: to });
+  revalidatePath(`/w/${slug}`, "layout");
+  return { ok: true, message: to === "finding" ? "Promovido a finding." : "Ahora es una hipótesis a validar." };
+}

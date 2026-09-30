@@ -15,7 +15,7 @@ import { PageHeader, Pill, Section, VerificationBadge, formatDate } from "@/comp
 import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { decideProposalAction } from "../../capturas/actions";
-import { assessFindingNow, linkEvidence } from "../actions";
+import { assessFindingNow, linkEvidence, promoteMaturity } from "../actions";
 
 export const metadata: Metadata = { title: "Estado del finding" };
 // El análisis con IA corre en una Server Action de esta página.
@@ -45,16 +45,17 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
 
   const { data: f } = await supabase
     .from("findings")
-    .select("id, statement, kind, analysis, review_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
+    .select("id, statement, kind, analysis, review_status, maturity, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
     .eq("id", id)
     .maybeSingle();
   if (!f) notFound();
 
-  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }] = await Promise.all([
+  const [{ data: history }, { data: proposals }, { data: tasks }, { data: candidates }, { data: revisions }] = await Promise.all([
     supabase.from("finding_assessments").select("id, created_at, evidence_ids, dimensions, gaps, summary, supports, contradicts, independent_cases").eq("finding_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("proposals").select("id, status, payload, result_id").eq("finding_id", id).order("created_at", { ascending: false }).order("position"),
     supabase.from("tasks").select("id, title, status, due_on, description, created_at, completed_at").eq("finding_id", id).order("created_at", { ascending: false }),
     supabase.from("evidence").select("id, statement, companies(trade_name, legal_name), observed_at").order("created_at", { ascending: false }).limit(60),
+    supabase.from("finding_revisions").select("kind, relation, previous_value, new_value, created_at").eq("finding_id", id).order("created_at"),
   ]);
 
   const assessment = history?.[0] ?? null;
@@ -76,6 +77,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
     links: rows.map(({ stance, linkedAt, e }) => ({ id: e.id, stance, verification_status: e.verification_status, revalidate_after: e.revalidate_after, company_id: e.company_id, stated_by_contact_id: e.stated_by_contact_id, capture_id: e.capture_id, visit_id: e.visit_id, source_id: e.source_id, linkedAt, statement: e.statement })),
     assessments: (history ?? []).map((a) => ({ at: a.created_at, gaps: a.gaps })),
     validations: (tasks ?? []).map((t) => ({ title: t.title, createdAt: t.created_at, completedAt: t.completed_at })),
+    revisions: (revisions ?? []).map((r) => ({ at: r.created_at, kind: r.kind as "enunciado" | "madurez", relation: r.relation, previous: r.previous_value, next: r.new_value })),
   });
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
   const sinceYesterday = timeline.filter((e) => e.at >= yesterday && e.kind !== "apertura");
@@ -101,10 +103,16 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
         title={f.statement}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
+            <Pill className={f.maturity === "finding" ? "border-emerald-500/40 text-emerald-800 dark:text-emerald-300" : undefined}>{MATURITY[f.maturity]}</Pill>
             <Pill>{findingKind.label(f.kind)}</Pill>
             <Pill>{reviewStatus.label(f.review_status)}</Pill>
             {f.companies && <Link href={entityHref(slug, "company", f.companies.id)} className="text-primary hover:underline">{companyName(f.companies)}</Link>}
-            <span className="text-xs">Un finding no es una oportunidad: primero se valida.</span>
+            <span className="text-xs">{MATURITY_NOTE[f.maturity]}</span>
+            {ctx.canEdit && f.maturity !== "finding" && (
+              <ActionForm action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : "finding")} className="space-y-0">
+                <SubmitButton variant="outline">{f.maturity === "idea" ? "Tratar como hipótesis" : "Promover a finding"}</SubmitButton>
+              </ActionForm>
+            )}
           </span>
         }
       />
@@ -322,3 +330,10 @@ function Block({ title, icon, items, empty, renderRef }: { title: string; icon: 
     </Section>
   );
 }
+
+const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding" };
+const MATURITY_NOTE: Record<string, string> = {
+  idea: "Una idea de quien capturó: todavía sin evidencia de demanda.",
+  hipotesis: "Hipótesis exploratoria: pasa a finding cuando la evidencia sostiene un patrón (decisión humana).",
+  finding: "Un finding no es una oportunidad: primero se valida.",
+};

@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v5";
+export const EXTRACT_PROMPT_VERSION = "captura-v6";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -19,11 +19,12 @@ export const ExtractionSchema = z.object({
   summary: z.string().describe("Resumen de 1-2 oraciones de lo capturado, sin interpretar."),
   company: z
     .object({
-      name: z.string(),
+      name: z.string().describe("Nombre propio; si no se sabe, una descripción: \"Contratista con ~35 personas en la zona\"."),
+      identified: z.boolean().describe("true solo si se conoce el nombre propio de la organización. Sin nombre queda como organización sin identificar, no como empresa."),
       existing_id: z.string().nullable().describe("id de la lista de empresas existentes SOLO si es claramente la misma."),
+      resolves: z.string().nullable().describe("id de la lista de entidades sin identificar si esta captura revela que es esa organización."),
       locality: z.string().nullable(),
       activity: z.string().nullable(),
-      quote: z.string().nullable(),
     })
     .nullable()
     .describe("La empresa u organización principal de la captura, si se menciona o se ve (cartel con nombre). null si no hay."),
@@ -35,7 +36,6 @@ export const ExtractionSchema = z.object({
       address_text: z.string().nullable(),
       locality: z.string().nullable(),
       surface_m2: z.number().nullable().describe("Solo si figura; es lo que DICE la fuente, no algo medido."),
-      quote: z.string().nullable(),
     })
     .nullable()
     .describe("Un activo físico observado o mencionado (local, terreno, galpón, hotel, fondo de comercio), sobre todo si está en venta o alquiler. null si no hay."),
@@ -46,7 +46,7 @@ export const ExtractionSchema = z.object({
       role: z.string().nullable(),
       institutional: z.boolean().describe("true si es un área o cargo sin persona identificada (\"Compras\", \"el encargado\" sin nombre)."),
       existing_id: z.string().nullable().describe("id de la lista de contactos existentes SOLO si es claramente la misma persona."),
-      quote: z.string().nullable(),
+      resolves: z.string().nullable().describe("id de la lista de entidades sin identificar si esta captura revela que es ese actor."),
     }),
   ),
   evidence: z.array(
@@ -60,25 +60,25 @@ export const ExtractionSchema = z.object({
         .describe("observado: quien capturó lo vio con sus propios ojos (\"hay un cartel de alquiler\"). declarado_por_persona: se lo dijo alguien. declarado_por_documento: lo afirma un cartel, aviso, folleto o documento (\"el cartel dice 35 m²\")."),
       stated_by: z.string().nullable().describe("Clave de la persona que lo dijo (p1…), si origin es declarado_por_persona."),
       declared_by: z.string().nullable().describe("Si origin es declarado_por_documento: qué lo afirma (\"aviso de alquiler en la vidriera\")."),
-      about: z.enum(["company", "asset", "none"]).describe("Sobre qué es el dato: la empresa principal, el activo, o ninguno de los dos."),
-      related_findings: z.array(
-        z.object({
-          finding_id: z.string().describe("id de la lista de findings existentes."),
-          stance: z.enum(["supports", "contradicts", "contextual"]),
-        }),
-      ).describe("Relación con findings EXISTENTES. Incluí 'contradicts' cuando el dato va en contra: la contraevidencia es tan importante como la evidencia a favor."),
+      about: z.enum(["company", "asset", "none"]).describe("Sobre qué es el dato: la organización principal (identificada o no), el activo, o ninguno de los dos."),
     }),
   ),
   finding_candidates: z.array(
     z.object({
       statement: z.string().describe("Hipótesis o aprendizaje posible, formulado con cautela (\"Posible…\")."),
-      existing_finding_id: z.string().nullable().describe("Si es la MISMA hipótesis que un finding existente (aunque esté redactada distinto), su id: la evidencia se suma a ese en lugar de crear otro. "),
+      existing_finding_id: z.string().nullable().describe("Si la evidencia es sobre una hipótesis EXISTENTE (aunque esté redactada distinto), su id: se suma a esa en lugar de crear otra."),
+      relation: z
+        .enum(["nueva", "apoya", "contradice", "acota", "amplia", "segmenta"])
+        .describe("nueva: no hay una existente. Con existing_finding_id: apoya, contradice, acota (la restringe), amplia (la extiende) o segmenta (vale para unos y no para otros)."),
+      refined_statement: z.string().nullable().describe("Si acota, amplia o segmenta: la hipótesis existente reformulada con lo nuevo (\"La necesidad de comida parece depender del esquema de alimentación de cada empresa\")."),
+      is_idea: z.boolean().describe("true si es una idea o intuición de quien capturó (\"se podría poner una parrilla\") sin evidencia de demanda."),
       kind: z.enum(FINDING_KINDS),
       rationale: z.string().describe("Por qué surge y qué faltaría para sostenerlo."),
       supports: z.array(z.string()).describe("Claves de evidencia (e1…) a favor."),
       contradicts: z.array(z.string()).describe("Claves de evidencia (e1…) en contra, si hay."),
     }),
   ).describe("Solo si la captura sugiere un patrón o problema que valga la pena investigar. Puede ser una lista vacía."),
+  unknowns: z.array(z.string()).describe("Qué todavía no sabemos que importa para decidir (nombre de la empresa, frecuencia, quién decide…). Máximo 5, cortas."),
   next_actions: z.array(
     z.object({
       title: z.string().describe("Acción concreta con verbo: \"Hablar con Laura (Compras) sobre frecuencia y gasto\"."),
@@ -137,7 +137,10 @@ Reglas:
 - La nota puede incluir la transcripción automática de un audio: puede tener errores de reconocimiento. No "corrijas" nombres, marcas ni cifras dudosas; si algo parece mal transcripto, dejalo como está y no lo uses como dato firme.
 - Para no duplicar: usá existing_id solo si la empresa o persona de la lista es claramente la misma. Ante la duda, dejalo vacío.
 - Una persona sin nombre ("el encargado", "Compras") es institutional: true.
-- Revisá los findings existentes: si un dato los apoya, los contradice o les da contexto, indicalo en related_findings. Buscá activamente la contraevidencia.
+- Revisá los findings existentes: si la captura los apoya o los contradice, proponé un finding_candidate con su existing_finding_id, la relación y las claves de evidencia a favor y en contra. Buscá activamente la contraevidencia.
+- Organizaciones y personas sin nombre ("una contratista", "un chofer de una petrolera") son fuentes válidas, pero no se inventan identidades: company.identified = false con una descripción como nombre; persona sin nombre con su rol. Si la captura revela quién es una de las ENTIDADES SIN IDENTIFICAR de la lista ("el encargado de la otra vez se llama Juan Pérez"), indicá su id en resolves.
+- Antes de proponer una hipótesis nueva, preguntate si lo nuevo apoya, contradice, acota, amplía o segmenta una existente. Dos observaciones opuestas suelen refinar una hipótesis ("depende del esquema de alimentación de cada empresa"), no crear dos contrapuestas.
+- Una idea de quien capturó no es evidencia de demanda: is_idea = true.
 - Los finding_candidates son opcionales y cautelosos: solo si hay un problema o patrón que valga la pena investigar, citando las claves de evidencia que lo sostienen o lo contradicen. Antes de proponer uno nuevo, revisá los findings existentes: si es la misma hipótesis con otras palabras, indicá existing_finding_id (duplicar un finding rompe el conteo de casos).
 - Las próximas acciones son concretas, accionables y derivadas de la captura.
 - Si un campo de texto no aplica, dejalo vacío ("").
@@ -153,6 +156,7 @@ export type ExtractionContext = {
   companies: { id: string; name: string; locality: string | null }[];
   contacts: { id: string; name: string; role: string | null; company: string | null }[];
   findings: { id: string; statement: string }[];
+  unresolved: { id: string; kind: "organization" | "actor"; label: string }[];
 };
 
 export type ExtractionResult =
@@ -171,6 +175,9 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
     "",
     "FINDINGS EXISTENTES (id · enunciado):",
     ...ctx.findings.map((f) => `${f.id} · ${f.statement}`),
+    "",
+    "ENTIDADES SIN IDENTIFICAR (id · tipo · cómo se las reconoce):",
+    ...ctx.unresolved.map((u) => `${u.id} · ${u.kind === "organization" ? "organización" : "persona"} · ${u.label}`),
   ].join("\n");
   const capture = [
     `CAPTURA · ${ctx.capturedAt} · por ${ctx.capturedBy}${ctx.missionName ? ` · misión ${ctx.missionName}` : ""}${ctx.location ? ` · ubicación ${ctx.location}` : ""}`,

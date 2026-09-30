@@ -337,13 +337,13 @@ isOneToOne: false
                   ]
                 },"captures": {
                   Row: {
-                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
+                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"ai_unknowns": (string)[],"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"created_at": string,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -566,16 +566,28 @@ isOneToOne: false
                   ]
                 },"evidence": {
                   Row: {
-                    "asset_id": string | null,"campaign_id": string | null,"capture_id": string | null,"capture_media_id": string | null,"company_id": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"declared_by": string | null,"establishment_id": string | null,"evidence_type": string,"id": string,"is_demo": boolean,"media_end_ms": number | null,"media_start_ms": number | null,"next_verification_step": string | null,"observed_at": string | null,"origin_kind": string,"quote": string | null,"revalidate_after": string | null,"source_id": string | null,"stated_by_contact_id": string | null,"statement": string,"updated_at": string,"verification_status": string,"visit_id": string | null,"workspace_id": string
+                    "about_unresolved_id": string | null,"asset_id": string | null,"campaign_id": string | null,"capture_id": string | null,"capture_media_id": string | null,"company_id": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"declared_by": string | null,"establishment_id": string | null,"evidence_type": string,"id": string,"is_demo": boolean,"media_end_ms": number | null,"media_start_ms": number | null,"next_verification_step": string | null,"observed_at": string | null,"origin_kind": string,"quote": string | null,"revalidate_after": string | null,"source_id": string | null,"stated_by_contact_id": string | null,"stated_by_unresolved_id": string | null,"statement": string,"updated_at": string,"verification_status": string,"visit_id": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind": string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"statement": string,"updated_at"?: string,"verification_status"?: string,"visit_id"?: string | null,"workspace_id": string
+                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind": string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement": string,"updated_at"?: string,"verification_status"?: string,"visit_id"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind"?: string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"visit_id"?: string | null,"workspace_id"?: string
+                    "about_unresolved_id"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"capture_id"?: string | null,"capture_media_id"?: string | null,"company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"declared_by"?: string | null,"establishment_id"?: string | null,"evidence_type"?: string,"id"?: string,"is_demo"?: boolean,"media_end_ms"?: number | null,"media_start_ms"?: number | null,"next_verification_step"?: string | null,"observed_at"?: string | null,"origin_kind"?: string,"quote"?: string | null,"revalidate_after"?: string | null,"source_id"?: string | null,"stated_by_contact_id"?: string | null,"stated_by_unresolved_id"?: string | null,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"visit_id"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "evidence_about_unresolved_fk"
+      columns: ["workspace_id","about_unresolved_id"]
+isOneToOne: false
+      referencedRelation: "unresolved_entities"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "evidence_stated_by_unresolved_fk"
+      columns: ["workspace_id","stated_by_unresolved_id"]
+isOneToOne: false
+      referencedRelation: "unresolved_entities"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "evidence_workspace_id_asset_id_fkey"
       columns: ["workspace_id","asset_id"]
 isOneToOne: false
@@ -730,15 +742,46 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"findings": {
+                },"finding_revisions": {
                   Row: {
-                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"ingest_meta": Json | null,"ingest_token_id": string | null,"kind": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
+                    "capture_id": string | null,"created_at": string,"created_by": string | null,"finding_id": string,"id": string,"kind": string,"new_value": string,"previous_value": string,"proposal_id": string | null,"reason": string | null,"relation": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind": string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
+                    "capture_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"finding_id": string,"id"?: string,"kind": string,"new_value": string,"previous_value": string,"proposal_id"?: string | null,"reason"?: string | null,"relation"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
+                    "capture_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"finding_id"?: string,"id"?: string,"kind"?: string,"new_value"?: string,"previous_value"?: string,"proposal_id"?: string | null,"reason"?: string | null,"relation"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "finding_revisions_workspace_id_capture_id_fkey"
+      columns: ["workspace_id","capture_id"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "finding_revisions_workspace_id_finding_id_fkey"
+      columns: ["workspace_id","finding_id"]
+isOneToOne: false
+      referencedRelation: "findings"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "finding_revisions_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"findings": {
+                  Row: {
+                    "analysis": string | null,"asset_id": string | null,"campaign_id": string | null,"company_id": string | null,"created_at": string,"created_by": string | null,"dedup_key": string | null,"establishment_id": string | null,"evidence": string | null,"id": string,"ingest_meta": Json | null,"ingest_token_id": string | null,"kind": string,"maturity": string,"origin": string,"review_note": string | null,"review_status": string,"reviewed_at": string | null,"reviewed_by": string | null,"source_id": string,"statement": string,"updated_at": string,"verification_status": string,"vertical_id": string | null,"visit_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind": string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id": string,"statement": string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "analysis"?: string | null,"asset_id"?: string | null,"campaign_id"?: string | null,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"dedup_key"?: string | null,"establishment_id"?: string | null,"evidence"?: string | null,"id"?: string,"ingest_meta"?: Json | null,"ingest_token_id"?: string | null,"kind"?: string,"maturity"?: string,"origin"?: string,"review_note"?: string | null,"review_status"?: string,"reviewed_at"?: string | null,"reviewed_by"?: string | null,"source_id"?: string,"statement"?: string,"updated_at"?: string,"verification_status"?: string,"vertical_id"?: string | null,"visit_id"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1166,6 +1209,49 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"unresolved_entities": {
+                  Row: {
+                    "capture_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"id": string,"kind": string,"label": string,"parent_id": string | null,"resolved_at": string | null,"resolved_by": string | null,"resolved_company_id": string | null,"resolved_contact_id": string | null,"workspace_id": string
+                  }
+                  Insert: {
+                    "capture_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"kind": string,"label": string,"parent_id"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"resolved_company_id"?: string | null,"resolved_contact_id"?: string | null,"workspace_id": string
+                  }
+                  Update: {
+                    "capture_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"id"?: string,"kind"?: string,"label"?: string,"parent_id"?: string | null,"resolved_at"?: string | null,"resolved_by"?: string | null,"resolved_company_id"?: string | null,"resolved_contact_id"?: string | null,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "unresolved_entities_workspace_id_capture_id_fkey"
+      columns: ["workspace_id","capture_id"]
+isOneToOne: false
+      referencedRelation: "captures"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "unresolved_entities_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "unresolved_entities_workspace_id_parent_id_fkey"
+      columns: ["workspace_id","parent_id"]
+isOneToOne: false
+      referencedRelation: "unresolved_entities"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "unresolved_entities_workspace_id_resolved_company_id_fkey"
+      columns: ["workspace_id","resolved_company_id"]
+isOneToOne: false
+      referencedRelation: "companies"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "unresolved_entities_workspace_id_resolved_contact_id_fkey"
+      columns: ["workspace_id","resolved_contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"user_preferences": {
                   Row: {
                     "home": NonNullable<Json>,"updated_at": string,"user_id": string,"workspace_id": string
@@ -1373,6 +1459,9 @@ isOneToOne: false
                            },
 "owns_conversation":
 { Args: { "conv": string }; Returns: boolean
+                           },
+"refine_finding":
+{ Args: { "p_capture_id": string,"p_finding_id": string,"p_proposal_id": string,"p_reason": string,"p_relation": string,"p_statement": string }; Returns: undefined
                            },
 "shares_workspace_with":
 { Args: { "other": string }; Returns: boolean

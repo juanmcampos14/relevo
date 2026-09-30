@@ -96,13 +96,14 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   ]);
   // D/E: último estado de cada finding, validaciones propuestas y agendadas, errores y qué cambió desde ayer.
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
-  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes, { data: approvedFindings }] = await Promise.all([
-    supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
+  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes, { data: approvedFindings }, { count: unresolvedCount }] = await Promise.all([
+    supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status, maturity)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
     supabase.from("proposals").select("finding_id, payload, position").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
     supabase.from("tasks").select("finding_id, title, due_on").not("finding_id", "is", null).neq("status", "done").order("due_on", { nullsFirst: false }),
     supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "error"),
     changesSince(supabase, yesterday, today),
-    supabase.from("findings").select("id, statement").eq("review_status", "aprobado").order("created_at", { ascending: false }).limit(20),
+    supabase.from("findings").select("id, statement, maturity").eq("review_status", "aprobado").order("created_at", { ascending: false }).limit(20),
+    supabase.from("unresolved_entities").select("id", { count: "exact", head: true }).is("resolved_at", null),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
@@ -224,6 +225,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     pendingCaptures ? { href: `${base}/capturas`, title: `${pendingCaptures} ${pendingCaptures === 1 ? "captura sin procesar" : "capturas sin procesar"}`, meta: "Material de campo que todavía no es evidencia" } : null,
     captureErrors ? { href: `${base}/capturas`, title: `${captureErrors} ${captureErrors === 1 ? "captura con error" : "capturas con error"}`, meta: "Reintentar el procesamiento", danger: true } : null,
     (findings.count ?? 0) + (drafts.count ?? 0) ? { href: `${base}/oportunidades`, title: `${(findings.count ?? 0) + (drafts.count ?? 0)} hallazgos o borradores por revisar`, meta: `${findings.count ?? 0} hallazgos · ${drafts.count ?? 0} borradores de RELEVO AI` } : null,
+    unresolvedCount ? { href: `${base}/sin-identificar`, title: `${unresolvedCount} ${unresolvedCount === 1 ? "organización o persona" : "organizaciones o personas"} sin identificar`, meta: "Ya aportan evidencia: resolvelas cuando sepas quiénes son" } : null,
     overdueAdmin.length ? { href: overdueAdmin[0].href, title: `${overdueAdmin.length} ${overdueAdmin.length === 1 ? "pendiente vencido" : "pendientes vencidos"}`, meta: overdueAdmin.slice(0, 2).map((a) => a.title).join(" · "), danger: true } : null,
   ].filter((x): x is { href: string; title: string; meta: string; danger?: boolean } => !!x);
   const Hygiene = (
@@ -303,7 +305,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
       {findingsToValidate.length || evaluating.length ? (
         <List>
           {evaluating.map((f) => (
-            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.statement} meta="Evaluando qué falta saber…" />
+            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.statement} meta={`${MATURITY[f.maturity]} · evaluando qué falta saber…`} />
           ))}
           {findingsToValidate.map((a) => {
             const gap = (a.gaps as Gap[])[0];
@@ -314,7 +316,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
                 href={`${base}/hallazgos/${a.finding_id}`}
                 title={a.findings.statement}
                 tone={gap === "contradiccion_sin_resolver" ? "danger" : undefined}
-                meta={`${GAPS[gap].label} · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}${a.contradicts ? ` · ${a.contradicts} en contra` : ""}${v ? ` · sugerido: ${v.title}` : ""}`}
+                meta={`${MATURITY[a.findings.maturity]} · ${GAPS[gap].label.toLowerCase()} · ${a.independent_cases} ${a.independent_cases === 1 ? "caso" : "casos"}${a.contradicts ? ` · ${a.contradicts} en contra` : ""}${v ? ` · sugerido: ${v.title}` : ""}`}
               />
             );
           })}
@@ -429,3 +431,5 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
     </>
   );
 }
+
+const MATURITY: Record<string, string> = { idea: "Idea", hipotesis: "Hipótesis", finding: "Finding" };

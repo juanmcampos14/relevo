@@ -28,9 +28,9 @@ export type ProposalDraft = { kind: ProposalKind; position: number; payload: Rec
 
 type ExtractionLike = {
   summary: string;
-  company: { name: string; existing_id: string | null; locality: string | null; activity: string | null; quote: string | null } | null;
-  asset?: { title: string; kind: string; operation: string; address_text: string | null; locality: string | null; surface_m2: number | null; quote: string | null } | null;
-  people: { key: string; name: string | null; role: string | null; institutional: boolean; existing_id: string | null; quote: string | null }[];
+  company: { name: string; identified?: boolean; existing_id: string | null; resolves?: string | null; locality: string | null; activity: string | null; quote?: string | null } | null;
+  asset?: { title: string; kind: string; operation: string; address_text: string | null; locality: string | null; surface_m2: number | null; quote?: string | null } | null;
+  people: { key: string; name: string | null; role: string | null; institutional: boolean; existing_id: string | null; resolves?: string | null; quote?: string | null }[];
   evidence: {
     key: string;
     statement: string;
@@ -40,9 +40,19 @@ type ExtractionLike = {
     stated_by: string | null;
     declared_by: string | null;
     about: "company" | "asset" | "none";
-    related_findings: { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[];
+    related_findings?: { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[];
   }[];
-  finding_candidates: { statement: string; kind: string; rationale: string; supports: string[]; contradicts: string[]; existing_finding_id?: string | null }[];
+  finding_candidates: {
+    statement: string;
+    kind: string;
+    rationale: string;
+    supports: string[];
+    contradicts: string[];
+    existing_finding_id?: string | null;
+    relation?: "nueva" | "apoya" | "contradice" | "acota" | "amplia" | "segmenta";
+    refined_statement?: string | null;
+    is_idea?: boolean;
+  }[];
   next_actions: { title: string; why: string; contact: string | null; due: string | null }[];
 };
 
@@ -51,7 +61,11 @@ export type ProposalContext = {
   companies: { id: string; name: string; locality: string | null; website?: string | null; phone?: string | null }[];
   contacts: { id: string; name: string; role: string | null; company: string | null }[];
   findings: { id: string; statement: string }[];
+  unresolved?: { id: string; kind: "organization" | "actor"; label: string }[];
 };
+
+/** Cómo se relaciona lo nuevo con una hipótesis existente (refinar en vez de acumular contrapuestas). */
+export const REFINES = new Set(["acota", "amplia", "segmenta"]);
 
 const squash = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -92,19 +106,33 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
   const companyIds = new Map(ctx.companies.map((c) => [c.id, c]));
   const contactIds = new Map(ctx.contacts.map((c) => [c.id, c]));
   const findingIds = new Set(ctx.findings.map((f) => f.id));
+  const unresolvedOf = (id: string | null | undefined, kind: "organization" | "actor") => (id && ctx.unresolved?.some((u) => u.id === id && u.kind === kind) ? id : null);
+  // La relación de cada evidencia con findings existentes sale de las hipótesis candidatas.
+  const relatedByKey = new Map<string, { finding_id: string; stance: "supports" | "contradicts" | "contextual" }[]>();
+  for (const f of ex.finding_candidates) {
+    const id = f.existing_finding_id && findingIds.has(f.existing_finding_id) ? f.existing_finding_id : null;
+    if (!id) continue;
+    for (const [keys, stance] of [[f.supports, "supports"], [f.contradicts, "contradicts"]] as const) {
+      for (const k of keys) relatedByKey.set(k, [...(relatedByKey.get(k) ?? []).filter((r) => r.finding_id !== id), { finding_id: id, stance }]);
+    }
+  }
 
   if (ex.company?.name.trim()) {
     const c = ex.company;
-    const known = c.existing_id ? companyIds.get(c.existing_id) : undefined;
-    const matches: Match[] = known
-      ? [{ type: "company", id: known.id, name: known.name, reason: "sugerida por la IA" }]
-      : findCandidates({ id: "", name: c.name, locality: c.locality }, ctx.companies).map((m) => ({ type: "company" as const, id: m.id, name: m.name, reason: m.reason.replace(/_/g, " ") }));
-    push("company", { key: "c", name: c.name.trim(), locality: c.locality, activity: c.activity }, c.quote, matches);
+    // Sin nombre propio: organización sin identificar (no una empresa del CRM ni candidata a duplicado).
+    const identified = c.identified !== false;
+    const known = identified && c.existing_id ? companyIds.get(c.existing_id) : undefined;
+    const matches: Match[] = !identified
+      ? []
+      : known
+        ? [{ type: "company", id: known.id, name: known.name, reason: "sugerida por la IA" }]
+        : findCandidates({ id: "", name: c.name, locality: c.locality }, ctx.companies).map((m) => ({ type: "company" as const, id: m.id, name: m.name, reason: m.reason.replace(/_/g, " ") }));
+    push("company", { key: "c", name: c.name.trim(), identified, resolves: identified ? unresolvedOf(c.resolves, "organization") : null, locality: c.locality, activity: c.activity }, c.quote ?? null, matches);
   }
 
   if (ex.asset?.title.trim()) {
     const a = ex.asset;
-    push("asset", { key: "a", title: a.title.trim(), kind: a.kind, operation: a.operation, address_text: a.address_text, locality: a.locality, surface_m2: a.surface_m2 }, a.quote);
+    push("asset", { key: "a", title: a.title.trim(), kind: a.kind, operation: a.operation, address_text: a.address_text, locality: a.locality, surface_m2: a.surface_m2 }, a.quote ?? null);
   }
 
   const personKeys = new Set<string>();
@@ -118,7 +146,7 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
       : p.name
         ? ctx.contacts.filter((c) => normalizeName(c.name) === normalizeName(p.name!)).map((c) => ({ type: "contact" as const, id: c.id, name: c.name, reason: "mismo nombre" }))
         : [];
-    push("person", { key: p.key, name: p.name?.trim() || null, role: p.role, institutional: p.institutional || !p.name, company_key: ex.company ? "c" : null }, p.quote, matches);
+    push("person", { key: p.key, name: p.name?.trim() || null, role: p.role, institutional: p.institutional || !p.name, company_key: ex.company ? "c" : null, resolves: p.name?.trim() ? unresolvedOf(p.resolves, "actor") : null }, p.quote ?? null, matches);
   }
 
   const evidenceKeys = new Set<string>();
@@ -134,7 +162,7 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
       stated_by: e.origin === "declarado_por_persona" && e.stated_by && personKeys.has(e.stated_by) ? e.stated_by : null,
       declared_by: e.origin === "declarado_por_documento" ? e.declared_by?.trim() || "documento o cartel" : null,
       about,
-      related_findings: e.related_findings.filter((r) => findingIds.has(r.finding_id)),
+      related_findings: [...(e.related_findings ?? []), ...(relatedByKey.get(e.key) ?? [])].filter((r, i, all) => findingIds.has(r.finding_id) && all.findIndex((x) => x.finding_id === r.finding_id) === i),
     }, e.quote);
   }
 
@@ -147,8 +175,13 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
       ...(same ? [{ type: "finding" as const, id: same, name: ctx.findings.find((x) => x.id === same)!.statement, reason: "la IA lo identifica como la misma hipótesis" }] : []),
       ...byText.filter((x) => x.id !== same).slice(0, 2).map((x) => ({ type: "finding" as const, id: x.id, name: x.statement, reason: "redacción parecida" })),
     ];
+    const relation = same ? (f.relation && f.relation !== "nueva" ? f.relation : "apoya") : "nueva";
     out.push({ kind: "finding", position: out.length, quote: null, matches, payload: {
       link_to: same,
+      relation,
+      // Acota, amplía o segmenta: la hipótesis existente reformulada (se registra como revisión al aceptar).
+      refined_statement: same && REFINES.has(relation) && f.refined_statement?.trim() ? f.refined_statement.trim() : null,
+      is_idea: f.is_idea === true,
       statement: f.statement.trim(),
       kind: f.kind,
       rationale: f.rationale,

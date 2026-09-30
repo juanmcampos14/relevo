@@ -97,7 +97,7 @@ export async function processCapture(
       ...transcribed.filter((t) => t.text).map((t, i) => `[Audio ${i + 1}${t.durationMs ? `, ${formatDuration(t.durationMs)}` : ""}, transcripción automática]\n${t.text}`),
     ].filter(Boolean).join("\n\n");
 
-    const [companies, contacts, findings, author, mission, images] = await Promise.all([
+    const [companies, contacts, findings, author, mission, images, unresolved] = await Promise.all([
       db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone").order("updated_at", { ascending: false }).limit(400),
       db.from("contacts").select("id, full_name, role_title, contact_links(companies(trade_name, legal_name))").order("updated_at", { ascending: false }).limit(400),
       db.from("findings").select("id, statement").neq("review_status", "rechazado").order("created_at", { ascending: false }).limit(150),
@@ -109,6 +109,7 @@ export async function processCapture(
           return data ? { mediaType: p.mime_type as "image/jpeg", base64: Buffer.from(await data.arrayBuffer()).toString("base64") } : null;
         }),
       ),
+      db.from("unresolved_entities").select("id, kind, label").is("resolved_at", null).order("created_at", { ascending: false }).limit(100),
     ]);
     const companyList = (companies.data ?? []).map((c) => ({ id: c.id, name: c.trade_name ?? c.legal_name ?? "", locality: c.locality, website: c.website, phone: c.public_phone }));
     const contactList = (contacts.data ?? []).map((c) => ({
@@ -118,6 +119,7 @@ export async function processCapture(
       company: c.contact_links.map((l) => l.companies?.trade_name ?? l.companies?.legal_name).find(Boolean) ?? null,
     }));
     const findingList = findings.data ?? [];
+    const unresolvedList = (unresolved.data ?? []) as { id: string; kind: "organization" | "actor"; label: string }[];
 
     const result = await extractCapture(opts.client ?? new Anthropic(), {
       capturedAt: formatAR(capture.captured_at),
@@ -129,6 +131,7 @@ export async function processCapture(
       companies: companyList,
       contacts: contactList,
       findings: findingList,
+      unresolved: unresolvedList,
     });
 
     const { data: run } = await db
@@ -151,7 +154,7 @@ export async function processCapture(
       .single();
     if (!result.ok) return fail(result.error, run?.id ?? null);
 
-    const drafts = buildProposals(result.extraction, { body: fullText, companies: companyList, contacts: contactList, findings: findingList });
+    const drafts = buildProposals(result.extraction, { body: fullText, companies: companyList, contacts: contactList, findings: findingList, unresolved: unresolvedList });
     // Evidencia dicha en un audio: se guarda en qué momento del audio está, para escucharla.
     for (const d of drafts) {
       const where = d.kind === "evidence" || d.kind === "person" ? locateInAudio(d.quote, transcribed) : null;
@@ -178,6 +181,7 @@ export async function processCapture(
       .update({
         status: drafts.length ? "propuestas_listas" : "revisado",
         ai_summary: [result.extraction.summary, ...notes].join(" "),
+        ai_unknowns: result.extraction.unknowns.map((u) => u.trim()).filter(Boolean).slice(0, 5),
         processed_at: new Date().toISOString(),
         ai_run_id: run?.id ?? null,
       })

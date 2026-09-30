@@ -48,6 +48,9 @@ export type EvidenceLink = {
   capture_id: string | null;
   visit_id: string | null;
   source_id: string | null;
+  /** Organización o actor todavía sin identificar: también es un caso (y el mismo en cada dato suyo). */
+  about_unresolved_id?: string | null;
+  stated_by_unresolved_id?: string | null;
 };
 
 export type Metrics = { supports: number; contradicts: number; contextual: number; independentCases: number; verified: number; stale: number };
@@ -58,7 +61,7 @@ export type Metrics = { supports: number; contradicts: number; contextual: numbe
  */
 export function metrics(links: EvidenceLink[], today: string): Metrics {
   const supports = links.filter((l) => l.stance === "supports");
-  const cases = new Set(supports.map((l) => l.company_id ?? l.stated_by_contact_id ?? l.capture_id ?? l.visit_id ?? l.source_id ?? l.id));
+  const cases = new Set(supports.map((l) => l.company_id ?? l.about_unresolved_id ?? l.stated_by_contact_id ?? l.stated_by_unresolved_id ?? l.capture_id ?? l.visit_id ?? l.source_id ?? l.id));
   return {
     supports: supports.length,
     contradicts: links.filter((l) => l.stance === "contradicts").length,
@@ -175,7 +178,7 @@ export function evidenceEffect(
 
 // --- E3: memoria de evolución ----------------------------------------------------
 
-export type TimelineEvent = { at: string; kind: "apertura" | "caso" | "mismo_caso" | "contradiccion" | "contexto" | "faltante_resuelto" | "faltante_nuevo" | "validacion_agendada" | "validacion_hecha"; text: string };
+export type TimelineEvent = { at: string; kind: "apertura" | "caso" | "mismo_caso" | "contradiccion" | "contexto" | "faltante_resuelto" | "faltante_nuevo" | "validacion_agendada" | "validacion_hecha" | "reformulada" | "madurez"; text: string };
 
 /**
  * Cómo llegó un finding a su estado actual: se reconstruye en orden a partir de la evidencia
@@ -187,6 +190,7 @@ export function findingTimeline(input: {
   links: (EvidenceLink & { linkedAt: string; statement: string })[];
   assessments: { at: string; gaps: string[] }[];
   validations: { title: string; createdAt: string; completedAt: string | null }[];
+  revisions?: { at: string; kind: "enunciado" | "madurez"; relation: string | null; previous: string; next: string }[];
 }): TimelineEvent[] {
   const ev: TimelineEvent[] = [{ at: input.createdAt, kind: "apertura", text: `Se abrió la hipótesis${input.origin ? ` (${input.origin})` : ""}.` }];
   const sorted = [...input.links].sort((a, b) => a.linkedAt.localeCompare(b.linkedAt));
@@ -213,6 +217,15 @@ export function findingTimeline(input: {
   for (const v of input.validations) {
     ev.push({ at: v.createdAt, kind: "validacion_agendada", text: `Validación agendada: ${v.title}.` });
     if (v.completedAt) ev.push({ at: v.completedAt, kind: "validacion_hecha", text: `Validación hecha: ${v.title}.` });
+  }
+  const MAT: Record<string, string> = { idea: "idea", hipotesis: "hipótesis", finding: "finding" };
+  const REL: Record<string, string> = { acota: "se acotó", amplia: "se amplió", segmenta: "se segmentó" };
+  for (const r of input.revisions ?? []) {
+    ev.push(
+      r.kind === "enunciado"
+        ? { at: r.at, kind: "reformulada", text: `La hipótesis ${REL[r.relation ?? ""] ?? "se reformuló"}: antes «${r.previous}».` }
+        : { at: r.at, kind: "madurez", text: `Pasó de ${MAT[r.previous] ?? r.previous} a ${MAT[r.next] ?? r.next} (decisión humana).` },
+    );
   }
   return ev.sort((a, b) => a.at.localeCompare(b.at));
 }

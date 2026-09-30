@@ -52,18 +52,23 @@ beforeAll(async () => {
   captureId = id as string;
   extraction = {
     summary: "Empresa de flota en Añelo deriva mantenimiento a Neuquén.",
-    company: { name: "Empresa X", existing_id: null, locality: "Añelo", activity: "Flota de camionetas", quote: null },
+    company: { name: "Empresa X", identified: true, existing_id: null, resolves: null, locality: "Añelo", activity: "Flota de camionetas" },
     asset: null,
     people: [
-      { key: "p1", name: null, role: "Encargado", institutional: true, existing_id: null, quote: "el encargado" },
-      { key: "p2", name: "Laura", role: "Compras", institutional: false, existing_id: null, quote: "Laura de Compras" },
+      { key: "p1", name: null, role: "Encargado", institutional: true, existing_id: null, resolves: null },
+      { key: "p2", name: "Laura", role: "Compras", institutional: false, existing_id: null, resolves: null },
     ],
     evidence: [
-      { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [] },
-      { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const, related_findings: [{ finding_id: existingFinding, stance: "contradicts" }] },
-      { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observado", declared_by: null, stated_by: null, about: "company" as const, related_findings: [] },
+      { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const },
+      { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const },
+      { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observado", declared_by: null, stated_by: null, about: "company" as const },
     ],
-    finding_candidates: [{ statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", existing_finding_id: null, kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] }],
+    finding_candidates: [
+      { statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", existing_finding_id: null, relation: "nueva", refined_statement: null, is_idea: false, kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] },
+      // Contraevidencia contra una hipótesis existente: se suma ahí (no crea otra).
+      { statement: "Los talleres de Añelo alcanzan", existing_finding_id: existingFinding, relation: "contradice", refined_statement: null, is_idea: false, kind: "observacion", rationale: "Deriva unidades a Neuquén.", supports: [], contradicts: ["e2"] },
+    ],
+    unknowns: ["Frecuencia real de derivaciones", "Quién decide la compra"],
     next_actions: [{ title: "Hablar con Laura (Compras) sobre frecuencia, gasto y proceso de compra", why: "Validar el costo del traslado", contact: "p2", due: null }],
   };
 });
@@ -87,15 +92,15 @@ describe("captura → propuestas → revisión → objetos", () => {
 
   it("procesar deja propuestas revisables (no escribe objetos) y registra la corrida", async () => {
     const res = await processCapture(db, { workspaceId: ws, settings, userId, captureId, client: fakeClient });
-    expect(res).toEqual({ ok: true, proposals: 8 });
+    expect(res).toEqual({ ok: true, proposals: 9 });
     const ps = await proposals();
-    expect(ps.map((p) => p.kind)).toEqual(["company", "person", "person", "evidence", "evidence", "evidence", "finding", "next_action"]);
+    expect(ps.map((p) => p.kind)).toEqual(["company", "person", "person", "evidence", "evidence", "evidence", "finding", "finding", "next_action"]);
     expect(ps.every((p) => p.status === "propuesta")).toBe(true);
     expect(ps[3].quote).toBe("Tienen 35 camionetas");
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });
     expect(count).toBe(0);
-    const { data: cap } = await db.from("captures").select("status, ai_summary, ai_run_id, body").eq("id", captureId).single();
-    expect(cap).toMatchObject({ status: "propuestas_listas", body: NOTE });
+    const { data: cap } = await db.from("captures").select("status, ai_summary, ai_run_id, body, ai_unknowns").eq("id", captureId).single();
+    expect(cap).toMatchObject({ status: "propuestas_listas", body: NOTE, ai_unknowns: ["Frecuencia real de derivaciones", "Quién decide la compra"] });
     const { data: run } = await db.from("ai_runs").select("status, input_tokens, cost_usd").eq("id", cap!.ai_run_id!).single();
     expect(run).toMatchObject({ status: "ok", input_tokens: 1200 });
   });
@@ -119,11 +124,12 @@ describe("captura → propuestas → revisión → objetos", () => {
     expect(await decide(ps[4].id, "aceptar")).toMatchObject({ ok: true, message: /contradice/ });
     expect(await decide(ps[5].id, "rechazar")).toMatchObject({ ok: true });
     expect(await decide(ps[6].id, "aceptar")).toMatchObject({ ok: true, message: /2 evidencias/ });
-    expect(await decide(ps[7].id, "aceptar")).toMatchObject({ ok: true });
-    expect(await decide(ps[7].id, "aceptar")).toMatchObject({ ok: false, message: /ya se decidió/ });
+    expect(await decide(ps[7].id, "aceptar")).toMatchObject({ ok: true, message: /hipótesis existente/ });
+    expect(await decide(ps[8].id, "aceptar")).toMatchObject({ ok: true });
+    expect(await decide(ps[8].id, "aceptar")).toMatchObject({ ok: false, message: /ya se decidió/ });
 
     ps = await proposals();
-    expect(ps.map((p) => p.status)).toEqual(["aceptada", "aceptada", "editada", "aceptada", "aceptada", "rechazada", "aceptada", "aceptada"]);
+    expect(ps.map((p) => p.status)).toEqual(["aceptada", "aceptada", "editada", "aceptada", "aceptada", "rechazada", "aceptada", "aceptada", "aceptada"]);
     const companyId = ps[0].result_id!;
 
     const { data: target } = await db.from("campaign_targets").select("status, owner_id").eq("company_id", companyId).single();
@@ -144,8 +150,10 @@ describe("captura → propuestas → revisión → objetos", () => {
     expect(fe).toEqual([{ existing: false, stance: "supports" }, { existing: false, stance: "supports" }, { existing: true, stance: "contradicts" }]);
     const { data: finding } = await db.from("findings").select("statement, review_status, origin, company_id, sources(kind, reference)").eq("id", ps[6].result_id!).single();
     expect(finding).toMatchObject({ review_status: "aprobado", origin: "ia", company_id: companyId, sources: { kind: "observacion", reference: `captura:${captureId}` } });
+    const { data: maturity } = await db.from("findings").select("maturity").eq("id", ps[6].result_id!).single();
+    expect(maturity!.maturity).toBe("hipotesis");
 
-    const { data: task } = await db.from("tasks").select("title, assignee_id, contact_id, target_id").eq("id", ps[7].result_id!).single();
+    const { data: task } = await db.from("tasks").select("title, assignee_id, contact_id, target_id").eq("id", ps[8].result_id!).single();
     expect(task).toMatchObject({ assignee_id: userId, contact_id: ps[2].result_id });
     expect(task!.target_id).not.toBeNull();
 
@@ -155,7 +163,7 @@ describe("captura → propuestas → revisión → objetos", () => {
 
   it("vincular con una empresa existente no crea otra", async () => {
     const { data: other } = await db.rpc("create_capture", { p: { workspace_id: ws, client_id: randomUUID(), body: "Volví a Empresa X, siguen mandando camionetas a Neuquén.", captured_at: new Date().toISOString(), ai_consent: true, media: [] } });
-    extraction = { ...extraction, company: { name: "Empresa X", existing_id: null, locality: "Añelo", activity: null, quote: null }, people: [], evidence: [], finding_candidates: [], next_actions: [] };
+    extraction = { ...extraction, company: { name: "Empresa X", identified: true, existing_id: null, resolves: null, locality: "Añelo", activity: null }, people: [], evidence: [], finding_candidates: [], next_actions: [] };
     await processCapture(db, { workspaceId: ws, settings, userId, captureId: other as string, client: fakeClient });
     const { data: ps } = await db.from("proposals").select("id, matches").eq("capture_id", other as string);
     const match = (ps![0].matches as { id: string }[])[0];

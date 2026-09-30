@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { freshnessFor, revalidateAfter } from "@/domain/evidence";
 import type { evidenceType } from "@/domain/catalogs";
+import { approvalOrder, captureExceptions, type ReviewProposal } from "@/domain/capture-review";
 
 type Db = SupabaseClient<Database>;
 type EvidenceType = (typeof evidenceType.values)[number];
@@ -15,6 +16,7 @@ type Proposal = {
   payload: Record<string, unknown>;
   quote: string | null;
   result_id: string | null;
+  result_type?: string | null;
 };
 
 export type Decision = { action: "aceptar" | "rechazar"; edits?: Record<string, unknown> };
@@ -22,6 +24,8 @@ export type Decision = { action: "aceptar" | "rechazar"; edits?: Record<string, 
 export type PromoteResult = { ok: true; message: string; resultId?: string; affectedFindings?: string[] } | { ok: false; message: string };
 
 const decided = (p?: Proposal) => !!p && (p.status === "aceptada" || p.status === "editada");
+/** Quedó como entidad sin identificar (no como empresa o persona del CRM). */
+const unresolved = (p?: Proposal) => decided(p) && p!.result_type === "unresolved";
 
 /**
  * Aceptar, editar o rechazar una propuesta. Aceptar crea el objeto RELEVO con el MISMO id de la
@@ -46,7 +50,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
 
   const [{ data: capture }, { data: siblings }] = await Promise.all([
     db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id, latitude, longitude, location_accuracy_m").eq("id", captureId).single(),
-    db.from("proposals").select("id, kind, status, payload, quote, result_id").eq("capture_id", captureId),
+    db.from("proposals").select("id, kind, status, payload, quote, result_id, result_type").eq("capture_id", captureId),
   ]);
   if (!capture) return { ok: false, message: "Captura no encontrada." };
   const all = (siblings ?? []) as unknown as Proposal[];
@@ -64,7 +68,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   const need = (dep: Proposal | undefined, what: string): string | null =>
     dep && dep.status === "propuesta" ? `Primero decidí ${what} (más arriba).` : null;
 
-  let resultType: "company" | "asset" | "contact" | "evidence" | "finding" | "task";
+  let resultType: "company" | "asset" | "contact" | "evidence" | "finding" | "task" | "unresolved";
   let resultId: string = prop.id;
   let message: string;
   let affectedFindings: string[] = [];
@@ -73,6 +77,17 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
     switch (prop.kind) {
       case "company": {
         resultType = "company";
+        if (p.identified === false && !(typeof p.link_to === "string" && p.link_to)) {
+          // Sabemos que existe una organización, no cuál: se guarda y se relaciona, sin ensuciar Empresas.
+          resultType = "unresolved";
+          const { error } = await db.from("unresolved_entities").upsert(
+            { id: prop.id, workspace_id: ws, kind: "organization", label: String(p.name ?? "Organización sin identificar").trim(), description: (p.activity as string | null) ?? null, capture_id: capture.id },
+            { onConflict: "id", ignoreDuplicates: true },
+          );
+          if (error) throw error;
+          message = "Guardada como organización sin identificar: cuando se sepa cuál es, se resuelve y conserva su historia.";
+          break;
+        }
         if (typeof p.link_to === "string" && p.link_to) {
           resultId = p.link_to;
           message = "Vinculada con la empresa existente: no se creó otra.";
@@ -91,6 +106,10 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             const { error } = await db.from("campaign_targets").insert({ workspace_id: ws, campaign_id: capture.campaign_id, company_id: resultId, status: "investigacion", owner_id: opts.userId });
             if (error) throw error;
           }
+        }
+        if (typeof p.resolves === "string" && p.resolves) {
+          affectedFindings = (await resolveEntity(db, { workspaceId: ws, userId: opts.userId, entityId: p.resolves, companyId: resultId })).affectedFindings;
+          message += " Era la organización sin identificar de antes: su evidencia pasó a esta empresa.";
         }
         break;
       }
@@ -136,9 +155,29 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
         resultType = "contact";
         const blocked = need(company, "la empresa");
         if (blocked) return { ok: false, message: blocked };
-        const companyId = decided(company) ? company!.result_id : null;
-        if (typeof p.link_to === "string" && p.link_to) {
-          resultId = p.link_to;
+        const companyId = decided(company) && !unresolved(company) ? company!.result_id : null;
+        const linked = typeof p.link_to === "string" && p.link_to ? p.link_to : null;
+        // Sin nombre y sin una empresa conocida ("un chofer de una petrolera", "el encargado de esa contratista"):
+        // actor sin identificar. Un área de una empresa conocida ("Compras") sigue siendo canal institucional.
+        if (!linked && !p.name && (!p.institutional || !companyId)) {
+          resultType = "unresolved";
+          const { error } = await db.from("unresolved_entities").upsert(
+            {
+              id: prop.id,
+              workspace_id: ws,
+              kind: "actor",
+              label: String(p.role || "Persona sin identificar").trim(),
+              parent_id: unresolved(company) ? company!.result_id : null,
+              capture_id: capture.id,
+            },
+            { onConflict: "id", ignoreDuplicates: true },
+          );
+          if (error) throw error;
+          message = "Guardada como persona sin identificar: lo que dijo queda como evidencia y se puede resolver después.";
+          break;
+        }
+        if (linked) {
+          resultId = linked;
           message = "Vinculada con la persona existente: no se creó otra.";
         } else {
           const institutional = p.institutional === true || !p.name;
@@ -162,6 +201,10 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             { onConflict: "contact_id,company_id,establishment_id,asset_id", ignoreDuplicates: true },
           );
           if (error) throw error;
+        }
+        if (typeof p.resolves === "string" && p.resolves) {
+          affectedFindings = (await resolveEntity(db, { workspaceId: ws, userId: opts.userId, entityId: p.resolves, contactId: resultId })).affectedFindings;
+          message += " Era la persona sin identificar de antes: lo que dijo pasó a esta persona.";
         }
         break;
       }
@@ -194,9 +237,11 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             media_start_ms: (p.audio as { start_ms?: number } | undefined)?.start_ms ?? null,
             media_end_ms: (p.audio as { end_ms?: number } | undefined)?.end_ms ?? null,
             campaign_id: capture.campaign_id,
-            company_id: about === "company" && decided(company) ? company!.result_id : null,
+            company_id: about === "company" && decided(company) && !unresolved(company) ? company!.result_id : null,
+            about_unresolved_id: about === "company" && unresolved(company) ? company!.result_id : null,
             asset_id: about === "asset" && decided(asset) ? asset!.result_id : null,
-            stated_by_contact_id: decided(speaker) ? speaker!.result_id : null,
+            stated_by_contact_id: decided(speaker) && !unresolved(speaker) ? speaker!.result_id : null,
+            stated_by_unresolved_id: unresolved(speaker) ? speaker!.result_id : null,
           },
           { onConflict: "id", ignoreDuplicates: true },
         );
@@ -226,7 +271,19 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           }
           resultId = p.link_to;
           affectedFindings = [p.link_to];
-          message = `Se sumaron ${links.length} evidencia${links.length === 1 ? "" : "s"} al finding existente (no se creó otro).`;
+          message = `Se sumaron ${links.length} evidencia${links.length === 1 ? "" : "s"} a la hipótesis existente (no se creó otra).`;
+          // Acota, amplía o segmenta: la hipótesis se reformula y el cambio queda registrado.
+          const refined = typeof p.refined_statement === "string" ? p.refined_statement.trim() : "";
+          if (refined && ["acota", "amplia", "segmenta"].includes(String(p.relation))) {
+            const { data: current } = await db.from("findings").select("statement").eq("id", p.link_to).single();
+            if (current && current.statement !== refined) {
+              const { error: e3 } = await db.rpc("refine_finding", {
+                p_finding_id: p.link_to, p_statement: refined, p_relation: String(p.relation), p_reason: (p.rationale as string | null) ?? "", p_capture_id: capture.id, p_proposal_id: prop.id,
+              });
+              if (e3) throw e3;
+              message += ` La hipótesis se reformuló (${p.relation === "amplia" ? "amplía" : p.relation}).`;
+            }
+          }
           break;
         }
         if (p.about_company) {
@@ -240,7 +297,9 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             workspace_id: ws,
             source_id: sourceId,
             campaign_id: capture.campaign_id,
-            company_id: p.about_company && decided(company) ? company!.result_id : null,
+            company_id: p.about_company && decided(company) && !unresolved(company) ? company!.result_id : null,
+            // Aceptar una hipótesis exploratoria no la vuelve un finding consolidado: eso es otra promoción humana.
+            maturity: p.is_idea ? "idea" : "hipotesis",
             kind: String(p.kind || "observacion"),
             statement: String(p.statement),
             analysis: (p.rationale as string | null) ?? null,
@@ -257,7 +316,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           if (e2) throw e2;
         }
         affectedFindings = [prop.id];
-        message = `Finding promovido con ${links.length} evidencia${links.length === 1 ? "" : "s"} vinculada${links.length === 1 ? "" : "s"}.`;
+        message = `${p.is_idea ? "Idea" : "Hipótesis"} guardada con ${links.length} evidencia${links.length === 1 ? "" : "s"} vinculada${links.length === 1 ? "" : "s"}.`;
         break;
       }
       case "next_action": {
@@ -266,7 +325,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
         const blocked = (p.about_company ? need(company, "la empresa") : null) ?? need(who, "la persona");
         if (blocked) return { ok: false, message: blocked };
         let targetId: string | null = null;
-        if (decided(company) && capture.campaign_id) {
+        if (decided(company) && !unresolved(company) && capture.campaign_id) {
           const { data } = await db.from("campaign_targets").select("id").eq("campaign_id", capture.campaign_id).eq("company_id", company!.result_id!).maybeSingle();
           targetId = data?.id ?? null;
         }
@@ -275,11 +334,11 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             id: prop.id,
             workspace_id: ws,
             title: String(p.title),
-            description: [p.why, "Surgió de una captura de campo."].filter(Boolean).join("\n"),
+            description: [p.why, unresolved(who) ? `Con: ${String(who!.payload.role ?? "persona")} (sin identificar)` : null, "Surgió de una captura de campo."].filter(Boolean).join("\n"),
             due_on: (p.due as string | null) || null,
             assignee_id: opts.userId,
             target_id: targetId,
-            contact_id: decided(who) ? who!.result_id : null,
+            contact_id: decided(who) && !unresolved(who) ? who!.result_id : null,
             kind: "Seguimiento",
           },
           { onConflict: "id", ignoreDuplicates: true },
@@ -403,5 +462,78 @@ export async function acceptGroup(
       out.affectedFindings.push(...(res.affectedFindings ?? []));
     } else out.skipped.push(res.message);
   }
+  return out;
+}
+
+/**
+ * Resolver una entidad sin identificar contra la empresa o persona real: su evidencia pasa a esa
+ * entidad (conservando a quién apuntaba antes) y se crean las relaciones que ahora se conocen.
+ */
+export async function resolveEntity(
+  db: Db,
+  opts: { workspaceId: string; userId: string; entityId: string; companyId?: string; contactId?: string },
+): Promise<{ ok: boolean; message: string; affectedFindings: string[] }> {
+  const { data: u } = await db.from("unresolved_entities").select("id, kind, parent_id, resolved_company_id, resolved_contact_id").eq("id", opts.entityId).maybeSingle();
+  if (!u) return { ok: false, message: "No se encontró esa entidad sin identificar.", affectedFindings: [] };
+  const ws = opts.workspaceId;
+  if (u.kind === "organization") {
+    if (!opts.companyId) return { ok: false, message: "Elegí la empresa.", affectedFindings: [] };
+    await db.from("unresolved_entities").update({ resolved_company_id: opts.companyId, resolved_at: new Date().toISOString(), resolved_by: opts.userId }).eq("id", u.id);
+    await db.from("evidence").update({ company_id: opts.companyId }).eq("about_unresolved_id", u.id).is("company_id", null);
+    // Quienes hablaron de ella quedan vinculados a la empresa (personas ya identificadas o que se identifiquen después).
+    const [{ data: speakers }, { data: actors }] = await Promise.all([
+      db.from("evidence").select("stated_by_contact_id").eq("about_unresolved_id", u.id).not("stated_by_contact_id", "is", null),
+      db.from("unresolved_entities").select("resolved_contact_id").eq("parent_id", u.id).not("resolved_contact_id", "is", null),
+    ]);
+    const contacts = [...new Set([...(speakers ?? []).map((x) => x.stated_by_contact_id!), ...(actors ?? []).map((x) => x.resolved_contact_id!)])];
+    if (contacts.length) {
+      await db.from("contact_links").upsert(
+        contacts.map((c) => ({ workspace_id: ws, contact_id: c, company_id: opts.companyId!, relation: "otro" })),
+        { onConflict: "contact_id,company_id,establishment_id,asset_id", ignoreDuplicates: true },
+      );
+    }
+  } else {
+    if (!opts.contactId) return { ok: false, message: "Elegí la persona.", affectedFindings: [] };
+    await db.from("unresolved_entities").update({ resolved_contact_id: opts.contactId, resolved_at: new Date().toISOString(), resolved_by: opts.userId }).eq("id", u.id);
+    await db.from("evidence").update({ stated_by_contact_id: opts.contactId }).eq("stated_by_unresolved_id", u.id).is("stated_by_contact_id", null);
+    if (u.parent_id) {
+      const { data: parent } = await db.from("unresolved_entities").select("resolved_company_id").eq("id", u.parent_id).maybeSingle();
+      if (parent?.resolved_company_id) {
+        await db.from("contact_links").upsert(
+          { workspace_id: ws, contact_id: opts.contactId, company_id: parent.resolved_company_id, relation: "otro" },
+          { onConflict: "contact_id,company_id,establishment_id,asset_id", ignoreDuplicates: true },
+        );
+      }
+    }
+  }
+  const { data: ev } = await db.from("evidence").select("id").or(`about_unresolved_id.eq.${u.id},stated_by_unresolved_id.eq.${u.id}`);
+  const ids = (ev ?? []).map((e) => e.id);
+  const { data: links } = ids.length ? await db.from("finding_evidence").select("finding_id").in("evidence_id", ids) : { data: [] };
+  return { ok: true, message: "Resuelta: su evidencia e historia quedaron en la entidad real.", affectedFindings: [...new Set((links ?? []).map((l) => l.finding_id))] };
+}
+
+/**
+ * "Aprobar propuesta": acepta lo normal de la captura en orden de dependencias y deja pendiente lo que
+ * requiere una decisión (posible duplicado, reformular una hipótesis, identificar a alguien) y lo que
+ * depende de eso. Cada aceptación es la misma que una por una: mismas escrituras, misma trazabilidad.
+ */
+export async function approveCapture(
+  db: Db,
+  opts: { workspaceId: string; settings: unknown; userId: string; captureId: string },
+): Promise<{ accepted: number; pending: string[]; failed: string[]; affectedFindings: string[] }> {
+  const { data } = await db.from("proposals").select("id, kind, status, payload, matches").eq("capture_id", opts.captureId).order("position");
+  const all = (data ?? []) as unknown as ReviewProposal[];
+  const exceptions = captureExceptions(all);
+  const out = { accepted: 0, pending: [...exceptions.values()], failed: [] as string[], affectedFindings: [] as string[] };
+  for (const p of approvalOrder(all)) {
+    if (p.status !== "propuesta" || exceptions.has(p.id)) continue;
+    const res = await decideProposal(db, { ...opts, proposalId: p.id, decision: { action: "aceptar" } });
+    if (res.ok) {
+      out.accepted++;
+      out.affectedFindings.push(...(res.affectedFindings ?? []));
+    } else if (res.message.startsWith("Primero decidí")) out.pending.push(res.message);
+    else out.failed.push(res.message);
+  }
+  out.affectedFindings = [...new Set(out.affectedFindings)];
   return out;
 }

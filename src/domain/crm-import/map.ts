@@ -18,7 +18,8 @@ export type IssueCode =
   | "referencia_rota"
   | "posible_duplicado"
   | "propietario_sin_validar"
-  | "sin_nombre";
+  | "sin_nombre"
+  | "sin_empresa";
 
 export type Proposal = { label: string; patch: Record<string, unknown> };
 export type Issue = { code: IssueCode; severity: Severity; field?: string; message: string; proposal?: Proposal };
@@ -196,10 +197,9 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
   if (evidence.freeText) {
     issues.push({
       code: "estado_texto_libre",
-      severity: "revisar",
+      severity: "info",
       field: "Estado de evidencia",
-      message: `Estado de evidencia en texto libre: "${v["Estado de evidencia"]}". Se importa como parcialmente verificado.`,
-      proposal: { label: "Importar como parcialmente verificado y guardar el texto en notas", patch: { verification_status: "partially_verified" } },
+      message: `Estado de evidencia en texto libre: "${v["Estado de evidencia"]}". Se importa como parcialmente verificado y el texto queda como nota de evidencia.`,
     });
   }
 
@@ -263,6 +263,7 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
 }
 
 const INSTITUTIONAL = /persona por identificar|\(cargo|^area |^área /i;
+const DECLARED_INSTITUTIONAL = /persona por identificar/i;
 const CHANNEL: [RegExp, ContactValues["preferred_channel"]][] = [
   [/whats/i, "whatsapp"],
   [/tel[eé]fono/i, "telefono"],
@@ -276,17 +277,24 @@ export function mapContact(r: RawRow): Mapped<ContactValues> {
   const id = txt(v["ID"]) ?? "";
   const rawName = txt(v["Nombre"]) ?? "";
   if (!rawName) issues.push({ code: "sin_nombre", severity: "bloquea", message: "El contacto no tiene nombre." });
-  const kind: ContactValues["contact_kind"] = "persona";
-  const name = rawName;
+  let kind: ContactValues["contact_kind"] = "persona";
+  let name = rawName;
   const access = txt(v["Acceso / vínculo"]);
   if (INSTITUTIONAL.test(rawName) || /institucional/i.test(access ?? "")) {
     const cleaned = rawName.replace(/\s*\((?:cargo;?\s*)?persona por identificar\)\s*/i, "").replace(/\s*\(cargo[^)]*\)\s*/i, "").trim() || rawName;
-    issues.push({
-      code: "canal_institucional",
-      severity: "revisar",
-      message: `"${rawName}" es un cargo o buzón, todavía no una persona identificada.`,
-      proposal: { label: `Guardarlo como canal institucional "${cleaned}"`, patch: { contact_kind: "canal_institucional", full_name: cleaned } },
-    });
+    if (DECLARED_INSTITUTIONAL.test(rawName)) {
+      // El Sheet ya lo declara ("persona por identificar"): no hay nada que decidir, entra como canal.
+      kind = "canal_institucional";
+      name = cleaned;
+      issues.push({ code: "canal_institucional", severity: "info", message: `"${rawName}" entra como canal institucional "${cleaned}" (el Sheet lo marca como persona por identificar).` });
+    } else {
+      issues.push({
+        code: "canal_institucional",
+        severity: "revisar",
+        message: `"${rawName}" es un cargo o buzón, todavía no una persona identificada.`,
+        proposal: { label: `Guardarlo como canal institucional "${cleaned}"`, patch: { contact_kind: "canal_institucional", full_name: cleaned } },
+      });
+    }
   }
   const email = txt(v["Correo"]);
   const phone = txt(v["Teléfono"]);

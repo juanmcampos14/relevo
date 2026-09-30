@@ -120,6 +120,11 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: strict({ lat: { type: "number" }, lng: { type: "number" }, radius_m: { type: "integer", minimum: 100, maximum: 25000 }, category: { type: "string", enum: [...PLACE_CATEGORY_KEYS] } }),
   },
   {
+    name: "context_documents",
+    description: "Documentos de contexto del equipo (p. ej. la presentación de las 16 verticales: metodología, ficha común por vertical, preguntas de campo; el kickoff de la misión). Sin 'document_ref' lista los vigentes con su resumen; con 'document_ref' devuelve el texto completo (o los párrafos que contienen 'query'). Usalo para entender por qué y cómo se pensó el trabajo, qué preguntas hacer en una vertical o cómo encaja algo en el mapa. NO es evidencia: si la evidencia o la memoria dicen otra cosa, mandan ellas.",
+    input_schema: strict({ document_ref: { type: "string", description: "document:uuid" }, query: { type: "string" } }),
+  },
+  {
     name: "open_page",
     description: "Lleva al usuario a una pantalla: una referencia 'tipo:uuid' (empresa, activo, persona, hipótesis, captura, oportunidad…) o una vista ('hoy', 'ejecutiva', 'red', 'personas', 'evidencia', 'calidad', 'actividades', 'capturas', 'sin_identificar'). Usala cuando el usuario pide ir, abrir o mostrar algo.",
     input_schema: strict({ target: { type: "string" }, query: { type: "string", description: "Filtro de búsqueda para vistas de lista (opcional)" } }, ["target"]),
@@ -319,6 +324,19 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           help_requests: helps ?? [],
         }),
       };
+    }
+    case "context_documents": {
+      const id = typeof a.document_ref === "string" ? a.document_ref.replace(/^document:/, "") : null;
+      if (!id) {
+        const { data } = await db.from("context_documents").select("id, title, kind, summary, source_url").eq("status", "vigente").order("kind").order("title");
+        return { content: track(ctx, { note: "Documentos de contexto: explican el plan original; no son evidencia.", documents: (data ?? []).map((d) => ({ ref: `document:${d.id}`, title: d.title, kind: d.kind, summary: d.summary, url: d.source_url })) }) };
+      }
+      const { data: d } = await db.from("context_documents").select("id, title, body, source_url, updated_at").eq("id", id).maybeSingle();
+      if (!d) return { content: "No existe ese documento.", isError: true };
+      const q = typeof a.query === "string" ? a.query.trim().toLowerCase() : "";
+      const parts = d.body.split(/\n{2,}/);
+      const body = q ? parts.filter((p) => p.toLowerCase().includes(q)).join("\n\n") || `(sin párrafos con "${a.query}"; texto completo abajo)\n\n${d.body}` : d.body;
+      return { content: track(ctx, { ref: `document:${d.id}`, title: d.title, url: d.source_url, updated_at: d.updated_at, hierarchy: "evidencia actual → memoria operativa → decisiones → fuentes → documentos de contexto", body: body.slice(0, 20000) }) };
     }
     case "quality_checks": {
       const checks = await qualityChecks(db, ctx.slug, new Date().toISOString().slice(0, 10));

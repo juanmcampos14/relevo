@@ -78,7 +78,7 @@ export async function loadStageContext(db: Db, workspaceId: string): Promise<Sta
 async function currentCompany(db: Db, ref: Ref, ctx: StageContext): Promise<Record<string, unknown> | null> {
   const ids = (ref.last_values._ids ?? {}) as EntityIds;
   const [{ data: c }, target, est] = await Promise.all([
-    db.from("companies").select("trade_name, activity, locality, public_phone, website, notes, drive_folder_url, verification_status").eq("id", ref.entity_id).maybeSingle(),
+    db.from("companies").select("trade_name, sector, activity, locality, public_phone, website, notes, drive_folder_url, verification_status").eq("id", ref.entity_id).maybeSingle(),
     ids.target ? db.from("campaign_targets").select("status, priority, next_action, next_action_due, owner_id, target_verticals(verticals(name))").eq("id", ids.target).maybeSingle() : Promise.resolve({ data: null }),
     ids.establishment ? db.from("establishments").select("address_text").eq("id", ids.establishment).maybeSingle() : Promise.resolve({ data: null }),
   ]);
@@ -90,7 +90,8 @@ async function currentCompany(db: Db, ref: Ref, ctx: StageContext): Promise<Reco
   return {
     ...c,
     address_text: est.data?.address_text ?? null,
-    sector: sectors.some((s) => fold(s) === fold(String(base.sector ?? ""))) ? base.sector : sectors[0] ?? null,
+    // Sector declarado en la empresa; las importadas antes lo tenían solo como vertical.
+    sector: c.sector ?? (sectors.some((s) => fold(s) === fold(String(base.sector ?? ""))) ? base.sector : sectors[0] ?? null),
     priority: t?.priority ?? null,
     stage: t?.status ?? null,
     next_action: t?.next_action ?? null,
@@ -250,8 +251,11 @@ export async function stageImport(db: Db, workspaceId: string, parsed: ParsedWor
   }
   for (const c of contacts) {
     const extra: Issue[] = [];
-    if (!inBatch("company", c.values.company_ref)) {
-      extra.push({ code: "referencia_rota", severity: "bloquea", field: "Empresa ID", message: `La empresa "${c.values.company_ref ?? "—"}" no está en el archivo ni en RELEVO.` });
+    // Sin empresa no bloquea (asesores, independientes): entra y queda en Calidad como "persona sin empresa".
+    if (!c.values.company_ref) {
+      extra.push({ code: "sin_empresa", severity: "info", field: "Empresa ID", message: "Sin empresa en el Sheet: entra como persona y queda en Calidad para vincularla." });
+    } else if (!inBatch("company", c.values.company_ref)) {
+      extra.push({ code: "referencia_rota", severity: "bloquea", field: "Empresa ID", message: `La empresa "${c.values.company_ref}" no está en el archivo ni en RELEVO.` });
     }
     if (!ctx.refs.has(refKey("contact", c.externalId)) && c.values.contact_kind !== "canal_institucional") {
       const inCompany = c.values.company_ref ? companyNameByRef.get(c.values.company_ref.toUpperCase()) : undefined;

@@ -34,6 +34,7 @@ export async function labelRefs(db: SupabaseClient<Database>, slug: string, refs
   if (ids("capture").length) add("capture", db.from("captures").select("id, captured_at").in("id", ids("capture")), (x) => `captura del ${new Date(x.captured_at).toLocaleDateString("es-AR")}`, (x) => `${base}/capturas/${x.id}`);
   if (ids("evidence").length) add("evidence", db.from("evidence").select("id, statement, capture_id, company_id, asset_id").in("id", ids("evidence")), (x) => `evidencia: ${x.statement.slice(0, 70)}`, (x) => (x.capture_id ? `${base}/capturas/${x.capture_id}` : x.company_id ? `${base}/e/company/${x.company_id}` : x.asset_id ? `${base}/e/asset/${x.asset_id}` : `${base}/explorar/evidencia`));
   if (ids("news").length) add("news", db.from("news_articles").select("id, title, url").in("id", ids("news")), (x) => x.title, (x) => x.url);
+  if (ids("document").length) add("document", db.from("context_documents").select("id, title, source_url").in("id", ids("document")), (x) => `documento de contexto: ${x.title}`, (x) => `${base}/explorar/fuentes#doc-${x.id}`);
   await Promise.all(jobs);
   return out;
 }

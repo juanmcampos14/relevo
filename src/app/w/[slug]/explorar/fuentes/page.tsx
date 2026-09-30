@@ -18,10 +18,41 @@ export default async function FuentesPage({ params }: PageProps<"/w/[slug]/explo
     .select("id, kind, title, url, publisher, published_at, captured_at, reference, is_demo")
     .order("captured_at", { ascending: false })
     .limit(200);
+  const { data: docs } = await supabase.from("context_documents").select("id, title, kind, summary, source_url, updated_at").eq("status", "vigente").order("kind").order("title");
 
   return (
     <>
       <PageHeader title="Fuentes" subtitle="De dónde sale cada dato. Una URL se registra una sola vez por workspace." />
+      {!!docs?.length && (
+        <section className="mb-6 space-y-2">
+          <h2 className="text-sm font-semibold">Documentos de contexto</h2>
+          <p className="text-xs text-muted-foreground">
+            RELEVO los consulta para entender qué buscamos y cómo se pensó el trabajo. No son evidencia: si el campo dice otra cosa, manda el campo.
+          </p>
+          <ul className="divide-y rounded-xl border bg-card shadow-xs">
+            {docs.map((d) => (
+              <li key={d.id} id={`doc-${d.id}`} className="space-y-1 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{d.title}</span>
+                  <Pill>{d.kind === "metodologia" ? "Metodología" : "Contexto"}</Pill>
+                </div>
+                {d.summary && <p className="text-sm text-muted-foreground">{d.summary}</p>}
+                <p className="text-xs text-muted-foreground">
+                  actualizado {formatDate(d.updated_at)}
+                  {d.source_url && (
+                    <>
+                      {" · "}
+                      <a href={d.source_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        abrir original
+                      </a>
+                    </>
+                  )}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {sources?.length ? (
         <ul className="divide-y rounded-xl border bg-card shadow-xs">
           {sources.map((s) => (

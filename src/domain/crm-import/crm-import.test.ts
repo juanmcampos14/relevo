@@ -57,13 +57,20 @@ describe("empresas", () => {
 });
 
 describe("contactos, actividades y fuentes", () => {
-  it("un cargo 'persona por identificar' se propone como canal institucional", () => {
+  it("un cargo que el Sheet marca 'persona por identificar' entra como canal institucional sin pedir revisión", () => {
     const m = mapContact(row("RED | CONTACTOS", { ID: "CT-005", Nombre: "Administración (cargo; persona por identificar)", "Empresa ID": "AN-0023", "Acceso / vínculo": "Buzón institucional", "Fecha respuesta": "Perfil encontrado" }));
     const inst = m.issues.find((i) => i.code === "canal_institucional");
-    expect(inst?.proposal?.patch).toEqual({ contact_kind: "canal_institucional", full_name: "Administración" });
-    expect(m.values.contact_kind).toBe("persona");
+    expect(inst?.severity).toBe("info");
+    expect(m.values).toMatchObject({ contact_kind: "canal_institucional", full_name: "Administración" });
     expect(m.values.preferred_channel).toBe("email");
     expect(m.issues.some((i) => i.code === "dato_en_campo_incorrecto" && i.field === "Fecha respuesta")).toBe(true);
+  });
+
+  it("un buzón sin la marca del Sheet se propone como canal institucional (alguien decide)", () => {
+    const m = mapContact(row("RED | CONTACTOS", { ID: "CT-007", Nombre: "Área compras", "Empresa ID": "AN-0023" }));
+    const inst = m.issues.find((i) => i.code === "canal_institucional");
+    expect(inst).toMatchObject({ severity: "revisar", proposal: { patch: { contact_kind: "canal_institucional", full_name: "Área compras" } } });
+    expect(m.values.contact_kind).toBe("persona");
   });
 
   it("responsable compartido y estado de actividad", () => {

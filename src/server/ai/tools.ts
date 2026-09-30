@@ -13,10 +13,10 @@ type Db = SupabaseClient<Database>;
 
 /** Tipos de referencia citables: [[tipo:uuid]]. */
 export const REF_TYPES = [
-  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task", "news", "capture", "evidence",
+  "company", "establishment", "asset", "contact", "finding", "opportunity", "visit", "decision", "source", "campaign", "task", "news", "capture", "evidence", "document",
 ] as const;
 export type RefType = (typeof REF_TYPES)[number];
-export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task|news|capture|evidence):([0-9a-f-]{36})\]\]/g;
+export const REF_PATTERN = /\[\[(company|establishment|asset|contact|finding|opportunity|visit|decision|source|campaign|task|news|capture|evidence|document):([0-9a-f-]{36})\]\]/g;
 
 const ref = (type: RefType, id: string) => `${type}:${id}`;
 const clip = (s: string | null | undefined, n = 1500) => (s && s.length > n ? `${s.slice(0, n)}… [recortado]` : s ?? null);

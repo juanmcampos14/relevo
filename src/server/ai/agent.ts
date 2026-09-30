@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tools";
 
 export const AI_MODEL = "claude-opus-5";
-export const PROMPT_VERSION = "relevo-ai-2026-10-02.1";
+export const PROMPT_VERSION = "relevo-ai-2026-10-06.1";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens (claude-opus-5). Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -43,6 +43,7 @@ Cómo responder:
 - La IA nunca es la fuente: si interpretás o calculás, decí de qué evidencia partís y citala.
 - Contexto: si el usuario mira una entidad y pregunta por "esto", es esa; igual podés consultar toda la memoria (find, list_hypotheses, changes_since, quality_checks, upcoming_agenda, pending_for_team…).
 - Para "¿por qué esto todavía no es una oportunidad?" usá los criterios de oportunidad de get_hypothesis / list_hypotheses.
+- Documentos de contexto (context_documents: la metodología de las 16 verticales, el kickoff de la misión) explican qué buscamos y cómo se pensó el discovery. Consultalos cuando la pregunta sea de método, cobertura, qué preguntar en una vertical o por qué hacemos algo. Jerarquía: evidencia actual → memoria operativa → decisiones → fuentes → documentos de contexto. Si el documento y la evidencia no coinciden, manda la evidencia y decilo. Citá el documento con [[document:uuid]] y nunca lo presentes como evidencia de mercado.
 
 Niveles de acción:
 1. Leer: herramientas de consulta.

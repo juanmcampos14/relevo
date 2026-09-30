@@ -55,6 +55,7 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
   posible_duplicado: "posible duplicado",
   propietario_sin_validar: "propietario mencionado: queda en notas, sin validar",
   sin_nombre: "sin nombre",
+  sin_empresa: "persona sin empresa: queda en Calidad para vincularla",
 };
 
 /** Empresas nuevas del mismo archivo que parecen la misma (el cruce con RELEVO ya viene del staging). */

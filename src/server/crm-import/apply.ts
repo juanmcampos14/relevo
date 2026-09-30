@@ -28,7 +28,7 @@ type Row = {
 };
 
 const ORDER: EntityType[] = ["source", "company", "contact", "task"];
-const COMPANY_COLS = ["trade_name", "activity", "locality", "public_phone", "website", "notes", "drive_folder_url", "verification_status"];
+const COMPANY_COLS = ["trade_name", "sector", "activity", "locality", "public_phone", "website", "notes", "drive_folder_url", "verification_status"];
 const CONTACT_COLS = ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes"];
 
 /** Qué falta decidir en una fila antes de poder aprobarla. */
@@ -90,19 +90,17 @@ async function citedSourceId(db: Db, workspaceId: string, text: string, external
   return created.id;
 }
 
-async function verticalId(db: Db, workspaceId: string, name: string, cache: Map<string, string>): Promise<string> {
+/**
+ * La vertical sale de la taxonomía acordada, no del texto libre del Sheet: si el sector coincide con una
+ * vertical existente se vincula; si no, queda como sector de la empresa (sin crear verticales nuevas).
+ */
+async function verticalId(db: Db, name: string, cache: Map<string, string | null>): Promise<string | null> {
   const key = fold(name);
   if (cache.has(key)) return cache.get(key)!;
-  const { data: all } = await db.from("verticals").select("id, name");
-  const hit = (all ?? []).find((v) => fold(v.name) === key);
-  if (hit) {
-    cache.set(key, hit.id);
-    return hit.id;
-  }
-  const { data, error } = await db.from("verticals").insert({ workspace_id: workspaceId, name }).select("id").single();
-  if (error) throw error;
-  cache.set(key, data.id);
-  return data.id;
+  const { data: all } = await db.from("verticals").select("id, name").eq("status", "activa");
+  const hit = (all ?? []).find((v) => fold(v.name) === key)?.id ?? null;
+  cache.set(key, hit);
+  return hit;
 }
 
 async function upsertIgnore<T extends keyof Database["public"]["Tables"]>(db: Db, table: T, row: Database["public"]["Tables"][T]["Insert"]) {
@@ -123,7 +121,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
   const rows = ((raw ?? []) as unknown as Row[]).sort((a, b) => ORDER.indexOf(a.entity_type) - ORDER.indexOf(b.entity_type));
   const ctx = await loadStageContext(db, workspaceId);
   const crmSource = await crmSourceId(db, workspaceId);
-  const verticals = new Map<string, string>();
+  const verticals = new Map<string, string | null>();
   const result: ApplyResult = { applied: 0, unchanged: 0, errors: [] };
   const evidenceLater: { row: Row; ids: EntityIds; v: Record<string, unknown> }[] = [];
 
@@ -253,9 +251,11 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
             }
           }
           if (ids.target && v.sector && (creating || only.includes("sector"))) {
-            const vid = await verticalId(db, workspaceId, v.sector as string, verticals);
-            const { error } = await db.from("target_verticals").upsert({ workspace_id: workspaceId, target_id: ids.target, vertical_id: vid }, { onConflict: "target_id,vertical_id", ignoreDuplicates: true });
-            if (error) throw error;
+            const vid = await verticalId(db, v.sector as string, verticals);
+            if (vid) {
+              const { error } = await db.from("target_verticals").upsert({ workspace_id: workspaceId, target_id: ids.target, vertical_id: vid }, { onConflict: "target_id,vertical_id", ignoreDuplicates: true });
+              if (error) throw error;
+            }
           }
           if (v.address_text && (creating || only.includes("address_text"))) {
             if (ids.establishment && !creating) {

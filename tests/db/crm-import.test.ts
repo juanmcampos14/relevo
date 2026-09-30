@@ -38,7 +38,7 @@ function workbook(over: { hotelNext?: string; hotelNotes?: string } = {}): Parse
         }),
         r("EMPRESAS", 45, { "ID anterior": "AN-9041", ID: "AN-9041", "Empresa / establecimiento": "Constructora Prueba", Sector: "Contratista industrial", Prioridad: "Media", "Teléfono público": "https://constructora.example/" }),
       ],
-      contacts: [r("RED | CONTACTOS", 9, { ID: "CT-9005", Nombre: "Administración (cargo; persona por identificar)", "Empresa ID": "AN-9023", Cargo: "Administración", "Acceso / vínculo": "Buzón institucional", Correo: "admin@hotel.example", "Fuente / referencia": "SRC-9001" })],
+      contacts: [r("RED | CONTACTOS", 9, { ID: "CT-9005", Nombre: "Administración (cargo; persona por identificar)", "Empresa ID": "AN-9023", Cargo: "Administración", "Acceso / vínculo": "Buzón institucional", Correo: "admin@hotel.example", "Fuente / referencia": "SRC-9001" }), r("RED | CONTACTOS", 10, { ID: "CT-9006", Nombre: "Asesor Prueba", Cargo: "Asesor inmobiliario" })],
       tasks: [r("ACTIVIDADES", 4, { ID: "ACT-9003", "Empresa ID": "AN-9023", "Contacto ID": "CT-9005", Tipo: "Correo", "Actividad / objetivo": "Solicitar reunión", Responsable: "Tano + Fran", Vencimiento: "2026-10-02", Estado: "Pendiente", Canal: "Gmail" })],
       sources: [
         r("FUENTES", 2, { ID: "SRC-9001", "Entidad vinculada": "AN-9023", Tipo: "Directorio de negocios", "Título / evidencia": "Hotel Prueba, ficha pública", "URL original": `https://maps.example/${RUN}`, "Fecha consulta": "2026-09-27", Calidad: "Media", "Hecho que sustenta": "Existencia, categoría y teléfono" }),
@@ -69,6 +69,7 @@ beforeAll(async () => {
   await pool.query(`update profiles set display_name = 'Estanislao Prueba' where user_id = $1`, [userId]);
   await pool.query(`insert into memberships (workspace_id, user_id, role, can_approve_decisions) values ($1, $2, 'owner', true)`, [ws, userId]);
   await pool.query(`insert into campaigns (workspace_id, name, status) values ($1, 'Añelo', 'activa')`, [ws]);
+  await pool.query(`insert into verticals (workspace_id, name) values ($1, 'Alojamiento')`, [ws]);
   db = createClient<Database>(URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
   const { error: e } = await db.auth.signInWithPassword({ email, password });
   if (e) throw e;
@@ -86,16 +87,16 @@ describe("importador del CRM", () => {
     first = await stageImport(db, ws, workbook(), { fileName: "crm.xlsx", sha256: "a" });
     const rows = await rowsOf(first);
     expect(rows.map((x) => `${x.entity_type}:${x.external_id}:${x.action}`).sort()).toEqual([
-      "company:AN-9023:crear", "company:AN-9041:crear", "company:AN-9054:crear", "contact:CT-9005:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "task:ACT-9003:crear",
+      "company:AN-9023:crear", "company:AN-9041:crear", "company:AN-9054:crear", "contact:CT-9005:crear", "contact:CT-9006:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "task:ACT-9003:crear",
     ]);
     const codes = rows.flatMap((x) => (x.issues as { code: string }[]).map((i) => `${x.external_id}:${i.code}`));
-    expect(codes).toEqual(expect.arrayContaining(["AN-9041:dato_en_campo_incorrecto", "CT-9005:canal_institucional", "SRC-9004:fuente_sin_entidad", "ACT-9003:responsable_compartido", "ACT-9003:responsable_desconocido"]));
+    expect(codes).toEqual(expect.arrayContaining(["AN-9041:dato_en_campo_incorrecto", "CT-9005:canal_institucional", "CT-9006:sin_empresa", "SRC-9004:fuente_sin_entidad", "ACT-9003:responsable_compartido", "ACT-9003:responsable_desconocido"]));
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });
     expect(count).toBe(0);
   });
 
   it("no se puede aprobar sin decidir las propuestas a revisar", async () => {
-    const { data } = await db.from("import_rows").select("id").eq("batch_id", first).eq("external_id", "CT-9005").single();
+    const { data } = await db.from("import_rows").select("id").eq("batch_id", first).eq("external_id", "AN-9041").single();
     const res = await decideRow(db, data!.id, "aprobada", {}, userId);
     expect(res.error).toMatch(/Falta decidir/);
   });
@@ -104,7 +105,7 @@ describe("importador del CRM", () => {
     await approveAll(first);
     const res = await applyBatch(db, ws, first);
     expect(res.errors).toEqual([]);
-    expect(res.applied).toBe(7);
+    expect(res.applied).toBe(8);
 
     // Estado con detalle + fuente en texto libre: fuente citada por el CRM + evidencia, sin perder nada.
     const { data: modular } = await db.from("companies").select("id, verification_status, sources(kind, title)").eq("trade_name", "Modular Prueba").single();
@@ -116,6 +117,11 @@ describe("importador del CRM", () => {
     expect(hotel).toMatchObject({ activity: "Hotel + viandas", verification_status: "partially_verified", sources: { title: "Hotel Prueba, ficha pública" } });
     const { data: target } = await db.from("campaign_targets").select("id, status, priority, next_action, next_action_due, owner_id, target_verticals(verticals(name))").eq("company_id", hotel!.id).single();
     expect(target).toMatchObject({ status: "investigacion", priority: 1, next_action: "Identificar decisor", next_action_due: "2026-10-05", owner_id: userId, target_verticals: [{ verticals: { name: "Alojamiento" } }] });
+    // Un sector que no es una vertical acordada no crea una vertical nueva: queda como sector de la empresa.
+    const { data: constructora } = await db.from("companies").select("sector").eq("trade_name", "Constructora Prueba").single();
+    expect(constructora!.sector).toBe("Contratista industrial");
+    const { data: vs } = await db.from("verticals").select("name");
+    expect(vs!.map((v) => v.name)).toEqual(["Alojamiento"]);
     const { data: est } = await db.from("establishments").select("address_text, address_status").eq("company_id", hotel!.id).single();
     expect(est).toEqual({ address_text: "RP7 y RP17", address_status: "no_verificada" });
 
@@ -131,7 +137,7 @@ describe("importador del CRM", () => {
     const { data: fixed } = await db.from("companies").select("website, public_phone").eq("trade_name", "Constructora Prueba").single();
     expect(fixed).toEqual({ website: "https://constructora.example/", public_phone: null });
     const { count: refs } = await db.from("external_refs").select("id", { count: "exact", head: true });
-    expect(refs).toBe(7);
+    expect(refs).toBe(8);
   });
 
   it("reimportar el mismo archivo no duplica nada", async () => {
@@ -139,11 +145,11 @@ describe("importador del CRM", () => {
     const rows = await rowsOf(again);
     expect(new Set(rows.map((x) => x.action))).toEqual(new Set(["sin_cambios"]));
     const edited = rows.filter((x) => (x.conflicts as { relevoEdited?: boolean }).relevoEdited).map((x) => x.external_id);
-    // Difieren del Sheet solo las filas donde se aceptó una propuesta (web movida, canal institucional);
-    // ni la nota de responsables compartidos ni la fecha de carga por defecto cuentan como edición.
-    expect(edited.sort()).toEqual(["AN-9041", "CT-9005"]);
+    // Difieren del Sheet solo las filas donde se aceptó una propuesta (web movida); el canal que el Sheet ya
+    // declara, la nota de responsables compartidos y la fecha de carga por defecto no cuentan como edición.
+    expect(edited.sort()).toEqual(["AN-9041"]);
     const closed = await applyBatch(db, ws, again);
-    expect(closed).toMatchObject({ applied: 0, unchanged: 7, errors: [] });
+    expect(closed).toMatchObject({ applied: 0, unchanged: 8, errors: [] });
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });
     expect(count).toBe(3);
     const { count: ev } = await db.from("evidence").select("id", { count: "exact", head: true });

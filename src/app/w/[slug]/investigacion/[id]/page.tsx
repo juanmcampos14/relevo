@@ -15,7 +15,7 @@ import { addCost, decideApproval, requestApproval, rotatePreviewLink, saveIdenti
 export const metadata: Metadata = { title: "Experimento" };
 
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
-const PUBLIC_BASE = "https://relevo.site/r/voice-anelo";
+const PUBLIC_BASE = "https://www.relevo.site/r/voice-anelo";
 
 export default async function ExperimentPage({ params, searchParams }: PageProps<"/w/[slug]/investigacion/[id]">) {
   const { slug, id } = await params;

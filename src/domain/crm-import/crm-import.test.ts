@@ -73,6 +73,14 @@ describe("contactos, actividades y fuentes", () => {
     expect(m.values.contact_kind).toBe("persona");
   });
 
+  it("un equipo o un responsable por identificar tampoco son personas: entran como canal sin revisión", () => {
+    for (const [nombre, limpio] of [["Equipo comercial", "Equipo comercial"], ["Responsable por identificar", "Responsable (por identificar)"]]) {
+      const m = mapContact(row("RED | CONTACTOS", { ID: "CT-038", Nombre: nombre, "Empresa ID": "AN-0088" }));
+      expect(m.values).toMatchObject({ contact_kind: "canal_institucional", full_name: limpio });
+      expect(m.issues.find((i) => i.code === "canal_institucional")?.severity).toBe("info");
+    }
+  });
+
   it("responsable compartido y estado de actividad", () => {
     const m = mapTask(row("ACTIVIDADES", { ID: "ACT-020", "Empresa ID": "AN-0029", "Actividad / objetivo": "Presentación", Responsable: "Tano + Fran", Estado: "Pendiente", Vencimiento: "2026-10-20" }));
     expect(m.values).toMatchObject({ status: "todo", due_on: "2026-10-20" });

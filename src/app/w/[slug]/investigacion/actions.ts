@@ -224,7 +224,7 @@ export async function responseToEvidence(slug: string, responseId: string, _: Ac
     if (!r || r.review_status !== "revisada") return { message: "Primero revisá la respuesta (redacta el texto libre)." };
     if (r.cohort !== "real") return { message: "Las respuestas de prueba o piloto no se convierten en evidencia." };
     const { data: e } = await supabase.from("research_experiments").select("title").eq("id", r.experiment_id).single();
-    const url = `https://relevo.site/r/voice-anelo`;
+    const url = `https://www.relevo.site/r/voice-anelo`;
     let { data: src } = await supabase.from("sources").select("id").eq("workspace_id", ctx.workspace.id).eq("reference", `voice:${r.experiment_id}`).maybeSingle();
     if (!src) {
       const { data, error } = await supabase.from("sources").insert({ workspace_id: ctx.workspace.id, kind: "documento", title: `${e?.title ?? "Voice"} · respuestas (declaraciones, no representativas)`, reference: `voice:${r.experiment_id}`, url, notes: "Relevamiento autoseleccionado: cada respuesta es una declaración." }).select("id").single();

@@ -265,8 +265,9 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
   };
 }
 
-const INSTITUTIONAL = /persona por identificar|\(cargo|^area |^área /i;
-const DECLARED_INSTITUTIONAL = /persona por identificar/i;
+const INSTITUTIONAL = /por identificar|\(cargo|^(?:equipo|área|area|administraci[oó]n|ventas|compras|recepci[oó]n|gerencia|mesa de entradas)\b/i;
+// Nombres que ya son un rol o un equipo (no una persona): no hay nada que decidir.
+const DECLARED_INSTITUTIONAL = /por identificar|^(?:equipo|administraci[oó]n|ventas|compras|recepci[oó]n|mesa de entradas)\b/i;
 const CHANNEL: [RegExp, ContactValues["preferred_channel"]][] = [
   [/whats/i, "whatsapp"],
   [/tel[eé]fono/i, "telefono"],
@@ -284,7 +285,7 @@ export function mapContact(r: RawRow): Mapped<ContactValues> {
   let name = rawName;
   const access = txt(v["Acceso / vínculo"]);
   if (INSTITUTIONAL.test(rawName) || /institucional/i.test(access ?? "")) {
-    const cleaned = rawName.replace(/\s*\((?:cargo;?\s*)?persona por identificar\)\s*/i, "").replace(/\s*\(cargo[^)]*\)\s*/i, "").trim() || rawName;
+    const cleaned = rawName.replace(/\s*\((?:cargo;?\s*)?persona por identificar\)\s*/i, "").replace(/\s*\(cargo[^)]*\)\s*/i, "").replace(/\s+por identificar$/i, " (por identificar)").trim() || rawName;
     if (DECLARED_INSTITUTIONAL.test(rawName)) {
       // El Sheet ya lo declara ("persona por identificar"): no hay nada que decidir, entra como canal.
       kind = "canal_institucional";

@@ -114,3 +114,13 @@ Piloto controlado con el export actual del Sheet, limitado a AN-0023, AN-0054 y 
 **Anomalías encontradas y corregidas durante el piloto:** (1) el detalle del estado de verificación ("expositor AOG 2026 + operación Neuquén") se perdía y la fuente citada en texto libre no se registraba → ahora son evidencia y fuente "citada por el CRM", completadas por la reimportación sin duplicar; (2) fechas del CRM mostradas un día antes (UTC) → mediodía de Argentina; dos evidencias del piloto corregidas; (3) falsos "editado en RELEVO" (nota de responsables compartidos, fecha de carga por defecto); (4) un .xlsx re-guardado fuera de Google Sheets (rutas internas absolutas) se rechazaba → se normaliza antes de leer; (5) el aviso de IDs por fórmula contaba filas vacías de plantilla; (6) la ficha no enlazaba al lote y su decisión → "Ver el lote y sus decisiones".
 
 **Pendiente del lado del Sheet:** sigue compartido con "cualquiera con el enlace".
+
+## 10. Revisión por excepción (P2, 30/09)
+
+Control humano ≠ un clic por fila. Cada lote se clasifica con una sola función (`src/domain/crm-import/triage.ts`), que arma el resumen y decide qué aprueba "Aprobar lote":
+
+- **Sin conflicto** (entra con el lote): registro nuevo que no coincide con nada de RELEVO ni con otra fila del archivo, o cambio del Sheet en campos que RELEVO no modificó y que no identifican al registro. Solo puede traer avisos informativos, que se resumen con su conteo.
+- **Requiere revisión** (una por una): cambió en RELEVO y en el Sheet; posible duplicado (contra RELEVO o dentro del mismo archivo); cambio en un dato que identifica (nombre, teléfono, email, sitio web, empresa vinculada); dato dudoso con o sin propuesta (cargo en lugar de persona, estado en texto libre, etapa o prioridad desconocida).
+- **Bloqueada** (no entra): referencia a un registro inexistente, sin nombre, sin ID o ID que cambió de fila. Se corrige en el Sheet y se vuelve a importar.
+
+Se mantienen staging, procedencia, diff de tres vías y nada se escribe sin aprobación. En el lote real del 29/09 (271 filas): 235 sin conflicto, 24 a revisar (entre ellas "Vaca Muerta Facility Group" repetida en dos filas), 4 bloqueadas, 7 sin cambios.

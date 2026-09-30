@@ -96,12 +96,13 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   ]);
   // D/E: último estado de cada finding, validaciones propuestas y agendadas, errores y qué cambió desde ayer.
   const yesterday = new Date(Date.parse(`${today}T12:00:00-03:00`) - 86_400_000).toISOString();
-  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes] = await Promise.all([
+  const [{ data: assessments }, { data: validations }, { data: validationTasks }, { count: captureErrors }, changes, { data: approvedFindings }] = await Promise.all([
     supabase.from("finding_assessments").select("finding_id, gaps, dimensions, supports, independent_cases, contradicts, created_at, findings!inner(statement, review_status)").neq("findings.review_status", "rechazado").order("created_at", { ascending: false }).limit(200),
     supabase.from("proposals").select("finding_id, payload, position").eq("status", "propuesta").not("finding_id", "is", null).order("position"),
     supabase.from("tasks").select("finding_id, title, due_on").not("finding_id", "is", null).neq("status", "done").order("due_on", { nullsFirst: false }),
     supabase.from("captures").select("id", { count: "exact", head: true }).eq("status", "error"),
     changesSince(supabase, yesterday, today),
+    supabase.from("findings").select("id, statement").eq("review_status", "aprobado").order("created_at", { ascending: false }).limit(20),
   ]);
   const latestByFinding = new Map<string, NonNullable<typeof assessments>[number]>();
   for (const a of assessments ?? []) if (!latestByFinding.has(a.finding_id)) latestByFinding.set(a.finding_id, a);
@@ -211,7 +212,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
           <Row key={e.findingId} href={`${base}/hallazgos/${e.findingId}`} title={e.text} tone={e.kinds.includes("contradice") ? "danger" : undefined} />
         ))}
         {changes.newFindings.map((f) => (
-          <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={`Nueva hipótesis: ${quote(f.statement)}`} />
+          <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.proposed ? `Nueva hipótesis propuesta: ${quote(f.statement)}` : `Nueva hipótesis: ${quote(f.statement)}`} meta={f.proposed ? "Pendiente de revisión: todavía no es una hipótesis abierta" : undefined} />
         ))}
       </List>
     </Section>
@@ -295,10 +296,15 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   );
 
   const findingsToValidate = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).length).slice(0, 4);
+  // Recién aceptada: ya es una hipótesis abierta aunque la evaluación (unos segundos) no haya terminado.
+  const evaluating = (approvedFindings ?? []).filter((f) => !latestByFinding.has(f.id)).slice(0, 2);
   const Validate = (
     <Section title="Hipótesis abiertas" actions={<Link href={`${base}/oportunidades`} className={linkCls}>Hallazgos</Link>}>
-      {findingsToValidate.length ? (
+      {findingsToValidate.length || evaluating.length ? (
         <List>
+          {evaluating.map((f) => (
+            <Row key={f.id} href={`${base}/hallazgos/${f.id}`} title={f.statement} meta="Evaluando qué falta saber…" />
+          ))}
           {findingsToValidate.map((a) => {
             const gap = (a.gaps as Gap[])[0];
             const v = (validations ?? []).find((x) => x.finding_id === a.finding_id)?.payload as { title: string } | undefined;

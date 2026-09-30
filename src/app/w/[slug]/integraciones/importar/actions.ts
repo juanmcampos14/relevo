@@ -7,10 +7,9 @@ import { getWorkspaceContext } from "@/server/context";
 import { dbErrorMessage, type ActionState } from "@/server/action-result";
 import { WorkbookError, parseCrmWorkbook } from "@/server/crm-import/parse";
 import { stageImport } from "@/server/crm-import/stage";
-import { applyBatch, pendingChoices, type Resolution } from "@/server/crm-import/apply";
+import { applyBatch, type Resolution } from "@/server/crm-import/apply";
 import { decideRow } from "@/server/crm-import/review";
-import type { Issue } from "@/domain/crm-import/map";
-import type { FieldChange, FieldConflict } from "@/domain/crm-import/diff";
+import { triageBatch, type TriageRow } from "@/domain/crm-import/triage";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -59,21 +58,26 @@ export async function decideImportRow(slug: string, rowId: string, _: ActionStat
   return { ok: true, message: decision === "aprobada" ? "Fila aprobada: se escribe al aplicar el lote." : "Fila rechazada." };
 }
 
-/** Aprueba de una vez las filas que no tienen nada que decidir (ni propuestas ni conflictos). */
-export async function approveClean(slug: string, batchId: string): Promise<ActionState> {
+/**
+ * "Aprobar lote": aprueba las filas que el triage marca como importables (nuevas sin coincidencias o
+ * cambios de rutina del Sheet). Conflictos, duplicados, cambios materiales y datos dudosos quedan
+ * para revisión humana; lo bloqueado no entra. Misma función que arma el resumen de la página.
+ */
+export async function approveBatch(slug: string, batchId: string): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   const supabase = await createClient();
-  const { data: rows } = await supabase.from("import_rows").select("id, issues, conflicts").eq("batch_id", batchId).eq("decision", "pendiente");
+  const { data } = await supabase.from("import_rows").select("id, entity_type, external_id, action, decision, raw, mapped, issues, conflicts").eq("batch_id", batchId);
+  const rows = (data ?? []) as unknown as TriageRow[];
+  const triage = triageBatch(rows);
   let n = 0;
-  for (const r of rows ?? []) {
-    const view = { issues: r.issues as unknown as Issue[], conflicts: r.conflicts as unknown as { updates?: FieldChange[]; conflicts?: FieldConflict[] }, resolution: {} };
-    if (pendingChoices(view).length) continue;
+  for (const r of rows) {
+    if (r.decision !== "pendiente" || triage.get(r.id)?.lane !== "importable") continue;
     const res = await decideRow(supabase, r.id, "aprobada", {}, ctx.user.id);
     if (!res.error) n++;
   }
   revalidatePath(`/w/${slug}/integraciones/importar`, "layout");
-  return { ok: true, message: n ? `${n} filas aprobadas.` : "No hay filas sin decisiones pendientes." };
+  return { ok: true, message: n ? `${n} filas aprobadas. Revisá las excepciones y escribí el lote en RELEVO.` : "No hay filas importables pendientes." };
 }
 
 export async function applyImport(slug: string, batchId: string): Promise<ActionState> {

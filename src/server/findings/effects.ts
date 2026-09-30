@@ -69,14 +69,16 @@ export async function captureEffects(db: Db, captureId: string, today: string): 
 }
 
 /** E3 en HOY — qué cambió en lo que sabemos desde una fecha: efecto de la evidencia nueva + hipótesis nuevas. */
-export async function changesSince(db: Db, sinceIso: string, today: string): Promise<{ effects: Effect[]; newFindings: { id: string; statement: string }[] }> {
+export async function changesSince(db: Db, sinceIso: string, today: string): Promise<{ effects: Effect[]; newFindings: { id: string; statement: string; proposed: boolean }[] }> {
   const [{ data: recent }, { data: created }] = await Promise.all([
     db.from("finding_evidence").select("finding_id, evidence_id").gte("created_at", sinceIso),
-    db.from("findings").select("id, statement").gte("created_at", sinceIso).neq("review_status", "rechazado"),
+    db.from("findings").select("id, statement, review_status").gte("created_at", sinceIso).neq("review_status", "rechazado"),
   ]);
-  const newIds = new Set((created ?? []).map((f) => f.id));
+  // Una hipótesis propuesta por la IA todavía no es una hipótesis abierta: se muestra como pendiente de revisión.
+  const news = (created ?? []).map((f) => ({ id: f.id, statement: f.statement, proposed: f.review_status === "pendiente_revision" }));
+  const newIds = new Set(news.map((f) => f.id));
   const ids = [...new Set((recent ?? []).map((r) => r.finding_id))].filter((id) => !newIds.has(id));
-  if (!ids.length) return { effects: [], newFindings: created ?? [] };
+  if (!ids.length) return { effects: [], newFindings: news };
   const { data: findings } = await db
     .from("findings")
     .select("id, statement, finding_evidence(stance, evidence(id, verification_status, revalidate_after, company_id, stated_by_contact_id, capture_id, visit_id, source_id))")
@@ -86,5 +88,5 @@ export async function changesSince(db: Db, sinceIso: string, today: string): Pro
     new Set((recent ?? []).map((r) => r.evidence_id)),
     today,
   );
-  return { effects, newFindings: created ?? [] };
+  return { effects, newFindings: news };
 }

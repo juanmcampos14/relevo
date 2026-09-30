@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { AlertTriangle, Info, OctagonX } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, OctagonX } from "lucide-react";
 import { cn } from "cn";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
@@ -13,7 +13,8 @@ import type { EntityIds } from "@/server/crm-import/stage";
 import { PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
 import { contactKind, contactPermission, targetStatus, taskStatus, verificationStatus } from "@/domain/catalogs";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
-import { applyImport, approveClean, decideImportRow, discardImport } from "../actions";
+import { summarize, triageBatch, type Reason, type TriageRow } from "@/domain/crm-import/triage";
+import { applyImport, approveBatch, decideImportRow, discardImport } from "../actions";
 
 export const metadata: Metadata = { title: "Revisar importación" };
 
@@ -79,15 +80,22 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
     .order("entity_type")
     .order("external_id");
   const rows = (raw ?? []) as unknown as RowView[];
+  const triage = triageBatch(rows as unknown as TriageRow[]);
+  const sum = summarize(rows as unknown as TriageRow[], triage);
+  const lane = (r: RowView) => triage.get(r.id)?.lane;
   const pending = rows.filter((r) => r.decision === "pendiente");
+  const importable = pending.filter((r) => lane(r) === "importable");
+  const review = pending.filter((r) => lane(r) !== "importable");
+  const blocked = rows.filter((r) => lane(r) === "bloqueado");
   const toApply = rows.filter((r) => r.decision === "aprobada" && !r.applied_at && r.action !== "sin_cambios");
   // Las filas sin cambios también se confirman: actualizan la procedencia (fecha de reimportación).
   const unconfirmed = rows.filter((r) => r.decision === "aprobada" && !r.applied_at && r.action === "sin_cambios");
   const applied = rows.filter((r) => r.applied_at && r.action !== "sin_cambios");
-  const rejected = rows.filter((r) => r.decision === "rechazada");
+  const rejected = rows.filter((r) => r.decision === "rechazada" && lane(r) !== "bloqueado");
   const unchanged = rows.filter((r) => r.action === "sin_cambios");
   const summary = batch.summary as { filtro?: string[] | null; ids_formula?: string[] };
   const open = batch.status === "en_revision" && ctx.canEdit;
+  const reasonsOf = (r: RowView) => triage.get(r.id)?.reasons ?? [];
 
   return (
     <div className="space-y-8">
@@ -97,14 +105,6 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
         subtitle={`${batch.file_name} · ${formatDate(batch.created_at, true)} · ${batch.status === "en_revision" ? "en revisión" : batch.status}${summary.filtro ? ` · solo ${summary.filtro.join(", ")}` : ""}`}
       />
 
-      <div className="flex flex-wrap gap-2 text-sm">
-        <Pill>{pending.length} por decidir</Pill>
-        <Pill>{toApply.length} aprobadas por aplicar</Pill>
-        <Pill>{applied.length} aplicadas</Pill>
-        <Pill>{unchanged.length} sin cambios</Pill>
-        <Pill>{rejected.length} rechazadas o bloqueadas</Pill>
-      </div>
-
       {summary.ids_formula?.length ? (
         <p className="flex gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
@@ -112,13 +112,50 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
         </p>
       ) : null}
 
+      {/* Resumen antes de decidir: qué entra, qué hay que mirar, qué no entra y por qué. */}
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="space-y-2 rounded-xl border bg-card p-4 shadow-xs">
+          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="size-4 text-emerald-600" aria-hidden="true" />{sum.importable.total} sin conflicto</p>
+          {sum.importable.total > 0 ? (
+            <>
+              <ul className="text-sm text-muted-foreground">
+                {Object.entries(sum.importable.byKind).map(([k, n]) => <li key={k}>{n} {k}</li>)}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Por qué es seguro: no coinciden con nada de RELEVO ni con otra fila del archivo, y los cambios son del Sheet en campos que RELEVO no modificó (sin tocar nombre, teléfono, email ni sitio web).
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nada pendiente para aprobar en lote.</p>
+          )}
+        </div>
+        <div className="space-y-2 rounded-xl border border-amber-500/40 bg-card p-4 shadow-xs">
+          <p className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4 text-amber-600" aria-hidden="true" />{review.length} {review.length === 1 ? "requiere" : "requieren"} revisión</p>
+          <ul className="text-sm text-muted-foreground">
+            {sum.revisar.byReason.map((x) => <li key={x.label}>{x.count} · {x.label.toLowerCase()}</li>)}
+          </ul>
+        </div>
+        <div className="space-y-2 rounded-xl border border-destructive/40 bg-card p-4 shadow-xs">
+          <p className="flex items-center gap-2 font-medium"><OctagonX className="size-4 text-destructive" aria-hidden="true" />{blocked.length} {blocked.length === 1 ? "bloqueada" : "bloqueadas"}</p>
+          <ul className="text-sm text-muted-foreground">
+            {sum.bloqueado.byReason.map((x) => <li key={x.label}>{x.count} · {x.label.toLowerCase()}</li>)}
+          </ul>
+          {blocked.length > 0 && <p className="text-xs text-muted-foreground">No se importan: corregilas en el Sheet y volvé a importar.</p>}
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {unchanged.length} sin cambios (quedan igual) · {toApply.length} aprobadas por escribir · {applied.length} ya escritas{rejected.length ? ` · ${rejected.length} rechazadas` : ""}
+      </p>
+
       {open && (
         <div className="flex flex-wrap gap-3">
-          <ActionForm action={approveClean.bind(null, slug, batchId)} className="space-y-0">
-            <SubmitButton variant="outline">Aprobar las filas sin nada que decidir</SubmitButton>
-          </ActionForm>
+          {importable.length > 0 && (
+            <ActionForm action={approveBatch.bind(null, slug, batchId)} className="space-y-0">
+              <SubmitButton variant={toApply.length ? "outline" : undefined}>Aprobar lote: {importable.length} sin conflicto</SubmitButton>
+            </ActionForm>
+          )}
           <ActionForm action={applyImport.bind(null, slug, batchId)} className="space-y-0">
-            <SubmitButton disabled={!toApply.length && !unconfirmed.length}>
+            <SubmitButton variant={toApply.length ? undefined : "outline"} disabled={!toApply.length && !unconfirmed.length}>
               {toApply.length ? `Escribir ${toApply.length} aprobadas en RELEVO` : "Cerrar lote (sin cambios)"}
             </SubmitButton>
           </ActionForm>
@@ -128,10 +165,29 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
         </div>
       )}
 
-      <RowGroup title="Por decidir" rows={pending} slug={slug} editable={open} />
-      <RowGroup title="Aprobadas, por escribir" rows={toApply} slug={slug} editable={false} />
-      <RowGroup title="Escritas en RELEVO" rows={applied} slug={slug} editable={false} />
-      <RowGroup title="Rechazadas o bloqueadas" rows={rejected} slug={slug} editable={false} />
+      <RowGroup title="Requieren revisión" rows={review} slug={slug} editable={open} reasonsOf={reasonsOf} />
+      {importable.length > 0 && (
+        <Section title={`Sin conflicto (${importable.length})`}>
+          {sum.importable.notes.length > 0 && (
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">Avisos informativos (no requieren decisión):</p>
+              <ul className="text-muted-foreground">
+                {sum.importable.notes.map((x) => <li key={x.code}>{x.count} · {x.label}</li>)}
+              </ul>
+            </div>
+          )}
+          <details className="rounded-xl border bg-card">
+            <summary className="flex min-h-12 cursor-pointer items-center px-4 text-sm font-medium">Ver las {importable.length} filas (se pueden aprobar o rechazar una por una)</summary>
+            <ul className="space-y-3 p-3">
+              {importable.map((r) => <RowCard key={r.id} r={r} slug={slug} editable={open} reasons={[]} />)}
+            </ul>
+          </details>
+        </Section>
+      )}
+      <RowGroup title="Aprobadas, por escribir" rows={toApply} slug={slug} editable={false} reasonsOf={reasonsOf} />
+      <RowGroup title="Escritas en RELEVO" rows={applied} slug={slug} editable={false} reasonsOf={reasonsOf} />
+      <RowGroup title="Bloqueadas" rows={blocked} slug={slug} editable={false} reasonsOf={reasonsOf} />
+      <RowGroup title="Rechazadas" rows={rejected} slug={slug} editable={false} reasonsOf={reasonsOf} />
       {unchanged.length > 0 && (
         <Section title={`Sin cambios (${unchanged.length})`}>
           <p className="text-sm text-muted-foreground">{unchanged.map((r) => r.external_id).join(" · ")}</p>
@@ -147,12 +203,12 @@ export default async function ImportReviewPage({ params }: PageProps<"/w/[slug]/
   );
 }
 
-function RowGroup({ title, rows, slug, editable }: { title: string; rows: RowView[]; slug: string; editable: boolean }) {
+function RowGroup({ title, rows, slug, editable, reasonsOf }: { title: string; rows: RowView[]; slug: string; editable: boolean; reasonsOf: (r: RowView) => Reason[] }) {
   if (!rows.length) return null;
   return (
     <Section title={`${title} (${rows.length})`}>
       <ul className="space-y-3">
-        {rows.map((r) => <RowCard key={r.id} r={r} slug={slug} editable={editable} />)}
+        {rows.map((r) => <RowCard key={r.id} r={r} slug={slug} editable={editable} reasons={reasonsOf(r)} />)}
       </ul>
     </Section>
   );
@@ -177,7 +233,9 @@ function entityLink(r: RowView, slug: string): string | null {
   return null;
 }
 
-function RowCard({ r, slug, editable }: { r: RowView; slug: string; editable: boolean }) {
+function RowCard({ r, slug, editable, reasons }: { r: RowView; slug: string; editable: boolean; reasons: Reason[] }) {
+  // Motivos del triage que no son avisos de la fila (duplicado dentro del archivo, cambio material).
+  const extra = reasons.filter((x) => x.key === "Posible duplicado dentro del archivo" || x.key === "Cambio en un dato que identifica al registro");
   const updates = r.conflicts.updates ?? [];
   const conflicts = r.conflicts.conflicts ?? [];
   const link = r.applied_at ? entityLink(r, slug) : null;
@@ -198,6 +256,14 @@ function RowCard({ r, slug, editable }: { r: RowView; slug: string; editable: bo
             <div key={k} className="flex gap-2"><dt className="text-muted-foreground">{fieldLabel[k]}:</dt><dd className="min-w-0 break-words">{show(v, k)}</dd></div>
           ))}
         </dl>
+      )}
+
+      {extra.length > 0 && (
+        <ul className="space-y-1">
+          {extra.map((x) => (
+            <li key={x.text} className="flex gap-2 text-sm"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />{x.text}</li>
+          ))}
+        </ul>
       )}
 
       {r.issues.length > 0 && (

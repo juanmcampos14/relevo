@@ -47,15 +47,23 @@ test("importar el CRM: revisar, aprobar, escribir, abrir la ficha y reimportar s
   await page.waitForURL(/\/integraciones\/importar\//);
   await expect(page.getByRole("heading", { name: "Revisar importación del CRM" })).toBeVisible();
 
-  // Filas con propuestas a decidir: se aplica la propuesta y se aprueba.
+  // Resumen antes de decidir: qué entra, qué revisar, qué no entra.
+  if (!process.env.CRM_XLSX) {
+    await expect(page.getByText("3 sin conflicto", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 requiere revisión")).toBeVisible();
+    await expect(page.getByText(/1 · cargo o buzón/)).toBeVisible();
+  }
+  // Excepciones: se aplica la propuesta y se aprueba una por una. Lo normal va en lote.
   for (;;) {
-    const card = page.locator("li", { has: page.getByRole("button", { name: "Aprobar" }) }).first();
+    const card = page.locator("li:visible", { has: page.getByRole("button", { name: "Aprobar", exact: true }) }).first();
     if (!(await card.count())) break;
     const radios = card.locator('input[type="radio"][value="aplicar"], input[type="radio"][value="relevo"]');
     for (let i = 0; i < (await radios.count()); i++) await radios.nth(i).check();
-    await card.getByRole("button", { name: "Aprobar" }).click();
+    await card.getByRole("button", { name: "Aprobar", exact: true }).click();
     await toast(page, /Fila aprobada/);
   }
+  await page.getByRole("button", { name: /Aprobar lote: \d+ sin conflicto/ }).click();
+  await toast(page, /filas aprobadas/);
   await page.getByRole("button", { name: /Escribir \d+ aprobadas en RELEVO/ }).click();
   await toast(page, /Listo: \d+ filas escritas/);
   await page.reload();
@@ -78,7 +86,8 @@ test("importar el CRM: revisar, aprobar, escribir, abrir la ficha y reimportar s
     await page.locator('input[type="file"][name="file"]').setInputFiles(file);
     await page.getByRole("button", { name: "Analizar archivo" }).click();
     await page.waitForURL(/\/integraciones\/importar\//);
-    await expect(page.getByText("0 por decidir")).toBeVisible();
-    await expect(page.getByText("4 sin cambios")).toBeVisible();
+    await expect(page.getByText("0 sin conflicto", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 requieren revisión")).toBeVisible();
+    await expect(page.getByText(/4 sin cambios \(quedan igual\)/)).toBeVisible();
   }
 });

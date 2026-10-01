@@ -36,11 +36,11 @@ const THINKING = [
 ];
 
 /** Acciones sugeridas y mensaje listo que deja RELEVO al final: se muestran como botón y como tarjeta para copiar. */
-export function parseReply(text: string): { body: string; actions: string[]; message: string | null } {
+export function parseReply(text: string): { body: string; actions: string[]; messages: string[] } {
   const actions = [...text.matchAll(/\[\[acci[oó]n:\s*([^\]]+)\]\]/gi)].map((m) => m[1].trim()).slice(0, 2);
-  const msg = text.match(/\[\[mensaje\]\]([\s\S]*?)\[\[\/mensaje\]\]/i);
-  const body = text.replace(/\[\[acci[oó]n:[^\]]+\]\]/gi, "").replace(/\[\[mensaje\]\][\s\S]*?\[\[\/mensaje\]\]/i, "").trim();
-  return { body, actions, message: msg ? msg[1].trim() : null };
+  const messages = [...text.matchAll(/\[\[mensaje\]\]([\s\S]*?)\[\[\/mensaje\]\]/gi)].map((m) => m[1].trim()).filter(Boolean);
+  const body = text.replace(/\[\[acci[oó]n:[^\]]+\]\]/gi, "").replace(/\[\[mensaje\]\][\s\S]*?\[\[\/mensaje\]\]/gi, "").trim();
+  return { body, actions, messages };
 }
 
 /** Texto para decir en voz alta: sin citas, marcas ni formato. */
@@ -113,7 +113,7 @@ export function Conversation(props: {
   const [here, setHere] = useState<Here | null>(null);
   const [place, setPlace] = useState<string | null>(null);
   const [interrupt, setInterrupt] = useState<Interrupt>(null);
-  const [copied, setCopied] = useState<number | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const spoke = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -280,15 +280,18 @@ export function Conversation(props: {
                   <div className="text-[17px] leading-[1.65] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold [&_ul]:space-y-2">
                     <RichText text={r.body} labels={new Map(Object.entries(m.labels ?? {}))} />
                   </div>
-                  {r.message && (
-                    <div className={cn("rounded-3xl bg-white px-6 py-5", shadow)}>
-                      <p className="text-[16px] leading-relaxed whitespace-pre-wrap">{r.message}</p>
-                      <button type="button" onClick={() => { navigator.clipboard?.writeText(r.message!); setCopied(i); setTimeout(() => setCopied(null), 1800); }} className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">
-                        {copied === i ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
-                        {copied === i ? "Copiado" : "Copiar mensaje"}
-                      </button>
-                    </div>
-                  )}
+                  {r.messages.map((msg, k) => {
+                    const key = `${i}-${k}`;
+                    return (
+                      <div key={key} className={cn("rounded-3xl bg-white px-6 py-5", shadow)}>
+                        <p className="text-[16px] leading-relaxed whitespace-pre-wrap">{msg}</p>
+                        <button type="button" onClick={() => { navigator.clipboard?.writeText(msg); setCopied(key); setTimeout(() => setCopied(null), 1800); }} className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">
+                          {copied === key ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+                          {copied === key ? "Copiado" : "Copiar mensaje"}
+                        </button>
+                      </div>
+                    );
+                  })}
                   {m.drafts?.map((d) => (
                     <ActionObject key={d.id} d={d} canEdit={canEdit} busy={busy}
                       onUndo={() => startBusy(async () => replaceDraft(await undoFromPanel(slug, d.id)))}

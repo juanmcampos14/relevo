@@ -42,7 +42,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </div>
           {error && (
             <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              El enlace no es válido o venció. Pedí uno nuevo.
+              El enlace no es válido o venció. Pedí uno nuevo y abrilo en el mismo navegador donde lo pediste, o entrá con contraseña.
             </p>
           )}
           <div className="rounded-2xl border bg-card p-6 shadow-sm">

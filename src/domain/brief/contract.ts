@@ -111,6 +111,24 @@ export type BriefContent = {
   changes: Record<keyof typeof CHANGE_LABEL, { key: string; headline: string }[]>;
   sources: { url: string; title: string; publisher: string | null }[];
   quiet_day_note: string;
+  /** Cómo salió esta corrida (para leerla y para saber si gastar más mejora el brief). */
+  metrics?: BriefMetrics;
+};
+export type BriefMetrics = {
+  mode: "completo" | "reducido";
+  costUsd: number;
+  monthCostUsd: number;
+  monthlyCapUsd: number;
+  collected: number;
+  collectedVmn: number;
+  sourcesCited: number;
+  sourcesCitedVmn: number;
+  webSearches: number;
+  signals: number;
+  signalsVmn: number;
+  stories: number;
+  watchlist: number;
+  candidates: number;
 };
 
 // Forma que viaja al modelo: vertical y tipo como texto (el límite de gramática de las salidas

@@ -115,10 +115,30 @@ export async function advanceBrief(db: Db, briefId: string, engines: Engines, op
       const research = b.research as { memo?: string; sources?: { url: string; title: string }[] };
       const s = await engines.synthesis.synthesize({ briefDate: b.brief_date, period, memo: research.memo ?? "", items, memory: digest });
       const content = await saveDraft(db, { briefId, workspaceId: b.workspace_id, briefDate: b.brief_date, draft: s.draft, memory, items, sources: research.sources ?? [] });
+      const usage: Record<string, { costUsd?: number; webSearches?: number }> = { ...((b.usage as Record<string, { costUsd?: number; webSearches?: number }>) ?? {}), synthesis: s.usage };
+      const runCost = Object.values(usage).reduce((a, u) => a + (u?.costUsd ?? 0), 0);
+      const isVmn = (u: string) => /vacamuertanews\.com/i.test(u);
+      const { count: storyCount } = await db.from("brief_stories").select("id", { count: "exact", head: true }).eq("workspace_id", b.workspace_id).eq("last_brief_id", briefId);
+      content.metrics = {
+        mode: (b.research as { capped?: unknown })?.capped ? "reducido" : "completo",
+        costUsd: runCost,
+        monthCostUsd: (await monthSpendUsd(db, b.workspace_id, b.brief_date)) + (s.usage.costUsd ?? 0),
+        monthlyCapUsd: briefSettings(ws.settings).monthlyCapUsd,
+        collected: items.length,
+        collectedVmn: items.filter((i) => i.priority === "vmn").length,
+        sourcesCited: content.sources.length,
+        sourcesCitedVmn: content.sources.filter((x) => isVmn(x.url)).length,
+        webSearches: usage.research?.webSearches ?? 0,
+        signals: content.signals.length,
+        signalsVmn: content.signals.filter((x) => isVmn(x.source_url) || /vaca muerta news/i.test(x.publisher)).length,
+        stories: storyCount ?? 0,
+        watchlist: content.watchlist.length,
+        candidates: content.candidates.length,
+      };
       await db.from("briefs").update({
         content: content as unknown as J,
         engines: { ...((b.engines as object) ?? {}), synthesis: s.engine } as unknown as J,
-        usage: { ...((b.usage as object) ?? {}), synthesis: s.usage } as unknown as J,
+        usage: usage as unknown as J,
         status: "generado", generated_at: new Date().toISOString(), step_started_at: null, attempts: 0, error: null,
       }).eq("id", briefId);
       const recipients = briefSettings(ws.settings).recipients;

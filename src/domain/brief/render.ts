@@ -42,11 +42,17 @@ ${s.source_url ? `<p style="margin:0;font-size:12px"><a href="${esc(s.source_url
 
 const list = (items: string[]) => (items.length ? `<ul style="margin:0;padding-left:18px">${items.map((i) => `<li style="margin:0 0 6px">${i}</li>`).join("")}</ul>` : `<p style="color:${C.muted};margin:0">—</p>`);
 
+export const modeLabel = (m: "completo" | "reducido") => (m === "reducido" ? "MODO REDUCIDO (tope mensual alcanzado: sin búsqueda web)" : "MODO COMPLETO");
+export function metricsLine(m: NonNullable<BriefContent["metrics"]>) {
+  return `${m.signals} señales (${m.signalsVmn} de Vaca Muerta News) · ${m.collected} notas leídas (${m.collectedVmn} de Vaca Muerta News) · ${m.webSearches} búsquedas web · ${m.sourcesCited} fuentes citadas · ${m.stories} historias tocadas · ${m.candidates} candidatos · costo USD ${m.costUsd.toFixed(2)} (mes: USD ${m.monthCostUsd.toFixed(2)} de ${m.monthlyCapUsd})`;
+}
+
 export function renderBriefEmail(c: BriefContent, m: BriefMeta): { subject: string; html: string; text: string } {
   const bySection = (sec: BriefSignalView["section"]) => c.signals.filter((s) => s.section === sec);
   const parts: string[] = [];
   parts.push(`<p style="margin:0;color:${C.muted};font-size:12px">RELEVO · ${esc(m.workspaceName)}</p>
 <h1 style="margin:4px 0 0;font-size:22px">Morning Brief · ${esc(briefDateLabel(m.briefDate))}</h1>`);
+  if (c.metrics) parts.push(`<p style="margin:10px 0 0;font-size:12px;color:${C.muted}"><b style="color:${c.metrics.mode === "reducido" ? C.warn : C.accent}">${modeLabel(c.metrics.mode)}</b> · ${metricsLine(c.metrics)}</p>`);
   if (c.quiet_day_note) parts.push(`<p style="margin:12px 0 0;padding:10px;background:#f9fafb;border-radius:6px">${esc(c.quiet_day_note)}</p>`);
   parts.push(h2("01", "Lo que importa hoy"), list(c.headline_points.map((p) => esc(p.text))));
   (["general", "anelo", "empresas", "activos"] as const).forEach((sec, i) => {
@@ -78,7 +84,7 @@ export function renderBriefEmail(c: BriefContent, m: BriefMeta): { subject: stri
 }
 
 export function renderBriefText(c: BriefContent, m: BriefMeta): string {
-  const L: string[] = [`RELEVO · Morning Brief · ${briefDateLabel(m.briefDate)}`, ""];
+  const L: string[] = [`RELEVO · Morning Brief · ${briefDateLabel(m.briefDate)}`, ...(c.metrics ? [`${modeLabel(c.metrics.mode)} · ${metricsLine(c.metrics)}`] : []), ""];
   if (c.quiet_day_note) L.push(c.quiet_day_note, "");
   L.push("01 — LO QUE IMPORTA HOY", ...c.headline_points.map((p) => `• ${p.text}`), "");
   (["general", "anelo", "empresas", "activos"] as const).forEach((sec, i) => {

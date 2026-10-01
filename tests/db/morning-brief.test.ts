@@ -103,6 +103,9 @@ describe("Morning Brief", () => {
     expect(c.candidates.map((x) => x.name)).toEqual(["Constructora Patagonia SA"]);
     expect(c.connections[0].memory_refs).toEqual([`finding:${finding}`]);
     expect(c.vertical_radar[0].vertical).toBe("Servicios industriales");
+    const metrics = (b!.content as { metrics: { costUsd: number } }).metrics;
+    expect(metrics).toMatchObject({ mode: "completo", collected: 1, collectedVmn: 1, signals: 1, signalsVmn: 1, candidates: 1 });
+    expect(metrics.costUsd).toBeCloseTo(0.3);
     const { count: companies } = await db.from("companies").select("id", { count: "exact", head: true }).eq("workspace_id", ws);
     expect(companies).toBe(1);
     const { data: seen } = await db.from("brief_source_items").select("url, first_brief_id").eq("workspace_id", ws);

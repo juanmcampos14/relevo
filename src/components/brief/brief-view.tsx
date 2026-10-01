@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BASIS_LABEL, CHANGE_LABEL, SECTION_LABEL, SIGNAL_TYPE_LABEL, type BriefContent, type BriefSignalView } from "@/domain/brief/contract";
+import { metricsLine, modeLabel } from "@/domain/brief/render";
 import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { Pill, Section } from "@/components/app/bits";
 import { actionToTask, decideCandidate, setStoryStatus } from "@/app/w/[slug]/brief/actions";
@@ -56,6 +57,11 @@ export function BriefView({ slug, briefId, content, canEdit }: { slug: string; b
   const c = content;
   return (
     <div className="space-y-8">
+      {c.metrics && (
+        <p className="text-xs text-muted-foreground">
+          <span className={c.metrics.mode === "reducido" ? "font-semibold text-amber-700 dark:text-amber-300" : "font-semibold text-primary"}>{modeLabel(c.metrics.mode)}</span> · {metricsLine(c.metrics)}
+        </p>
+      )}
       {c.quiet_day_note && <p className="rounded-lg border bg-muted/40 p-3 text-sm">{c.quiet_day_note}</p>}
 
       <Section title="01 · Lo que importa hoy">

@@ -8,6 +8,8 @@ import { runTurn } from "@/server/ai/turn";
 import { configuredTranscriber } from "@/server/capture/transcribe";
 import type { Preview } from "@/server/ai/drafts";
 import { decideDraft, undoDraft } from "./actions";
+import { structureLater } from "@/server/capture/background";
+import { CAPTURE_BUCKET } from "@/domain/capture";
 import { approveCaptureAction } from "../capturas/actions";
 import { decideProposal } from "@/server/capture/promote";
 import { captureExceptions, type ReviewProposal } from "@/domain/capture-review";
@@ -89,22 +91,54 @@ export async function ignoreFromPanel(slug: string, captureId: string): Promise<
   return { card: await captureCard(slug, captureId) };
 }
 
-export async function askRelevo(slug: string, input: { conversationId: string | null; scope: string; screen: string; text: string; here?: { lat: number; lng: number; accuracy?: number } | null }): Promise<PanelReply> {
+export async function askRelevo(slug: string, input: { conversationId: string | null; scope: string; screen: string; text: string; here?: { lat: number; lng: number; accuracy?: number } | null; place?: string | null; captureId?: string | null }): Promise<PanelReply> {
   const ctx = await getWorkspaceContext(slug);
   const text = z.string().trim().min(1).max(4000).safeParse(input.text);
   if (!text.success) return { ok: false, conversationId: input.conversationId, message: "Escribí una pregunta." };
   const scope = /^[a-z]+:[0-9a-f-]{36}$/.test(input.scope) ? input.scope : "";
   const supabase = await createClient();
+  // Foto de la calle: ya quedó guardada como captura (con ubicación). RELEVO la ve en este turno y el Brain la
+  // estructura en background, sin que nadie la clasifique.
+  const captureId = input.captureId && /^[0-9a-f-]{36}$/.test(input.captureId) ? input.captureId : null;
+  const images: { mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }[] = [];
+  if (captureId) {
+    const { data: media } = await supabase.from("capture_media").select("storage_path, mime_type, kind").eq("capture_id", captureId).eq("kind", "photo").limit(3);
+    for (const m of media ?? []) {
+      const { data: blob } = await supabase.storage.from(CAPTURE_BUCKET).download(m.storage_path);
+      if (!blob) continue;
+      const type = (["image/jpeg", "image/png", "image/webp"].includes(m.mime_type) ? m.mime_type : "image/jpeg") as "image/jpeg";
+      images.push({ mediaType: type, data: Buffer.from(await blob.arrayBuffer()).toString("base64") });
+    }
+  }
   const res = await runTurn(supabase, {
     slug, workspaceId: ctx.workspace.id, workspaceName: ctx.workspace.name, userId: ctx.user.id,
     conversationId: input.conversationId, text: text.data, scope, screen: input.screen.slice(0, 120),
     settings: ctx.workspace.settings,
     here: input.here && Number.isFinite(input.here.lat) && Number.isFinite(input.here.lng) ? input.here : null,
+    place: input.place?.slice(0, 120) ?? null,
+    images: images.length ? images : undefined,
+    attachedCaptureId: captureId,
   });
+  if (captureId) await structureLater(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, captureId, focus: text.data });
   if (!res.ok) return res;
   const labels = await labelRefs(supabase, slug, res.citations);
   const captures = (await Promise.all(res.captureIds.map((id) => captureCard(slug, id)))).filter((c): c is PanelCapture => !!c);
   return { ok: true, conversationId: res.conversationId, text: res.text, labels: Object.fromEntries(labels), drafts: await draftsView(slug, res.draftIds), navigate: res.navigate, captures, webSources: res.webSources };
+}
+
+/** Nombre legible del lugar donde está la persona ("Palermo, Buenos Aires"): contexto, no un módulo. */
+export async function placeName(lat: number, lng: number): Promise<string | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${lat.toFixed(4)}&lon=${lng.toFixed(4)}`, { headers: { "User-Agent": "RELEVO-OS/1.0 (hola@relevo.site)", "Accept-Language": "es" }, signal: AbortSignal.timeout(6000), next: { revalidate: 86400 } });
+    if (!res.ok) return null;
+    const a = ((await res.json()) as { address?: Record<string, string> }).address ?? {};
+    const area = a.suburb ?? a.neighbourhood ?? a.quarter ?? a.city_district ?? a.town ?? a.village ?? null;
+    const city = a.city ?? a.town ?? a.village ?? a.state ?? null;
+    return [area, city !== area ? city : null].filter(Boolean).join(", ") || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Aprobar o rechazar una propuesta desde el panel; devuelve cómo quedó (con enlace al resultado). */

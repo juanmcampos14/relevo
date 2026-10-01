@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { missionBrief } from "@/server/ai/mission";
-import { Conversation, type TodayItem } from "@/components/surface/conversation";
+import { Conversation, type Interrupt, type TodayItem } from "@/components/surface/conversation";
 
 export const metadata: Metadata = { title: { absolute: "RELEVO" } };
 export const dynamic = "force-dynamic";
+
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 
 // Nueva superficie (beta): Conversar. RELEVO ya trabajó; la conversación es protagonista y los objetos
 // aparecen solo cuando aportan. Usa el mismo Brain y el mismo motor que el resto de RELEVO.
@@ -27,10 +29,15 @@ export default async function Hoy({ params }: PageProps<"/hoy/[slug]">) {
   const pending = [...(synthesis?.today ?? []), ...(synthesis?.this_week ?? [])].filter((x) => !x.done).slice(0, 3);
   const items: TodayItem[] = pending.map((x) => ({ title: x.title, why: x.why }));
   const d = brief?.mission.days_to_start ?? null;
-  const mission = brief ? `${brief.mission.name.split("—")[0].trim()}${d !== null ? (d > 1 ? ` · faltan ${d} días` : d === 1 ? " · mañana" : d === 0 ? " · hoy" : " · en curso") : ""}` : null;
+  const missionName = brief?.mission.name.split("—")[0].trim() ?? null;
+  const mission = missionName ? `${missionName}${d !== null ? (d > 1 ? ` · faltan ${d} días` : d === 1 ? " · mañana" : d === 0 ? " · hoy" : " · en curso") : ""}` : null;
   const intro = synthesis
-    ? `Mientras no estabas estuve preparando ${brief?.mission.name.split("—")[0].trim() ?? "la misión"}. ${items.length ? `Hay ${items.length === 1 ? "una cosa" : `${["", "", "dos", "tres"][items.length]} cosas`} que movería${pending.length && synthesis.today?.some((x) => !x.done) ? " hoy" : ""}.` : "Por ahora no hay nada urgente."}`
-    : "Contame qué necesitás, o qué viste, escuchaste o hiciste.";
+    ? `Estuve trabajando mientras no estabas.${items.length ? " Esto es lo que movería hoy." : " Por ahora no hay nada urgente."}`
+    : "Contame qué necesitás, o mostrame lo que estás viendo.";
 
-  return <Conversation slug={slug} canEdit={ctx.canEdit} greeting={greeting} intro={intro} items={items} missionLabel={mission} />;
+  // Interrumpir solo cuando importa: algo nuevo y de relevancia alta en la misión, de las últimas 36 horas.
+  const { data: alert } = await supabase.from("brief_signals").select("id, headline").eq("relevance", "alta").eq("change", "nuevo").gte("created_at", hoursAgo(36)).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const interrupt: Interrupt = alert ? { id: alert.id, title: `${name ? `${name}, apareció` : "Apareció"} algo en ${missionName ?? "la misión"} que miraría.`, detail: alert.headline } : null;
+
+  return <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={brief?.mission.ref.split(":")[1] ?? null} canEdit={ctx.canEdit} greeting={greeting} intro={intro} items={items} missionLabel={mission} interrupt={interrupt} />;
 }

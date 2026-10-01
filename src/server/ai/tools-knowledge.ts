@@ -12,7 +12,7 @@ import { qualityChecks } from "@/server/quality";
 import type { ToolContext } from "./tools";
 import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type PlaceCategory, type Point } from "@/domain/geo";
 import { geocode, memoryNearby, placesNearby } from "@/server/geo";
-import { processCapture } from "@/server/capture/process";
+import { structureLater } from "@/server/capture/background";
 import { missionBrief } from "./mission";
 import { fold } from "@/domain/crm-import/map";
 import { ContactEventInput, applyContactEvent } from "./contact-events";
@@ -460,26 +460,14 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       });
       if (error || !id) return { content: `No se pudo guardar la captura: ${error?.message ?? "sin id"}`, isError: true };
       const captureId = id as string;
-      ctx.onCapture?.(captureId);
       ctx.seenRefs.add(ref("capture", captureId));
-      const res = await processCapture(db, { workspaceId: ctx.workspaceId, settings: ctx.settings, userId: ctx.userId, captureId, focus: typeof a.focus === "string" ? a.focus : undefined });
-      if (!res.ok) return { content: track(ctx, { ref: ref("capture", captureId), saved: true, processed: false, note: res.message }) };
-      const [{ data: c }, { data: props }] = await Promise.all([
-        db.from("captures").select("ai_summary, ai_unknowns").eq("id", captureId).single(),
-        db.from("proposals").select("kind, payload, matches").eq("capture_id", captureId).order("position"),
-      ]);
+      // Se estructura en background (persona, empresa, evidencia, hipótesis, seguimiento): la respuesta no espera.
+      await structureLater(db, { workspaceId: ctx.workspaceId, settings: ctx.settings, userId: ctx.userId, captureId, focus: typeof a.focus === "string" ? a.focus : undefined });
       return {
-        content: track(ctx, {
-          ref: ref("capture", captureId),
+        content: JSON.stringify({
           saved: true,
           location: here ? "con la ubicación del teléfono" : "sin ubicación",
-          summary: c?.ai_summary,
-          unknowns: c?.ai_unknowns,
-          proposals: (props ?? []).map((p) => {
-            const v = p.payload as Record<string, unknown>;
-            return { kind: p.kind, what: String(v.statement ?? v.name ?? v.title ?? v.role ?? ""), origin: v.origin ?? null, relation: v.relation ?? null, refines: v.refined_statement ?? null, existing: v.link_to ? { ref: ref("finding", String(v.link_to)) } : null, is_idea: v.is_idea ?? null };
-          }),
-          note: "Quedó guardada y estructurada como propuesta: el usuario la aprueba desde la tarjeta del panel. No afirmes nada como verificado.",
+          note: "Quedó guardado el original y el Brain lo estructura en segundo plano (guarda lo seguro; lo ambiguo queda pendiente). Respondé corto qué entendiste y qué vas a hacer; no describas lo que se guardó ni pidas aprobación.",
         }),
       };
     }

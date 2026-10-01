@@ -7,7 +7,7 @@ export default async function Root() {
   const user = await getSessionUser();
   const supabase = await createClient();
   const { data: workspaces } = await supabase.from("workspaces").select("name, slug").eq("status", "active").order("name");
-  if (workspaces?.length === 1) redirect(`/w/${workspaces[0].slug}`);
+  if (workspaces?.length === 1) redirect(`/hoy/${workspaces[0].slug}`);
 
   return (
     <main className="mx-auto max-w-md px-4 py-10">

@@ -7,6 +7,7 @@ import { AI_MODEL, PROMPT_VERSION, runAgent } from "./agent";
 import { previewDraft } from "./drafts";
 import { after } from "next/server";
 import { synthesizeMission } from "@/server/mission/synthesis";
+import { ANELO_POINT, distanceM } from "@/domain/geo-match";
 
 // Un turno de conversación con RELEVO: lo usan la página de RELEVO AI y el panel persistente.
 // Mismo motor, mismas herramientas, mismos permisos (el cliente del usuario → RLS).
@@ -36,6 +37,11 @@ export async function runTurn(
   opts: {
     slug: string; workspaceId: string; workspaceName: string; userId: string; settings?: unknown; conversationId: string | null; text: string; scope: string; screen?: string;
     here?: { lat: number; lng: number; accuracy?: number } | null; client?: Pick<Anthropic, "beta">;
+    /** Lugar físico legible ("Palermo, Buenos Aires"), si se conoce. */
+    place?: string | null;
+    /** Fotos de este turno, ya guardadas como captura (captureId). */
+    images?: { mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }[];
+    attachedCaptureId?: string | null;
   },
 ): Promise<TurnResult> {
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, conversationId: opts.conversationId, message: "RELEVO AI no está configurado en este entorno (falta ANTHROPIC_API_KEY)." };
@@ -63,6 +69,7 @@ export async function runTurn(
   ordered.forEach((r) => (r.citations as string[]).forEach((c) => seenRefs.add(c)));
   // La entidad de la pantalla actual es consultable (y citable) sin buscarla.
   if (opts.scope) seenRefs.add(opts.scope);
+  if (opts.attachedCaptureId) seenRefs.add(`capture:${opts.attachedCaptureId}`);
 
   // Identidad: cómo se llama cada persona del equipo en la conversación y con qué nombre completo aparece en
   // documentos y en el CRM (p. ej. Tano = Estanislao Vilamajo). Se configura en workspace.settings.team.
@@ -75,7 +82,8 @@ export async function runTurn(
   const context = [
     `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.${teamLine ? ` Equipo: ${teamLine}; en documentos y en el CRM pueden figurar con cualquiera de los dos nombres.` : ""}${firstName ? ` Hablás con ${firstName}: llamalo así.` : ""}`,
     opts.screen ? `Pantalla actual: ${opts.screen}.` : null,
-    opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m). "Acá" o "donde estoy" es ese punto.` : null,
+    opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m)${opts.place ? `, en ${opts.place}` : ""}. "Acá" o "donde estoy" es ese punto.` : null,
+    opts.attachedCaptureId ? `Mandó ${opts.images?.length === 1 ? "una foto" : "fotos"} que ya quedaron guardadas con su ubicación [[capture:${opts.attachedCaptureId}]]: miralas y respondé; no las vuelvas a registrar.` : null,
     opts.scope && scopeLabel[scopeType]
       ? `El usuario está mirando ${scopeLabel[scopeType]} [[${opts.scope}]]: si la pregunta se refiere a "esto", "acá" o no nombra otra cosa, es sobre eso (consultalo primero con ${scopeTool[scopeType] ?? "get_record"}). Podés consultar el resto de la memoria cuando haga falta.`
       : "Alcance: todo el workspace.",
@@ -85,15 +93,20 @@ export async function runTurn(
   const captureIds: string[] = [];
   let navigate: string | null = null;
   // Una nota de campo alimenta el proyecto que se está mirando; si no, la misión.
-  const campaignId = scopeType === "campaign"
+  // Dónde está la persona no es la misión: lejos de la zona de la misión (p. ej. caminando por Buenos Aires),
+  // lo que captura queda en su lugar y no se carga a la misión, que sigue trabajando detrás.
+  const mission = scopeType === "campaign"
     ? opts.scope.split(":")[1]
     : (await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle()).data?.id ?? null;
+  const awayFromMission = !!opts.here && scopeType !== "campaign" && distanceM(ANELO_POINT, opts.here) > 150_000;
+  const campaignId = awayFromMission ? null : mission;
   const started = Date.now();
   const result = await runAgent({
     client: opts.client ?? new Anthropic(),
     history,
     userText: opts.text,
     context,
+    images: opts.images,
     tools: {
       db,
       slug: opts.slug,
@@ -142,7 +155,8 @@ export async function runTurn(
     .select("id")
     .single();
 
-  const userParam: Anthropic.Beta.BetaMessageParam = { role: "user", content: [{ type: "text", text: context }, { type: "text", text: opts.text }] };
+  // En el historial queda la referencia a la foto, no la imagen.
+  const userParam: Anthropic.Beta.BetaMessageParam = { role: "user", content: [{ type: "text", text: context }, { type: "text", text: opts.attachedCaptureId ? `${opts.text}\n[foto: capture:${opts.attachedCaptureId}]` : opts.text }] };
   await db.from("ai_messages").insert({ workspace_id: opts.workspaceId, conversation_id: convId, role: "user", text: opts.text, api_content: [userParam] as never });
   if (result.status !== "error") {
     const { data: msg } = await db
@@ -154,11 +168,11 @@ export async function runTurn(
   }
   await db.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
   // Re-síntesis profunda de la misión en background tras una acción relevante (como mucho una por hora).
-  if (draftIds.length && campaignId && result.status !== "error") {
+  if (draftIds.length && mission && result.status !== "error") {
     const { data: applied } = await db.from("ai_action_drafts").select("id").in("id", draftIds).eq("status", "ejecutada").limit(1);
-    const { data: c } = await db.from("campaigns").select("synthesized_at").eq("id", campaignId).maybeSingle();
+    const { data: c } = await db.from("campaigns").select("synthesized_at").eq("id", mission).maybeSingle();
     if (applied?.length && (!c?.synthesized_at || Date.now() - new Date(c.synthesized_at).getTime() > 3_600_000)) {
-      const resynth = () => synthesizeMission(db, { workspaceId: opts.workspaceId, campaignId, userId: opts.userId });
+      const resynth = () => synthesizeMission(db, { workspaceId: opts.workspaceId, campaignId: mission, userId: opts.userId });
       try {
         after(async () => { await resynth(); });
       } catch {

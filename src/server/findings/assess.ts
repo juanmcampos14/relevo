@@ -6,7 +6,7 @@ import * as z from "zod/v4";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { ECONOMIC_KEYS, sanitizeEconomics } from "@/domain/economics";
-import { EVIDENCE_LEVEL_KEYS, PURPOSE_KEYS, sanitizeDiscovery } from "@/domain/discovery";
+import { BUYER_ROLE, DEMAND_SECTOR, EVIDENCE_LEVEL_KEYS, PURPOSE_KEYS, sanitizeDiscovery, type Purpose } from "@/domain/discovery";
 import {
   DIMENSIONS,
   DIMENSION_KEYS,
@@ -22,7 +22,7 @@ import {
 
 type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
-const PROMPT_VERSION = "finding-estado-v4";
+const PROMPT_VERSION = "finding-estado-v5";
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60;
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
@@ -65,7 +65,7 @@ export const AssessmentSchema = z.object({
     who_can_help: z.array(
       z.object({
         ref: z.string().describe("Referencia 'contact:…' o 'company:…' de la lista. Preferí una persona si la hay."),
-        purpose: z.enum(PURPOSE_KEYS).describe("comprar_asociar: dueño de un negocio/activo que podríamos comprar o con quien asociarnos. vender_crear: posible comprador de lo que podríamos ofrecer. inteligencia: entiende cómo funciona el mercado aunque no hagamos negocio con él."),
+        purpose: z.enum(PURPOSE_KEYS).describe("Qué representa ese actor para la MISIÓN, no qué le vamos a preguntar acá. comprar_asociar: dueño u operador de un negocio, activo, alojamiento o servicio (podríamos comprarlo o asociarnos). vender_crear: quien compra, paga, asigna o decide del lado de la demanda (operadoras, contratistas, compradores corporativos, Compras/RRHH/Facilities). inteligencia: brokers, asesores, cámaras, medios, trabajadores o gente local que explica cómo funciona Añelo."),
         why: z.string().describe("Por qué esta persona o empresa: qué puede validar."),
         ask: z.string().describe("Qué preguntarle, concreto."),
       }),
@@ -89,8 +89,12 @@ Reglas:
 - Las validaciones son concretas y realizables en campo o por teléfono (a quién, qué preguntar, qué dato conseguir).
 - Economía: registrá solo lo que la evidencia dice (declarado u observado, citando ids) o lo que se calcula de eso (con la fórmula). Una estimación se marca como estimada. No completes variables por completar.
 - Discovery: investigamos para cerrar gaps. El diseño del equipo (contexto de la hipótesis y preguntas) NO es evidencia: es lo que creemos y cómo pensamos validarlo. La evidencia relacionada (sobre empresas vinculadas, no vinculada todavía a esta hipótesis) es real pero indirecta: usala con su procedencia. Las señales externas son contexto: no prueban demanda.
-- "Quién puede ayudar": solo personas o empresas de la lista, con el propósito correcto y una pregunta concreta que cierre un gap.
+- "Quién puede ayudar": solo personas o empresas de las listas, con una pregunta concreta que cierre un gap. Si la lista trae el propósito ya definido, respetalo. Cubrí los dos lados cuando la hipótesis lo pida: quien ofrece/opera y quien compra, paga, asigna o decide (lado demanda). Si no hay nadie del lado demanda en las listas, decilo en why.
+- Economía con procedencia: un dato publicado por la propia empresa (en su web, un aviso) o dicho por una persona es DECLARADO por ella, no estimado: citá su id de evidencia (vinculada o relacionada). Estimado es solo un supuesto tuyo sin evidencia. Publicado no significa verdadero: el nivel de validación queda en la evidencia.
 - Español rioplatense, breve.`;
+
+/** La evidencia relacionada se lista como "evidence:uuid"; la vinculada, por id. Se aceptan ambas formas. */
+const bareId = (id: string) => id.replace(/^evidence:/, "");
 
 export type AssessResult = { ok: true; assessmentId: string; proposals: number } | { ok: false; message: string };
 
@@ -116,7 +120,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
   const m = metrics(links, today);
   const detGaps = deterministicGaps(m);
 
-  const ctxDiscovery = await discoveryContext(db, finding.id, new Set(links.map((l) => l.id)));
+  const ctxDiscovery = await discoveryContext(db, finding.id, new Set(links.map((l) => l.id)), opts.workspaceId);
 
   const evidenceText = rows.length
     ? rows.map(({ stance, e }) => [
@@ -180,7 +184,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
     .single();
   if (!parsed) return { ok: false, message: error ?? "No se pudo evaluar el finding." };
 
-  const dims = sanitizeDimensions(parsed.dimensions, links);
+  const dims = sanitizeDimensions(parsed.dimensions.map((d) => ({ ...d, evidence_ids: d.evidence_ids.map(bareId) })), links);
   const gaps = orderGaps([...detGaps, ...gapsFromDimensions(dims)]);
   const { data: assessment, error: e1 } = await db
     .from("finding_assessments")
@@ -189,7 +193,8 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
       finding_id: finding.id,
       evidence_ids: links.map((l) => l.id),
       dimensions: dims as unknown as NonNullable<Json>,
-      economics: sanitizeEconomics(parsed.economics ?? [], new Set(links.map((l) => l.id))) as unknown as NonNullable<Json>,
+      // Economía: vale citar evidencia vinculada o relacionada (lo declarado por una empresa sobre sí misma).
+      economics: sanitizeEconomics((parsed.economics ?? []).map((e) => ({ ...e, evidence_ids: e.evidence_ids.map(bareId) })), new Set([...links.map((l) => l.id), ...ctxDiscovery.relatedIds])) as unknown as NonNullable<Json>,
       gaps,
       summary: parsed.summary,
       discovery: sanitizeDiscovery(parsed.discovery, ctxDiscovery.seen) as unknown as Json,
@@ -227,7 +232,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
  * Lo que rodea a una hipótesis en el Brain, para el discovery: empresas vinculadas y su gente, evidencia
  * sobre esas empresas (no vinculada todavía), preguntas del diseño de investigación y señales externas.
  */
-async function discoveryContext(db: Db, findingId: string, linked: Set<string>) {
+async function discoveryContext(db: Db, findingId: string, linked: Set<string>, workspaceId: string) {
   const [{ data: fc }, { data: qf }, { data: sig }] = await Promise.all([
     db.from("finding_companies").select("companies(id, trade_name, legal_name, sector, activity, locality, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)))").eq("finding_id", findingId),
     db.from("question_findings").select("research_questions(id, code, kind, industry, dimension, question)").eq("finding_id", findingId),
@@ -240,19 +245,51 @@ async function discoveryContext(db: Db, findingId: string, linked: Set<string>) 
     : { data: [] };
   const related = (ev ?? []).filter((e) => !linked.has(e.id));
   const people = new Map<string, string>();
+  const purposes = new Map<string, Purpose>();
+  // Propósito ya definido en los objetivos de la misión activa (lo que el actor representa para la misión).
+  const { data: mission } = await db.from("campaigns").select("id").eq("workspace_id", workspaceId).eq("kind", "mision").eq("status", "activa").limit(1).maybeSingle();
+  const { data: tg } = mission ? await db.from("campaign_targets").select("company_id, purpose").eq("campaign_id", mission.id).not("purpose", "is", null) : { data: [] };
+  const companyPurpose = new Map((tg ?? []).map((x) => [x.company_id!, x.purpose as Purpose]));
   const lines: string[] = ["EMPRESAS Y PERSONAS RELACIONADAS (vinculadas a la hipótesis en el diseño):"];
   for (const c of companies) {
     const name = c.trade_name ?? c.legal_name ?? "Empresa";
     people.set(`company:${c.id}`, name);
-    lines.push(`- company:${c.id} · ${name} · ${[c.sector, c.activity, c.locality].filter(Boolean).join(" · ")}`);
+    const cp = companyPurpose.get(c.id);
+    if (cp) purposes.set(`company:${c.id}`, cp);
+    lines.push(`- company:${c.id} · ${name} · ${[c.sector, c.activity, c.locality].filter(Boolean).join(" · ")}${cp ? ` · propósito para la misión: ${cp}` : ""}`);
     for (const l of c.contact_links) {
       const p = l.contacts;
       if (!p) continue;
       people.set(`contact:${p.id}`, `${p.full_name} · ${name}`);
+      if (cp) purposes.set(`contact:${p.id}`, cp);
       lines.push(`  - contact:${p.id} · ${p.full_name}${p.role_title ? ` (${p.role_title})` : ""} · ${p.contact_kind === "canal_institucional" ? "canal institucional" : "persona"} · relación: ${p.relationship_status ?? "—"}${p.outreach_draft ? " · tiene borrador de primer contacto" : ""}`);
     }
   }
   if (!companies.length) lines.push("(ninguna)");
+
+  // Lado demanda: quienes compran, pagan, asignan o deciden, aunque no estén vinculados a esta hipótesis.
+  const linkedCompanies = new Set(companies.map((c) => c.id));
+  const { data: demand } = await db.from("companies").select("id, trade_name, legal_name, sector, activity, contact_links(contacts(id, full_name, role_title))").eq("workspace_id", workspaceId).eq("is_demo", false).limit(400);
+  const buyers = (demand ?? [])
+    .filter((c) => !linkedCompanies.has(c.id))
+    .map((c) => ({ c, roles: c.contact_links.flatMap((l) => (l.contacts && BUYER_ROLE.test(l.contacts.role_title ?? "") ? [l.contacts] : [])) }))
+    .filter(({ c, roles }) => DEMAND_SECTOR.test(`${c.sector ?? ""} ${c.activity ?? ""}`) || roles.length)
+    .sort((a, b) => b.roles.length - a.roles.length)
+    .slice(0, 15);
+  lines.push("", "LADO DEMANDA (quienes compran, pagan, asignan o deciden; no vinculados todavía a esta hipótesis):");
+  for (const { c, roles } of buyers) {
+    const name = c.trade_name ?? c.legal_name ?? "Empresa";
+    people.set(`company:${c.id}`, name);
+    const cp = companyPurpose.get(c.id);
+    if (cp) purposes.set(`company:${c.id}`, cp);
+    lines.push(`- company:${c.id} · ${name} · ${[c.sector, c.activity].filter(Boolean).join(" · ")}${cp ? ` · propósito para la misión: ${cp}` : ""}`);
+    for (const p of roles) {
+      people.set(`contact:${p.id}`, `${p.full_name} · ${name}`);
+      if (cp) purposes.set(`contact:${p.id}`, cp);
+      lines.push(`  - contact:${p.id} · ${p.full_name}${p.role_title ? ` (${p.role_title})` : ""}`);
+    }
+  }
+  if (!buyers.length) lines.push("(ninguno en el Brain)");
   lines.push("", "EVIDENCIA RELACIONADA (sobre esas empresas; no vinculada todavía a la hipótesis):");
   lines.push(...(related.length ? related.map((e) => `- evidence:${e.id} · "${e.statement}" · ${e.origin_kind} · ${e.verification_status}${e.declared_by ? ` · declarado por ${e.declared_by}` : ""}${e.observed_at ? ` · ${e.observed_at.slice(0, 10)}` : ""}`) : ["(ninguna)"]));
   const questions = (qf ?? []).flatMap((x) => (x.research_questions ? [x.research_questions] : []));
@@ -267,6 +304,8 @@ async function discoveryContext(db: Db, findingId: string, linked: Set<string>) 
       signals: new Set((sig ?? []).map((x) => `signal:${x.id}`)),
       questions: new Set(questions.map((q) => `question:${q.id}`)),
       people,
+      purposes,
     },
+    relatedIds: related.map((e) => e.id),
   };
 }

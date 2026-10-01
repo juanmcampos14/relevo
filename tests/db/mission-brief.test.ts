@@ -15,7 +15,7 @@ const pool = newPool();
 const admin = createClient<Database>(URL, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false } });
 const email = `tano-m-${randomUUID().slice(0, 8)}@test.local`;
 const password = randomUUID();
-let ws: string, userId: string, db: SupabaseClient<Database>, mission: string, finding: string, company: string, contact: string, question: string, evidence: string, signal: string;
+let ws: string, userId: string, db: SupabaseClient<Database>, mission: string, finding: string, company: string, contact: string, question: string, evidence: string, signal: string, buyer: string;
 const prompts: string[] = [];
 
 const fakeClient = () =>
@@ -31,7 +31,7 @@ const fakeClient = () =>
               summary: "Solo diseño y una declaración relacionada.",
               dimensions: [{ key: "problema", status: "creido", summary: "La vacancia rota.", evidence_ids: [] }],
               next_validations: [{ title: "Hablar con el operador", why: "Nadie lo validó.", gap: "evidencia_insuficiente", who: "Operador" }],
-              economics: [],
+              economics: [{ variable: "volumen", value: "120 camas publicadas por el hotel", basis: "declarado", formula: null, evidence_ids: [`evidence:${evidence}`] }],
               discovery: {
                 belief: "La rotación pesa más que el inventario.",
                 why: "Un operador declaró ocupación alta; el resto es diseño.",
@@ -40,7 +40,10 @@ const fakeClient = () =>
                 evidence_refs: [`evidence:${evidence}`, "evidence:00000000-0000-0000-0000-000000000000"],
                 signal_refs: [`signal:${signal}`],
                 question_refs: [`question:${question}`],
-                who_can_help: [{ ref: `contact:${contact}`, purpose: "comprar_asociar", why: "Opera camas", ask: "¿Cuánto dura una asignación?" }],
+                who_can_help: [
+                  { ref: `contact:${contact}`, purpose: "inteligencia", why: "Opera camas", ask: "¿Cuánto dura una asignación?" },
+                  { ref: `contact:${buyer}`, purpose: "vender_crear", why: "Compra camas para cuadrillas", ask: "¿Cuántas camas pagan y cuántas usan?" },
+                ],
               },
             },
           };
@@ -62,6 +65,9 @@ beforeAll(async () => {
   contact = await q(`insert into contacts (workspace_id, full_name, role_title, outreach_draft) values ($1, 'Martín Prueba', 'Encargado', 'Hola Martín…') returning id`, [ws]);
   await pool.query(`insert into contact_links (workspace_id, contact_id, company_id) values ($1, $2, $3)`, [ws, contact, company]);
   await pool.query(`insert into campaign_targets (workspace_id, campaign_id, company_id, priority, purpose) values ($1, $2, $3, 1, 'comprar_asociar')`, [ws, mission, company]);
+  const op = await q(`insert into companies (workspace_id, trade_name, sector) values ($1, 'Operadora Prueba', 'Comprador corporativo') returning id`, [ws]);
+  buyer = await q(`insert into contacts (workspace_id, full_name, role_title) values ($1, 'Ana Compras', 'Gerente de Compras') returning id`, [ws]);
+  await pool.query(`insert into contact_links (workspace_id, contact_id, company_id) values ($1, $2, $3)`, [ws, buyer, op]);
   finding = await q(`insert into findings (workspace_id, source_id, kind, statement, maturity, dedup_key) values ($1, $2, 'necesidad', 'Rotación y asignación de vacancia pesan más que inventario total', 'hipotesis', 'crm:H-VA-09') returning id`, [ws, src]);
   await pool.query(`insert into finding_companies (workspace_id, finding_id, company_id) values ($1, $2, $3)`, [ws, finding, company]);
   question = await q(`insert into research_questions (workspace_id, code, kind, industry, question, origin) values ($1, 'VO-Q04', 'entrevista', 'AOG · Hotel Prueba', '¿Cuánto dura una asignación de cama?', 'crm') returning id`, [ws]);
@@ -82,13 +88,19 @@ describe("misión como contexto", () => {
     const res = await assessFinding(db, { workspaceId: ws, settings: { ai_processing_consent: true }, userId, findingId: finding, client: fakeClient(), today: "2026-10-01" });
     expect(res.ok).toBe(true);
     const prompt = prompts.at(-1)!;
-    for (const s of [`company:${company}`, `contact:${contact}`, "tiene borrador de primer contacto", `evidence:${evidence}`, `question:${question}`, `signal:${signal}`]) expect(prompt).toContain(s);
-    const { data } = await db.from("finding_assessments").select("discovery").eq("finding_id", finding).single();
+    for (const s of [`company:${company}`, `contact:${contact}`, "tiene borrador de primer contacto", "propósito para la misión: comprar_asociar", `evidence:${evidence}`, `question:${question}`, `signal:${signal}`, "LADO DEMANDA", `contact:${buyer} · Ana Compras (Gerente de Compras)`]) expect(prompt).toContain(s);
+    const { data } = await db.from("finding_assessments").select("discovery, economics").eq("finding_id", finding).single();
+    // El propósito definido en el objetivo de la misión manda sobre lo que diga el modelo; el comprador entra del lado demanda.
     expect(data!.discovery).toMatchObject({
       evidence_level: "media",
       evidence_refs: [`evidence:${evidence}`],
-      who_can_help: [{ ref: `contact:${contact}`, name: "Martín Prueba · Hotel Prueba", purpose: "comprar_asociar" }],
+      who_can_help: [
+        { ref: `contact:${contact}`, name: "Martín Prueba · Hotel Prueba", purpose: "comprar_asociar" },
+        { ref: `contact:${buyer}`, name: "Ana Compras · Operadora Prueba", purpose: "vender_crear" },
+      ],
     });
+    // Lo publicado por la propia empresa queda DECLARADO con su evidencia, no estimado.
+    expect(data!.economics).toEqual([expect.objectContaining({ variable: "volumen", basis: "declarado", evidence_ids: [evidence] })]);
   });
 
   it("el mission brief trae misión, momento, hipótesis con lo que creemos y quién ayuda, outreach listo y guiones AOG", async () => {

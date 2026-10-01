@@ -7,11 +7,12 @@ import { profileNames } from "@/server/findings";
 import { EmptyState, PageHeader, Pill, formatDate } from "@/components/app/bits";
 import { Composer } from "@/components/ai/composer";
 import { RichText } from "@/components/ai/rich-text";
-import { decideDraft, sendMessage } from "./actions";
+import { decideDraft, sendMessage, undoDraft } from "./actions";
 
 export const metadata: Metadata = { title: "RELEVO AI" };
 
 const actionLabel: Record<string, string> = {
+  contact_event: "Contacto registrado",
   create_task: "Crear tarea",
   prepare_validation: "Agendar validación",
   link_evidence: "Vincular evidencia",
@@ -21,7 +22,7 @@ const actionLabel: Record<string, string> = {
   request_decision: "Pedir decisión",
   record_web_evidence: "Guardar fuente web como evidencia",
 };
-const draftStatus: Record<string, string> = { propuesta: "Propuesta", aprobada: "Aprobada", rechazada: "Rechazada", ejecutada: "Ejecutada", error: "Error" };
+const draftStatus: Record<string, string> = { propuesta: "Propuesta", aprobada: "Aprobada", rechazada: "Rechazada", ejecutada: "Ejecutada", error: "Error", deshecha: "Deshecha" };
 
 export default async function AiPage({ params, searchParams }: PageProps<"/w/[slug]/ai">) {
   const { slug } = await params;
@@ -109,6 +110,28 @@ export default async function AiPage({ params, searchParams }: PageProps<"/w/[sl
                   <RichText text={m.text} labels={labels} />
                   {myDrafts.map((d) => {
                     const p = d.payload as Record<string, string | undefined>;
+                    // Acción aplicada por RELEVO (auditada): se informa y se puede deshacer.
+                    if (d.action === "contact_event") {
+                      const cal = (d.after_state as { calendar_url?: string | null } | null)?.calendar_url;
+                      const summary = (d.preview as { summary?: string } | null)?.summary ?? d.rationale;
+                      return (
+                        <div key={d.id} className="space-y-2 rounded-md border p-3">
+                          <p className="text-sm">{d.status === "deshecha" ? <s className="text-muted-foreground">{summary}</s> : summary}</p>
+                          {d.status === "ejecutada" ? (
+                            <div className="flex flex-wrap gap-2">
+                              {cal && <a href={cal} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/85">Agregar a Calendar</a>}
+                              {ctx.canEdit && (
+                                <form action={undoDraft.bind(null, slug, d.id)}>
+                                  <button className="inline-flex h-8 items-center rounded-md border px-3 text-sm hover:bg-muted">Deshacer</button>
+                                </form>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">{d.status === "deshecha" ? "Deshecho: no quedó nada." : d.error ?? d.status}</p>
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <div key={d.id} className="space-y-2 rounded-md border border-dashed p-3">
                         <div className="flex flex-wrap items-center gap-2">

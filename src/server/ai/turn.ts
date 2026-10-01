@@ -62,10 +62,12 @@ export async function runTurn(
   // La entidad de la pantalla actual es consultable (y citable) sin buscarla.
   if (opts.scope) seenRefs.add(opts.scope);
 
+  const { data: me } = await db.from("profiles").select("display_name").eq("user_id", opts.userId).maybeSingle();
+  const firstName = me?.display_name?.trim().split(/\s+/)[0] ?? null;
   const now = new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
   const [scopeType] = opts.scope.split(":");
   const context = [
-    `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.`,
+    `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.${firstName ? ` Hablás con ${firstName}.` : ""}`,
     opts.screen ? `Pantalla actual: ${opts.screen}.` : null,
     opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m). "Acá" o "donde estoy" es ese punto.` : null,
     opts.scope && scopeLabel[scopeType]
@@ -97,6 +99,18 @@ export async function runTurn(
       settings: opts.settings,
       campaignId,
       onCapture: (id) => captureIds.push(id),
+      saveApplied: async ({ action, payload, summary, after }) => {
+        // Las acciones aplicadas solas quedan auditadas como borrador ejecutado (deshacible).
+        const { data, error } = await db
+          .from("ai_action_drafts")
+          .insert({ workspace_id: opts.workspaceId, conversation_id: convId!, action, payload: payload as never, rationale: summary, evidence_refs: [], preview: { summary, changes: [], why: summary, evidence_refs: [], duplicate_risk: [], expected: summary, applied: true } as never })
+          .select("id")
+          .single();
+        if (error) throw error;
+        await db.from("ai_action_drafts").update({ status: "ejecutada", decided_by: opts.userId, decided_at: new Date().toISOString(), after_state: after as never }).eq("id", data.id);
+        draftIds.push(data.id);
+        return data.id;
+      },
       saveDraft: async (input) => {
         const { action, rationale, evidence_refs, ...payload } = input;
         const preview = await previewDraft(db, input);

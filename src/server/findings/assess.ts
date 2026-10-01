@@ -22,7 +22,7 @@ import {
 
 type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
-const PROMPT_VERSION = "finding-estado-v5";
+const PROMPT_VERSION = "finding-estado-v6";
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60;
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
@@ -91,6 +91,8 @@ Reglas:
 - Discovery: investigamos para cerrar gaps. El diseño del equipo (contexto de la hipótesis y preguntas) NO es evidencia: es lo que creemos y cómo pensamos validarlo. La evidencia relacionada (sobre empresas vinculadas, no vinculada todavía a esta hipótesis) es real pero indirecta: usala con su procedencia. Las señales externas son contexto: no prueban demanda.
 - "Quién puede ayudar": solo personas o empresas de las listas, con una pregunta concreta que cierre un gap. Si la lista trae el propósito ya definido, respetalo. Cubrí los dos lados cuando la hipótesis lo pida: quien ofrece/opera y quien compra, paga, asigna o decide (lado demanda). Si no hay nadie del lado demanda en las listas, decilo en why.
 - Economía con procedencia: un dato publicado por la propia empresa (en su web, un aviso) o dicho por una persona es DECLARADO por ella, no estimado: citá su id de evidencia (vinculada o relacionada). Estimado es solo un supuesto tuyo sin evidencia. Publicado no significa verdadero: el nivel de validación queda en la evidencia.
+- Precio distinto ≠ baja de precio. Dos precios para un mismo activo pueden ser otra publicación, otro broker, otro activo, un error, una actualización o un cambio real: no decidas cuál. Nunca infieras que algo "saldría más barato", que "bajó" o que hay margen de negociación; decí que el precio es inconsistente y que falta saber cuál es el vigente.
+- No inventes actores. Si un propietario, broker u operador aparece solo como texto del activo (no como empresa o persona de las listas), no lo propongas como "quién puede ayudar": identificarlo es un faltante ("falta identificar propietario/broker").
 - Español rioplatense, breve.`;
 
 /** La evidencia relacionada se lista como "evidence:uuid"; la vinculada, por id. Se aceptan ambas formas. */
@@ -233,6 +235,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
  * sobre esas empresas (no vinculada todavía), preguntas del diseño de investigación y señales externas.
  */
 async function discoveryContext(db: Db, findingId: string, linked: Set<string>, workspaceId: string) {
+  const { data: fa } = await db.from("findings").select("assets(id, title, kind, operation, locality, surface_m2, capacity_text, occupancy_declared, owner_text, broker_text, operator_text, price_status, asset_prices(amount, currency, operation, observed_on, source_url, publisher, basis, note))").eq("id", findingId).maybeSingle();
   const [{ data: fc }, { data: qf }, { data: sig }] = await Promise.all([
     db.from("finding_companies").select("companies(id, trade_name, legal_name, sector, activity, locality, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)))").eq("finding_id", findingId),
     db.from("question_findings").select("research_questions(id, code, kind, industry, dimension, question)").eq("finding_id", findingId),
@@ -250,7 +253,16 @@ async function discoveryContext(db: Db, findingId: string, linked: Set<string>, 
   const { data: mission } = await db.from("campaigns").select("id").eq("workspace_id", workspaceId).eq("kind", "mision").eq("status", "activa").limit(1).maybeSingle();
   const { data: tg } = mission ? await db.from("campaign_targets").select("company_id, purpose").eq("campaign_id", mission.id).not("purpose", "is", null) : { data: [] };
   const companyPurpose = new Map((tg ?? []).map((x) => [x.company_id!, x.purpose as Purpose]));
-  const lines: string[] = ["EMPRESAS Y PERSONAS RELACIONADAS (vinculadas a la hipótesis en el diseño):"];
+  const lines: string[] = [];
+  const asset = fa?.assets;
+  if (asset) {
+    lines.push(`ACTIVO DE LA HIPÓTESIS: ${asset.title} · ${[asset.kind, asset.operation, asset.locality].filter(Boolean).join(" · ")}${asset.surface_m2 ? ` · ${asset.surface_m2} m²` : ""}${asset.capacity_text ? ` · ${asset.capacity_text}` : ""}`);
+    lines.push(`  Ocupación declarada: ${asset.occupancy_declared ?? "—"} · estado del precio: ${asset.price_status === "inconsistente" ? "INCONSISTENTE (no es una baja)" : asset.price_status ?? "—"}`);
+    lines.push(`  Propietario / broker / operador SOLO COMO TEXTO (no son entidades del Brain): ${[asset.owner_text, asset.broker_text, asset.operator_text].filter(Boolean).join(" · ") || "sin datos"}`);
+    for (const p of asset.asset_prices) lines.push(`  - precio ${p.currency} ${Number(p.amount).toLocaleString("es-AR")} · ${p.operation} · ${p.observed_on ?? "fecha s/d"} · ${p.publisher ?? p.source_url ?? "fuente s/d"} · ${p.basis}${p.note ? ` · ${p.note}` : ""}`);
+    lines.push("");
+  }
+  lines.push("EMPRESAS Y PERSONAS RELACIONADAS (vinculadas a la hipótesis en el diseño):");
   for (const c of companies) {
     const name = c.trade_name ?? c.legal_name ?? "Empresa";
     people.set(`company:${c.id}`, name);

@@ -7,14 +7,14 @@ import { labelRefs, type RefLabel } from "@/server/ai/labels";
 import { runTurn } from "@/server/ai/turn";
 import { configuredTranscriber } from "@/server/capture/transcribe";
 import type { Preview } from "@/server/ai/drafts";
-import { decideDraft } from "./actions";
+import { decideDraft, undoDraft } from "./actions";
 import { approveCaptureAction } from "../capturas/actions";
 import { decideProposal } from "@/server/capture/promote";
 import { captureExceptions, type ReviewProposal } from "@/domain/capture-review";
 
 // Panel persistente de RELEVO: mismo motor que la página de RELEVO AI, con el contexto de la pantalla.
 
-export type PanelDraft = { id: string; action: string; status: string; rationale: string | null; preview: Preview | null; error: string | null; resultHref: string | null };
+export type PanelDraft = { id: string; action: string; status: string; rationale: string | null; preview: Preview | null; error: string | null; resultHref: string | null; applied: boolean; calendarUrl: string | null };
 export type PanelCapture = {
   id: string;
   href: string;
@@ -31,7 +31,7 @@ export type PanelReply =
 async function draftsView(slug: string, ids: string[]): Promise<PanelDraft[]> {
   if (!ids.length) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("ai_action_drafts").select("id, action, status, rationale, preview, error, result_ref").in("id", ids).order("created_at");
+  const { data } = await supabase.from("ai_action_drafts").select("id, action, status, rationale, preview, error, result_ref, after_state").in("id", ids).order("created_at");
   const labels = await labelRefs(supabase, slug, (data ?? []).map((d) => d.result_ref).filter((x): x is string => !!x));
   return (data ?? []).map((d) => ({
     id: d.id,
@@ -41,6 +41,8 @@ async function draftsView(slug: string, ids: string[]): Promise<PanelDraft[]> {
     preview: (d.preview as Preview | null) && Object.keys(d.preview as object).length ? (d.preview as Preview) : null,
     error: d.error,
     resultHref: d.result_ref ? labels.get(d.result_ref)?.href ?? null : null,
+    applied: d.action === "contact_event",
+    calendarUrl: (d.after_state as { calendar_url?: string | null } | null)?.calendar_url ?? null,
   }));
 }
 
@@ -108,6 +110,12 @@ export async function askRelevo(slug: string, input: { conversationId: string | 
 /** Aprobar o rechazar una propuesta desde el panel; devuelve cómo quedó (con enlace al resultado). */
 export async function decideFromPanel(slug: string, draftId: string, verdict: "aprobar" | "rechazar"): Promise<PanelDraft | null> {
   await decideDraft(slug, draftId, verdict);
+  return (await draftsView(slug, [draftId]))[0] ?? null;
+}
+
+/** Deshacer una acción que RELEVO aplicó sola; devuelve cómo quedó. */
+export async function undoFromPanel(slug: string, draftId: string): Promise<PanelDraft | null> {
+  await undoDraft(slug, draftId);
   return (await draftsView(slug, [draftId]))[0] ?? null;
 }
 

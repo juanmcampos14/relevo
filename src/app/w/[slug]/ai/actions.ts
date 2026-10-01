@@ -10,6 +10,7 @@ import { after } from "next/server";
 import { runTurn } from "@/server/ai/turn";
 import { ProposeActionInput, executeDraft } from "@/server/ai/drafts";
 import { assessFinding } from "@/server/findings/assess";
+import { undoContactEvent, type EventEffects } from "@/server/ai/contact-events";
 
 export async function sendMessage(slug: string, conversationId: string | null, _: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
@@ -56,5 +57,17 @@ export async function decideDraft(slug: string, draftId: string, verdict: "aprob
     .from("ai_action_drafts")
     .update({ ...stamp, status: error ? "error" : "ejecutada", result_ref: resultRef, error, before_state: (exec.before ?? null) as never, after_state: (exec.after ?? null) as never })
     .eq("id", draftId);
+  revalidatePath(`/w/${slug}`, "layout");
+}
+
+/** Deshace una acción que RELEVO aplicó sola ("ya le escribí", "confirmó la reunión"): queda auditada como deshecha. */
+export async function undoDraft(slug: string, draftId: string): Promise<void> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return;
+  const supabase = await createClient();
+  const { data: draft } = await supabase.from("ai_action_drafts").select("id, action, after_state").eq("id", draftId).eq("status", "ejecutada").eq("action", "contact_event").maybeSingle();
+  if (!draft?.after_state) return;
+  await undoContactEvent(supabase, draft.after_state as unknown as EventEffects);
+  await supabase.from("ai_action_drafts").update({ status: "deshecha", decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", draftId);
   revalidatePath(`/w/${slug}`, "layout");
 }

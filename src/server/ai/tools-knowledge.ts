@@ -14,6 +14,7 @@ import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type Plac
 import { geocode, memoryNearby, placesNearby } from "@/server/geo";
 import { processCapture } from "@/server/capture/process";
 import { missionBrief } from "./mission";
+import { ContactEventInput, applyContactEvent } from "./contact-events";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
 function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
@@ -133,7 +134,7 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "mission_brief",
     description: "Todo lo que el Brain sabe de una misión en una llamada (por defecto la misión activa, p. ej. Añelo): fechas y momento (preparación / en curso), documentos del plan, hipótesis con qué creemos, nivel de evidencia, gaps y quién puede ayudar, objetivos y prioridades, contactos con borrador de primer contacto listo, follow-ups hasta el fin de la misión, agenda, guiones AOG, activos del Radar con último precio, historias vivas, señales recientes y cobertura de ubicaciones. Usala para 'preparame el viaje', '¿qué estamos intentando comprobar?', '¿con quién hablo?', '¿qué hago esta semana para la misión?'. Es materia prima: sintetizá lo importante ahora, no la repitas.",
-    input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" } }),
+    input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" }, detail: { type: "boolean", description: "true para el detalle completo (hipótesis, guiones AOG, activos, follow-ups, señales). Por defecto trae solo lo que RELEVO ya preparó." } }),
   },
   {
     name: "research_questions",
@@ -149,6 +150,22 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     name: "signals",
     description: "Señales externas guardadas (Morning Brief y Radar) con su historia: qué pasó, hecho/declaración/inferencia, fuente, fecha, vertical, empresas e hipótesis relacionadas. Filtros: query (texto), days (por defecto 30), company_ref, finding_ref. Son contexto: no prueban demanda.",
     input_schema: strict({ query: { type: "string" }, days: { type: "integer", minimum: 1, maximum: 365 }, company_ref: { type: "string" }, finding_ref: { type: "string" } }),
+  },
+  {
+    name: "record_contact_event",
+    description: "Registra lo que la persona te cuenta de su outreach y lo APLICA en el momento (queda auditado y se puede deshacer): event='mensaje_enviado' (\"ya le escribí a…\"): cierra el pendiente de contactarlo y deja un seguimiento si no responde (follow_up_on opcional; por defecto 3 días hábiles). event='reunion_confirmada' (\"X confirmó el miércoles 11:30\"): agrega la reunión a la agenda de la misión con su objetivo y devuelve el link para Calendar. Antes, identificá a la persona o la empresa (find / get_person): si hay más de una posible, preguntá cuál en vez de registrar. Convertí 'el miércoles' a fecha real según hoy.",
+    input_schema: strict({
+      event: { type: "string", enum: ["mensaje_enviado", "reunion_confirmada"] },
+      contact_ref: { type: "string" },
+      company_ref: { type: "string" },
+      channel: { type: "string", description: "WhatsApp, LinkedIn, mail, llamada…" },
+      date: { type: "string", description: "YYYY-MM-DD (reunión)" },
+      time: { type: "string", description: "HH:MM (reunión)" },
+      place: { type: "string" },
+      objective: { type: "string", description: "Para qué es la reunión: qué queremos validar y con qué hipótesis" },
+      note: { type: "string" },
+      follow_up_on: { type: "string", description: "YYYY-MM-DD" },
+    }, ["event"]),
   },
   {
     name: "open_page",
@@ -500,6 +517,19 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (m && !m.success) return { content: "Referencia inválida: usá 'campaign:uuid' o nada para la misión activa.", isError: true };
       const brief = await missionBrief(db, m?.success ? m.data.split(":")[1] : null);
       if (!brief) return { content: "No hay una misión activa.", isError: true };
+      // Primera respuesta rápida: solo lo preparado (síntesis del día + contactos para mover). El detalle, si lo piden.
+      if (a.detail !== true && brief.prepared && !brief.prepared.stale) {
+        // Las referencias de la síntesis vienen del Brain (verificadas al prepararla): quedan citables.
+        for (const r of JSON.stringify(brief.prepared).matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)) ctx.seenRefs.add(r[1]);
+        return {
+          content: track(ctx, {
+            mission: { ref: brief.mission.ref, name: brief.mission.name, dates: brief.mission.dates, today: brief.mission.today, days_to_start: brief.mission.days_to_start, moment: brief.mission.moment },
+            prepared: brief.prepared,
+            contacts_to_move: { ...brief.contacts_to_move, items: brief.contacts_to_move.items.slice(0, 8) },
+            more: "Para el detalle (hipótesis, guiones AOG, activos, follow-ups, señales) llamá mission_brief con detail=true, solo si lo piden.",
+          }),
+        };
+      }
       return { content: track(ctx, brief) };
     }
     case "research_questions": {
@@ -545,6 +575,21 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           memory: [...s.company_ids.map((id) => ({ ref: ref("company", id) })), ...s.finding_ids.map((id) => ({ ref: ref("finding", id) })), ...s.asset_ids.map((id) => ({ ref: ref("asset", id) }))],
         }))),
       };
+    }
+    case "record_contact_event": {
+      const input = ContactEventInput.safeParse(a);
+      if (!input.success) return { content: `No pude registrarlo: ${input.error.issues.map((i) => i.message).join("; ")}`, isError: true };
+      for (const r of [input.data.contact_ref, input.data.company_ref]) {
+        if (r && !ctx.seenRefs.has(r)) return { content: `Antes identificá ${r} con find o get_person (no registro sobre referencias no verificadas).`, isError: true };
+      }
+      if (!ctx.workspaceId || !ctx.userId || !ctx.saveApplied) return { content: "No disponible en este contexto.", isError: true };
+      try {
+        const { summary, effects } = await applyContactEvent(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, campaignId: ctx.campaignId ?? null }, input.data);
+        await ctx.saveApplied({ action: "contact_event", payload: input.data, summary, after: effects });
+        return { content: JSON.stringify({ applied: true, summary, calendar_link: effects.calendar_url, undo: "La persona puede deshacerlo desde la tarjeta de la conversación." }) };
+      } catch (e) {
+        return { content: `No pude registrarlo: ${(e as Error).message}`, isError: true };
+      }
     }
     case "locate": {
       const q = Str.min(2).safeParse(a.query);

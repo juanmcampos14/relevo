@@ -15,10 +15,10 @@ const ref = (type: string, id: string) => `${type}:${id}`;
 const clip = (s: string | null | undefined, n = 240) => (s && s.length > n ? `${s.slice(0, n)}…` : s ?? null);
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-export async function missionBrief(db: Db, campaignId: string | null, today = new Date()) {
+export async function missionBrief(db: Db, campaignId: string | null, today = new Date(), opts: { withSynthesis?: boolean } = { withSynthesis: true }) {
   const { data: missions } = campaignId
-    ? await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on").eq("id", campaignId).limit(1)
-    : await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on").eq("kind", "mision").eq("status", "activa").order("starts_on", { ascending: true, nullsFirst: false }).limit(1);
+    ? await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at").eq("id", campaignId).limit(1)
+    : await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at").eq("kind", "mision").eq("status", "activa").order("starts_on", { ascending: true, nullsFirst: false }).limit(1);
   const mission = missions?.[0];
   if (!mission) return null;
   const t = day(today);
@@ -30,7 +30,7 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
     db.from("findings").select("id, dedup_key, statement, maturity, finding_companies(count), question_findings(count), finding_assessments(created_at, summary, gaps, discovery, baseline_campaign_id)").neq("review_status", "rechazado").eq("case_status", "activo").or(`campaign_id.eq.${mission.id},campaign_id.is.null`).limit(60),
     db.from("research_questions").select("id, code, industry, dimension, question, next_action").ilike("industry", "AOG%").order("code"),
     db.from("contacts").select("id, full_name, role_title, relationship_status, contact_links(companies(id, trade_name, legal_name))").not("outreach_draft", "is", null).limit(40),
-    db.from("campaign_targets").select("id, status, priority, purpose, next_action, next_action_due, companies(id, trade_name, legal_name)").eq("campaign_id", mission.id).limit(200),
+    db.from("campaign_targets").select("id, status, priority, purpose, next_action, next_action_due, briefing, companies(id, trade_name, legal_name)").eq("campaign_id", mission.id).limit(200),
     db.from("tasks").select("id, title, due_on, kind, channel, contact_id, contacts(full_name), campaign_targets(companies(id, trade_name, legal_name))").neq("status", "done").not("due_on", "is", null).lte("due_on", until).order("due_on").limit(60),
     db.from("visit_plans").select("id, title, planned_on, visit_stops(count)").gte("planned_on", t).lte("planned_on", until).order("planned_on"),
     db.from("assets").select("id, title, category, locality, price_status, latitude, asset_prices(amount, currency, operation, period, observed_on)").not("radar_ref", "is", null).limit(40),
@@ -70,7 +70,22 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const highNoAction = (targets ?? []).filter((x) => x.priority === 1 && !x.next_action && x.companies);
   const overdue = (tasks ?? []).filter((x) => x.due_on! < t);
 
+  type B = { this_week?: boolean; today?: boolean; why?: string; objective?: string; we_need?: string; attention?: string | null; purpose?: string; contact?: { ref: string; name: string } | null };
+  const shortlist = (targets ?? [])
+    .filter((x) => x.companies && x.briefing && ((x.briefing as B).this_week || (x.briefing as B).today))
+    .map((x) => {
+      const b = x.briefing as B;
+      return { company: { ref: ref("company", x.companies!.id), name: companyName(x.companies!) }, person: b.contact ?? null, today: !!b.today, purpose: b.purpose ? PURPOSES[b.purpose as keyof typeof PURPOSES] : null, why: b.why, need: b.we_need, objective: b.objective, attention: b.attention ?? null };
+    })
+    .sort((a, b) => Number(b.today) - Number(a.today));
+  const synthesisAgeH = mission.synthesized_at ? (today.getTime() - new Date(mission.synthesized_at).getTime()) / 3_600_000 : null;
+
   return {
+    // Lo que RELEVO ya preparó (en background): respondé desde acá primero.
+    ...(opts.withSynthesis && mission.synthesis
+      ? { prepared: { synthesis: mission.synthesis, computed_hours_ago: synthesisAgeH === null ? null : Math.round(synthesisAgeH), stale: synthesisAgeH !== null && synthesisAgeH > 30 } }
+      : {}),
+    contacts_to_move: { count: shortlist.length, attention_today: shortlist.filter((x) => x.today).length, items: shortlist.slice(0, 20) },
     mission: {
       ref: ref("campaign", mission.id),
       name: mission.name,

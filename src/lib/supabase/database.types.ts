@@ -469,13 +469,13 @@ isOneToOne: false
                   ]
                 },"campaign_targets": {
                   Row: {
-                    "asset_id": string | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"purpose": string | null,"status": string,"updated_at": string,"workspace_id": string
+                    "asset_id": string | null,"briefed_at": string | null,"briefing": Json | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"purpose": string | null,"status": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "asset_id"?: string | null,"campaign_id": string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
+                    "asset_id"?: string | null,"briefed_at"?: string | null,"briefing"?: Json | null,"campaign_id": string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "asset_id"?: string | null,"campaign_id"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "asset_id"?: string | null,"briefed_at"?: string | null,"briefing"?: Json | null,"campaign_id"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -537,13 +537,13 @@ isOneToOne: false
                   ]
                 },"campaigns": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"ends_on": string | null,"id": string,"kind": string,"name": string,"objective": string | null,"owner_id": string | null,"starts_on": string | null,"status": string,"updated_at": string,"workspace_id": string,"zone": string | null
+                    "created_at": string,"created_by": string | null,"ends_on": string | null,"id": string,"kind": string,"name": string,"objective": string | null,"owner_id": string | null,"starts_on": string | null,"status": string,"synthesis": Json | null,"synthesized_at": string | null,"updated_at": string,"workspace_id": string,"zone": string | null
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name": string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string,"zone"?: string | null
+                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name": string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"workspace_id": string,"zone"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string,"zone"?: string | null
+                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"workspace_id"?: string,"zone"?: string | null
                   }
                   Relationships: [
                     {

@@ -142,6 +142,8 @@ export type ToolContext = {
   seenRefs: Set<string>;
   /** Registra un borrador; devuelve su id. */
   saveDraft: (input: z.infer<typeof ProposeActionInput>) => Promise<string>;
+  /** Registra una acción que RELEVO ya aplicó (auditada y deshacible); devuelve el id del registro. */
+  saveApplied?: (rec: { action: "contact_event"; payload: Record<string, unknown>; summary: string; after: unknown }) => Promise<string>;
 };
 
 function track(ctx: ToolContext, value: unknown) {

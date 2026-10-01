@@ -1,0 +1,35 @@
+import { after, NextResponse, type NextRequest } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { briefTargets } from "@/server/mission/targets";
+import { synthesizeMission } from "@/server/mission/synthesis";
+
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
+const TARGETS_EVERY_H = 72;
+
+/**
+ * GET /api/cron/mision (Bearer $CRON_SECRET): "RELEVO ya trabajó". Después del Morning Brief y antes de la
+ * entrega, prepara cada misión activa: renueva por qué importa cada objetivo (cada 3 días) y la síntesis
+ * del día, para que la conversación responda en segundos.
+ */
+export async function GET(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const db = createAdminClient();
+  const { data: missions } = await db.from("campaigns").select("id, workspace_id, ends_on").eq("kind", "mision").eq("status", "activa");
+  const active = (missions ?? []).filter((m) => !m.ends_on || m.ends_on >= new Date().toISOString().slice(0, 10));
+  after(async () => {
+    for (const m of active) {
+      const { data: last } = await db.from("campaign_targets").select("briefed_at").eq("campaign_id", m.id).not("briefed_at", "is", null).order("briefed_at").limit(1).maybeSingle();
+      const { count: unbriefed } = await db.from("campaign_targets").select("id", { count: "exact", head: true }).eq("campaign_id", m.id).is("briefed_at", null).not("company_id", "is", null);
+      if (unbriefed || !last?.briefed_at || Date.now() - new Date(last.briefed_at).getTime() > TARGETS_EVERY_H * 3_600_000) {
+        const t = await briefTargets(db, { workspaceId: m.workspace_id, campaignId: m.id });
+        console.info("mision objetivos", m.id, JSON.stringify(t));
+      }
+      const s = await synthesizeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
+      console.info("mision sintesis", m.id, s.ok ? `USD ${s.costUsd.toFixed(2)}` : s.message);
+    }
+  });
+  return NextResponse.json({ scheduled: active.map((m) => m.id) }, { status: 202 });
+}

@@ -10,7 +10,7 @@ import { RichText } from "@/components/ai/rich-text";
 import { useCapture } from "@/components/app/capture/capture-dock";
 import { useRecorder } from "@/lib/capture/media";
 import type { RefLabel } from "@/server/ai/labels";
-import { approveFromPanel, askRelevo, decideFromPanel, ignoreFromPanel, transcribeQuestion, type PanelCapture, type PanelDraft } from "@/app/w/[slug]/ai/panel-actions";
+import { approveFromPanel, askRelevo, decideFromPanel, ignoreFromPanel, transcribeQuestion, undoFromPanel, type PanelCapture, type PanelDraft } from "@/app/w/[slug]/ai/panel-actions";
 
 // RELEVO en todas las pantallas: entiende lo que estás mirando, consulta toda la memoria, navega y
 // propone cambios que solo se ejecutan con tu aprobación.
@@ -120,6 +120,13 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
       router.refresh();
     });
 
+  const undo = (draftId: string) =>
+    startExec(async () => {
+      const d = await undoFromPanel(slug, draftId);
+      if (d) setMessages((ms) => ms.map((m) => (m.drafts ? { ...m, drafts: m.drafts.map((x) => (x.id === draftId ? d : x)) } : m)));
+      router.refresh();
+    });
+
   const replaceCapture = (card: PanelCapture | null) => card && setMessages((ms) => ms.map((m) => (m.captures ? { ...m, captures: m.captures.map((c) => (c.id === card.id ? card : c)) } : m)));
   const approveCapture = (id: string) => startExec(async () => { const r = await approveFromPanel(slug, id); replaceCapture(r.card); router.refresh(); });
   const ignoreCapture = (id: string) => startExec(async () => { const r = await ignoreFromPanel(slug, id); replaceCapture(r.card); });
@@ -167,7 +174,7 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
                   </details>
                 )}
                 {m.note && <p className="text-xs text-muted-foreground">{m.note}</p>}
-                {m.drafts?.map((d) => <DraftCard key={d.id} d={d} canEdit={canEdit} busy={pending || executing} onDecide={decide} />)}
+                {m.drafts?.map((d) => <DraftCard key={d.id} d={d} canEdit={canEdit} busy={pending || executing} onDecide={decide} onUndo={undo} />)}
               </div>
             ),
           )}
@@ -227,13 +234,29 @@ export function AssistantPanel({ slug, canEdit }: { slug: string; canEdit: boole
 }
 
 const ACTION_LABEL: Record<string, string> = {
+  contact_event: "Contacto registrado",
   create_task: "Crear tarea", prepare_validation: "Agendar validación", link_evidence: "Vincular evidencia", update_next_action: "Actualizar próxima acción",
   request_help: "Pedir ayuda", draft_finding: "Registrar hipótesis (queda pendiente de revisión)", request_decision: "Pedir una decisión",
   record_web_evidence: "Guardar fuente web como evidencia",
 };
 
-function DraftCard({ d, canEdit, busy, onDecide }: { d: PanelDraft; canEdit: boolean; busy: boolean; onDecide: (id: string, v: "aprobar" | "rechazar") => void }) {
+function DraftCard({ d, canEdit, busy, onDecide, onUndo }: { d: PanelDraft; canEdit: boolean; busy: boolean; onDecide: (id: string, v: "aprobar" | "rechazar") => void; onUndo: (id: string) => void }) {
   const p = d.preview;
+  // Lo que RELEVO ya aplicó solo: se informa, con Calendar si es una reunión, y se puede deshacer.
+  if (d.applied)
+    return (
+      <div className="space-y-2 rounded-lg border p-3 text-sm">
+        <p className="font-medium">{d.status === "deshecha" ? <s className="text-muted-foreground">{p?.summary ?? d.rationale}</s> : p?.summary ?? d.rationale}</p>
+        {d.status === "ejecutada" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {d.calendarUrl && <a href={d.calendarUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground">Agregar a Calendar</a>}
+            {canEdit && <button type="button" disabled={busy} onClick={() => onUndo(d.id)} className="inline-flex h-9 items-center rounded-md border px-3 text-sm disabled:opacity-50">Deshacer</button>}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">{d.status === "deshecha" ? "Deshecho: no quedó nada." : d.error ?? d.status}</p>
+        )}
+      </div>
+    );
   return (
     <div className="space-y-2 rounded-lg border border-dashed p-3 text-sm">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Propuesta · {ACTION_LABEL[d.action] ?? d.action}</p>

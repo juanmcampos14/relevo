@@ -9,6 +9,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/mision",
+      "schedule": "0 9 * * *"
+    },
+    {
       "path": "/api/cron/brief",
       "schedule": "0 10 * * *"
     },

@@ -25,6 +25,49 @@ Texto libre **nunca** crea una vertical. RELEVO propone la asignación (del sect
 | F5 Vida cotidiana | V03 Farmacias + salud cotidiana · V12 Comercio cotidiano · V13 Servicios para trabajadores + familias |
 | F6 Tecnología y productividad | V16 Software + automatización B2B |
 
+## Las 17 verticales: qué entra, qué no y qué pregunta responde
+
+La vertical se asigna por **la pregunta que se investiga**, no por el objeto: el mismo hotel puede estudiarse como servicio (V09) o como activo (V17).
+
+| Código | Vertical | Frente | Entra | No entra (va a) | Pregunta central |
+|---|---|---|---|---|---|
+| V01 | Viandas / restaurantes / catering | F3 | Viandas B2B, catering de campamento, comedores, restaurantes, comida preparada para turnos | Supermercado y kiosco (V12) | ¿Quién come qué, cuándo, quién paga y qué falla en horario o entrega? |
+| V02 | Ferreterías + suministros industriales | F1 | Ferretería, EPP, hidráulica, electricidad, consumibles, MRO | Repuestos de vehículos (V10); materiales de obra (V14) | ¿Qué SKU críticos faltan, con qué urgencia y cómo compra mantenimiento? |
+| V03 | Farmacias + salud cotidiana | F5 | Farmacia, consultorio, estudios, salud ocupacional | Servicios HSE técnicos de campo (V15) | ¿Qué se resuelve acá y qué obliga a viajar? |
+| V04 | Gomerías + neumáticos | F2 | Gomería, auxilio en ruta, neumáticos de flota y livianos | Talleres mecánicos (V10) | ¿Cuánto cuesta un neumático o auxilio que no llega a tiempo? |
+| V05 | Lavaderos de vehículos | F2 | Lavado de flota, maquinaria y pickups; certificación de limpieza | — | ¿Pesa más horario, certificación o precio? |
+| V06 | Estaciones de servicio | F2 | Combustible, tienda y café en ruta, servicios al tránsito, convenios de flota | Venta de una estación (V17 + V06) | ¿Dónde hay picos, colas y servicios anexos que faltan? |
+| V07 | Lavanderías industriales + textiles | F1 | Ropa de cama de hoteles y campamentos, uniformes, EPP textil | Limpieza de instalaciones (V08) | ¿Capacidad, retiros y reposición alcanzan para el housing? |
+| V08 | Limpieza + facility management | F1 | Limpieza, mantenimiento liviano, paquetes de facility para hoteles, campamentos y bases | Construcción y mantenimiento edilicio mayor (V14) | ¿Qué servicio tercerizado falla cuando cambia la dotación? |
+| V09 | Alojamiento + campamentos | F3 | **El servicio de alojamiento**: hoteles y apart en operación, campamentos, módulos, housing corporativo (camas o unidades contratadas por empresas), ocupación, tarifas, rotación | Comprar, vender o desarrollar el inmueble (V17); construir módulos (V14) | ¿Quién compra camas, cuántas, a qué precio y qué pasa con la vacancia? |
+| V10 | Repuestos / talleres / lubricentros | F2 | Taller mecánico, repuestos, lubricentro, diagnóstico de flotas | Neumáticos (V04) | ¿Cuántos días queda parado un vehículo y por qué? |
+| V11 | Logística / almacenamiento / última milla | F2 | Transporte liviano, depósitos como servicio, entregas urgentes, transporte de personal, arena | Comprar o alquilar el depósito como activo (V17) | ¿Dónde se espera, cuánto cuesta y quién lo contrata? |
+| V12 | Comercio cotidiano | F5 | Supermercados, kioscos, indumentaria, hogar, fuga de gasto a Neuquén | Restaurantes (V01) | ¿Qué se compra afuera y por qué (surtido, precio, horario)? |
+| V13 | Servicios para trabajadores + familias | F5 | Gimnasios, peluquerías, guarderías, educación, recreación, movilidad personal | Salud (V03); vivienda (V17) | ¿Qué servicio se usa de verdad y qué lo limita (turnos, horario)? |
+| V14 | Construcción + mantenimiento | F1 | Obra, materiales, instalaciones, refrigeración, grupos electrógenos, construcción modular, mantenimiento edilicio | Desarrollar o invertir en el inmueble (V17) | ¿Quién contrata obra y qué subcontrato es difícil de cubrir? |
+| V15 | Servicios industriales especializados | F1 | Inspección, HSE, residuos, alquiler de equipos, servicios técnicos a operadoras | Software (V16) | ¿Qué servicio habilitado falta para urgencias y qué barrera tiene? |
+| V16 | Software + automatización B2B | F6 | Procesos con doble carga: compras, certificación, partes, logística, administración | — | ¿Qué fricción medible pagaría alguien por eliminar? |
+| V17 | Inmuebles, activos y fondos de comercio (provisoria) | F4 | **La transacción o la tenencia de un activo**: terrenos, naves y depósitos, inmuebles comerciales, hoteles o complejos en venta, desarrollos inmobiliarios y de housing, vivienda y alquiler residencial, fondos de comercio, negocios operativos en venta, activos subutilizados | La operación del servicio que el activo presta (su vertical de uso) | ¿Conviene comprar, desarrollar, alquilar o asociarse, a qué precio real y con qué renta? |
+
+## Alojamiento, housing, real estate y activos: una sola regla
+
+**V09 = el servicio de alojamiento** (alguien paga por noches, camas o unidades). **V17 = el activo como negocio** (alguien compra, vende, desarrolla o alquila el inmueble o el fondo de comercio). **V14 = el servicio de construirlo o mantenerlo.** Nada se duplica: cada caso tiene una pregunta y una vertical principal; si importa la otra mirada, se suma como vertical secundaria.
+
+| Caso | Vertical principal | Secundaria | Rol típico |
+|---|---|---|---|
+| Hotel o apart en operación (ocupación, clientes, tarifas) | V09 | — | operador de activo |
+| Hotel o complejo en venta (La Forestada) | V17 | V09 (uso) | propietario, broker |
+| Housing corporativo: camas contratadas por empresas | V09 | — | operador de activo, comprador corporativo |
+| Desarrollo de housing o de un complejo nuevo | V17 | V09 (uso futuro) | desarrollador, inversor |
+| Vivienda y alquiler residencial para familias | V17 | V13 (demanda de residentes) | propietario, broker |
+| Terreno (sobre ruta, loteo, parque industrial) | V17 | la del uso previsto, si existe | propietario, broker |
+| Nave o depósito en venta o alquiler (dos naves) | V17 | V11 (uso logístico) | propietario, operador / inquilino |
+| Fondo de comercio (p. ej. una lavandería en venta) | V17 | la del negocio (V07) | propietario |
+| Activo operativo subutilizado (playa ferroviaria) | V17 | V11 | propietario (público o privado) |
+| Constructora de módulos o de housing | V14 | V09 | proveedor, contratista |
+| Inmobiliaria o broker | V17 | — | broker |
+| Mountain Suites (proyecto) | V17 | V09 | — |
+
 **Por qué 16 + 1 y no 16 ni 18**, contra los cinco criterios:
 
 1. **Presentación de verticales**: las 16 conservan su definición, su ficha común (oferta, demanda, economía, barreras, evidencia, siguiente paso) y su numeración = H-VA-01…16. No se tocan: son la base de comparación.

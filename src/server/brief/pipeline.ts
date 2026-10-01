@@ -173,6 +173,11 @@ export async function retryBrief(db: Db, briefId: string) {
 
 type SaveInput = { briefId: string; workspaceId: string; briefDate: string; draft: BriefDraft; memory: BriefMemory; items: CollectedItem[]; sources: { url: string; title: string }[] };
 
+function omit<T extends object, K extends keyof T>(o: T, keys: K[]): Omit<T, K> {
+  const out = { ...o };
+  for (const k of keys) delete out[k];
+  return out;
+}
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]+/g, " ").trim();
 const url = (s: string) => (/^https?:\/\//i.test(s.trim()) ? s.trim() : null);
 const date = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
@@ -267,7 +272,7 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
       assetCandidates.push({ kind: "activo", name: s.asset_name.trim(), detail: `${s.headline} · ${price.currency} ${price.amount.toLocaleString("es-AR")} (${s.asset_operation || "operación s/d"})`, source_url: s.source_url });
       candidatePayload.set(`activo:${fold(s.asset_name)}`, { price: price.amount, currency: price.currency, operation: s.asset_operation === "alquiler" ? "alquiler" : "venta", observed_on: date(s.happened_on) ?? briefDate, locality: s.geography || null, publisher: s.publisher || null });
     }
-    const { related_company_ids: _c, related_finding_ids: _f, related_campaign_ids: _k, related_asset_ids: _a, story_ref: _s, asset_ref: _ar, asset_name: _an, asset_price: _ap, asset_currency: _ac, asset_operation: _ao, ...rest } = s;
+    const rest = omit(s, ["related_company_ids", "related_finding_ids", "related_campaign_ids", "related_asset_ids", "story_ref", "asset_ref", "asset_name", "asset_price", "asset_currency", "asset_operation"]);
     signals.push({
       ...rest, change, source_url: url(s.source_url) ?? "", id: data.id, story_id: storyId,
       story_title: storyId ? storyTitle.get(s.story_ref) ?? memory.stories.find((x) => x.id === storyId)?.title ?? null : null,

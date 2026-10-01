@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { USERS, login } from "./helpers";
 // Recorrido de producto: observación de campo → ubicación → señal → investigación (memoria + territorio + web) → hipótesis → nueva evidencia.
@@ -16,8 +17,8 @@ test("una observación de campo se investiga (memoria + territorio + web), se gu
     await expect(page.getByText("Consultando la memoria…")).toBeVisible();
     await expect(page.getByText("Consultando la memoria…")).toBeHidden({ timeout: 400_000 });
     const text = await page.locator("[role=dialog]").innerText();
-    require("node:fs").mkdirSync(".scratch", { recursive: true });
-    require("node:fs").writeFileSync(`.scratch/${shot}.txt`, text);
+    mkdirSync(".scratch", { recursive: true });
+    writeFileSync(`.scratch/${shot}.txt`, text);
     await page.screenshot({ path: `.scratch/${shot}.png`, fullPage: false });
   };
   await ask("Hoy caminé cinco horas por Añelo y vi una sola ferretería. Me llamó la atención. ¿Puede haber una oportunidad acá? Investigá cuántas ferreterías hay realmente en Añelo, cómo funciona el negocio, qué demanda podría existir y ayudame a entender si vale la pena seguir investigándolo.", "ferre-1");

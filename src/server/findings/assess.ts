@@ -6,6 +6,7 @@ import * as z from "zod/v4";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { ECONOMIC_KEYS, sanitizeEconomics } from "@/domain/economics";
+import { EVIDENCE_LEVEL_KEYS, PURPOSE_KEYS, sanitizeDiscovery } from "@/domain/discovery";
 import {
   DIMENSIONS,
   DIMENSION_KEYS,
@@ -21,7 +22,7 @@ import {
 
 type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
-const PROMPT_VERSION = "finding-estado-v3";
+const PROMPT_VERSION = "finding-estado-v4";
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60;
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
@@ -53,6 +54,23 @@ export const AssessmentSchema = z.object({
       evidence_ids: z.array(z.string()),
     }),
   ).describe("Solo las variables económicas que la evidencia permite conocer o calcular. Lo que no está, no se inventa."),
+  discovery: z.object({
+    belief: z.string().describe("Qué creemos, en una oración simple, como lo diría el equipo."),
+    why: z.string().describe("Por qué lo creemos: qué lo sostiene hoy (evidencia, señales o solo el diseño del equipo). Si es solo diseño, decilo."),
+    evidence_level: z.enum(EVIDENCE_LEVEL_KEYS).describe("nula: solo diseño. baja: contexto externo o una sola declaración. media: varias declaraciones u observaciones relacionadas. alta: casos independientes vinculados y verificados."),
+    evidence_summary: z.string().describe("Qué evidencia hay, en una oración: cuántos datos, de quién, de qué tipo (declarado, observado, publicado)."),
+    evidence_refs: z.array(z.string()).describe("Referencias 'evidence:…' (vinculada o relacionada) que sostienen lo anterior."),
+    signal_refs: z.array(z.string()).describe("Referencias 'signal:…' del contexto externo que importan."),
+    question_refs: z.array(z.string()).describe("Referencias 'question:…' del diseño de investigación que conviene usar para validar."),
+    who_can_help: z.array(
+      z.object({
+        ref: z.string().describe("Referencia 'contact:…' o 'company:…' de la lista. Preferí una persona si la hay."),
+        purpose: z.enum(PURPOSE_KEYS).describe("comprar_asociar: dueño de un negocio/activo que podríamos comprar o con quien asociarnos. vender_crear: posible comprador de lo que podríamos ofrecer. inteligencia: entiende cómo funciona el mercado aunque no hagamos negocio con él."),
+        why: z.string().describe("Por qué esta persona o empresa: qué puede validar."),
+        ask: z.string().describe("Qué preguntarle, concreto."),
+      }),
+    ).describe("Hasta 5, de la más útil a la menos útil, solo de la lista de empresas y personas relacionadas."),
+  }),
 });
 
 const SYSTEM = `Evaluás el estado de una hipótesis (finding) de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta, a partir de la evidencia vinculada. Tu trabajo es decir qué sabemos, qué creemos, qué lo contradice y qué falta saber, y proponer la validación más útil. Una persona decide.
@@ -70,6 +88,8 @@ Reglas:
 - Un finding no es una oportunidad: no propongas avanzar comercialmente, proponé validar.
 - Las validaciones son concretas y realizables en campo o por teléfono (a quién, qué preguntar, qué dato conseguir).
 - Economía: registrá solo lo que la evidencia dice (declarado u observado, citando ids) o lo que se calcula de eso (con la fórmula). Una estimación se marca como estimada. No completes variables por completar.
+- Discovery: investigamos para cerrar gaps. El diseño del equipo (contexto de la hipótesis y preguntas) NO es evidencia: es lo que creemos y cómo pensamos validarlo. La evidencia relacionada (sobre empresas vinculadas, no vinculada todavía a esta hipótesis) es real pero indirecta: usala con su procedencia. Las señales externas son contexto: no prueban demanda.
+- "Quién puede ayudar": solo personas o empresas de la lista, con el propósito correcto y una pregunta concreta que cierre un gap.
 - Español rioplatense, breve.`;
 
 export type AssessResult = { ok: true; assessmentId: string; proposals: number } | { ok: false; message: string };
@@ -96,6 +116,8 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
   const m = metrics(links, today);
   const detGaps = deterministicGaps(m);
 
+  const ctxDiscovery = await discoveryContext(db, finding.id, new Set(links.map((l) => l.id)));
+
   const evidenceText = rows.length
     ? rows.map(({ stance, e }) => [
         `- id ${e.id} · ${stance === "supports" ? "A FAVOR" : stance === "contradicts" ? "EN CONTRA" : "CONTEXTO"}`,
@@ -116,6 +138,8 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
     "",
     "EVIDENCIA VINCULADA:",
     evidenceText,
+    "",
+    ctxDiscovery.text,
   ].filter((x) => x !== null).join("\n");
 
   const started = Date.now();
@@ -168,6 +192,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
       economics: sanitizeEconomics(parsed.economics ?? [], new Set(links.map((l) => l.id))) as unknown as NonNullable<Json>,
       gaps,
       summary: parsed.summary,
+      discovery: sanitizeDiscovery(parsed.discovery, ctxDiscovery.seen) as unknown as Json,
       supports: m.supports,
       contradicts: m.contradicts,
       independent_cases: m.independentCases,
@@ -196,4 +221,52 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
     if (e2) return { ok: false, message: e2.message };
   }
   return { ok: true, assessmentId: assessment.id, proposals: validations.length };
+}
+
+/**
+ * Lo que rodea a una hipótesis en el Brain, para el discovery: empresas vinculadas y su gente, evidencia
+ * sobre esas empresas (no vinculada todavía), preguntas del diseño de investigación y señales externas.
+ */
+async function discoveryContext(db: Db, findingId: string, linked: Set<string>) {
+  const [{ data: fc }, { data: qf }, { data: sig }] = await Promise.all([
+    db.from("finding_companies").select("companies(id, trade_name, legal_name, sector, activity, locality, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)))").eq("finding_id", findingId),
+    db.from("question_findings").select("research_questions(id, code, kind, industry, dimension, question)").eq("finding_id", findingId),
+    db.from("brief_signals").select("id, headline, basis, happened_on, publisher, origin").contains("finding_ids", [findingId]).order("happened_on", { ascending: false }).limit(10),
+  ]);
+  const companies = (fc ?? []).flatMap((x) => (x.companies ? [x.companies] : []));
+  const companyIds = companies.map((c) => c.id);
+  const { data: ev } = companyIds.length
+    ? await db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, observed_at, company_id").in("company_id", companyIds).order("observed_at", { ascending: false }).limit(40)
+    : { data: [] };
+  const related = (ev ?? []).filter((e) => !linked.has(e.id));
+  const people = new Map<string, string>();
+  const lines: string[] = ["EMPRESAS Y PERSONAS RELACIONADAS (vinculadas a la hipótesis en el diseño):"];
+  for (const c of companies) {
+    const name = c.trade_name ?? c.legal_name ?? "Empresa";
+    people.set(`company:${c.id}`, name);
+    lines.push(`- company:${c.id} · ${name} · ${[c.sector, c.activity, c.locality].filter(Boolean).join(" · ")}`);
+    for (const l of c.contact_links) {
+      const p = l.contacts;
+      if (!p) continue;
+      people.set(`contact:${p.id}`, `${p.full_name} · ${name}`);
+      lines.push(`  - contact:${p.id} · ${p.full_name}${p.role_title ? ` (${p.role_title})` : ""} · ${p.contact_kind === "canal_institucional" ? "canal institucional" : "persona"} · relación: ${p.relationship_status ?? "—"}${p.outreach_draft ? " · tiene borrador de primer contacto" : ""}`);
+    }
+  }
+  if (!companies.length) lines.push("(ninguna)");
+  lines.push("", "EVIDENCIA RELACIONADA (sobre esas empresas; no vinculada todavía a la hipótesis):");
+  lines.push(...(related.length ? related.map((e) => `- evidence:${e.id} · "${e.statement}" · ${e.origin_kind} · ${e.verification_status}${e.declared_by ? ` · declarado por ${e.declared_by}` : ""}${e.observed_at ? ` · ${e.observed_at.slice(0, 10)}` : ""}`) : ["(ninguna)"]));
+  const questions = (qf ?? []).flatMap((x) => (x.research_questions ? [x.research_questions] : []));
+  lines.push("", "PREGUNTAS DEL DISEÑO DE INVESTIGACIÓN:");
+  lines.push(...(questions.length ? questions.map((q) => `- question:${q.id} · ${q.code ?? ""} · ${q.kind}${q.industry ? ` · ${q.industry}` : ""}${q.dimension ? ` · ${q.dimension}` : ""} · ${q.question}`) : ["(ninguna)"]));
+  lines.push("", "SEÑALES EXTERNAS (Morning Brief / Radar; contexto, no evidencia de demanda):");
+  lines.push(...((sig ?? []).length ? sig!.map((x) => `- signal:${x.id} · ${x.happened_on ?? "s/f"} · ${x.basis} · ${x.headline}${x.publisher ? ` (${x.publisher})` : ""}`) : ["(ninguna)"]));
+  return {
+    text: lines.join("\n"),
+    seen: {
+      evidence: new Set([...linked].map((id) => `evidence:${id}`).concat(related.map((e) => `evidence:${e.id}`))),
+      signals: new Set((sig ?? []).map((x) => `signal:${x.id}`)),
+      questions: new Set(questions.map((q) => `question:${q.id}`)),
+      people,
+    },
+  };
 }

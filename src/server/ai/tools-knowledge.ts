@@ -13,6 +13,7 @@ import type { ToolContext } from "./tools";
 import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type PlaceCategory, type Point } from "@/domain/geo";
 import { geocode, memoryNearby, placesNearby } from "@/server/geo";
 import { processCapture } from "@/server/capture/process";
+import { missionBrief } from "./mission";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
 function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
@@ -130,6 +131,26 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     input_schema: strict({ document_ref: { type: "string", description: "document:uuid" }, query: { type: "string" } }),
   },
   {
+    name: "mission_brief",
+    description: "Todo lo que el Brain sabe de una misión en una llamada (por defecto la misión activa, p. ej. Añelo): fechas y momento (preparación / en curso), documentos del plan, hipótesis con qué creemos, nivel de evidencia, gaps y quién puede ayudar, objetivos y prioridades, contactos con borrador de primer contacto listo, follow-ups hasta el fin de la misión, agenda, guiones AOG, activos del Radar con último precio, historias vivas, señales recientes y cobertura de ubicaciones. Usala para 'preparame el viaje', '¿qué estamos intentando comprobar?', '¿con quién hablo?', '¿qué hago esta semana para la misión?'. Es materia prima: sintetizá lo importante ahora, no la repitas.",
+    input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" } }),
+  },
+  {
+    name: "research_questions",
+    description: "Preguntas del diseño de investigación: guiones de conversación AOG (aog=true), preguntas de entrevista, de Voice, reglas y controles, con las hipótesis que validan. Filtros: finding_ref (preguntas de una hipótesis), aog, kind (entrevista, regla, voice, control), query (texto). Usala para preparar una conversación o una visita.",
+    input_schema: strict({
+      finding_ref: { type: "string" },
+      aog: { type: "boolean" },
+      kind: { type: "string", enum: ["entrevista", "regla", "voice", "control"] },
+      query: { type: "string" },
+    }),
+  },
+  {
+    name: "signals",
+    description: "Señales externas guardadas (Morning Brief y Radar) con su historia: qué pasó, hecho/declaración/inferencia, fuente, fecha, vertical, empresas e hipótesis relacionadas. Filtros: query (texto), days (por defecto 30), company_ref, finding_ref. Son contexto: no prueban demanda.",
+    input_schema: strict({ query: { type: "string" }, days: { type: "integer", minimum: 1, maximum: 365 }, company_ref: { type: "string" }, finding_ref: { type: "string" } }),
+  },
+  {
     name: "open_page",
     description: "Lleva al usuario a una pantalla: una referencia 'tipo:uuid' (empresa, activo, persona, hipótesis, captura, oportunidad…) o una vista ('hoy', 'ejecutiva', 'red', 'personas', 'evidencia', 'calidad', 'actividades', 'capturas', 'sin_identificar'). Usala cuando el usuario pide ir, abrir o mostrar algo.",
     input_schema: strict({ target: { type: "string" }, query: { type: "string", description: "Filtro de búsqueda para vistas de lista (opcional)" } }, ["target"]),
@@ -185,7 +206,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "list_hypotheses": {
       let q = db
         .from("findings")
-        .select("id, statement, maturity, case_status, finding_assessments(created_at, summary, gaps, dimensions, economics, independent_cases, contradicts), opportunity_findings(opportunities(status))")
+        .select("id, statement, maturity, case_status, finding_assessments(created_at, summary, gaps, dimensions, economics, independent_cases, contradicts, discovery), opportunity_findings(opportunities(status))")
         .neq("review_status", "rechazado")
         .limit(100);
       if (typeof a.maturity === "string" && a.maturity !== "todas") q = q.eq("maturity", a.maturity);
@@ -208,6 +229,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           contradicting: as?.contradicts ?? 0,
           summary: clip(as?.summary, 300),
           gaps: gaps.map((g) => GAPS[g]?.label ?? g),
+          discovery: as?.discovery ? { belief: (as.discovery as { belief?: string }).belief, evidence_level: (as.discovery as { evidence_level?: string }).evidence_level } : null,
           economics: economics.map((e) => ({ variable: ECONOMICS[e.variable], value: e.value, basis: e.basis === "estimado" ? "inferido (estimación)" : e.basis, formula: e.formula })),
           buyer_known: buyer,
           missing_for_opportunity: crit.items.filter((i) => !i.ok && i.key !== "hito").map((i) => i.label),
@@ -223,7 +245,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const id = m.data.split(":")[1];
       const [{ data: f }, { data: as }, { data: revs }, { data: helps }, { data: props }, { data: tasks }] = await Promise.all([
         db.from("findings").select("id, statement, maturity, case_status, kind, analysis, created_at, finding_evidence(stance, evidence(id, statement, quote, origin_kind, verification_status, declared_by, observed_at, capture_id, company_id, stated_by_contact_id, visit_id, source_id, about_unresolved_id, stated_by_unresolved_id, stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))").eq("id", id).maybeSingle(),
-        db.from("finding_assessments").select("created_at, summary, gaps, dimensions, economics").eq("finding_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        db.from("finding_assessments").select("created_at, summary, gaps, dimensions, economics, discovery").eq("finding_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         db.from("finding_revisions").select("kind, relation, previous_value, new_value, reason, created_at").eq("finding_id", id).order("created_at"),
         db.from("help_requests").select("kind, ask, status, result").eq("finding_id", id),
         db.from("proposals").select("payload, status").eq("finding_id", id).eq("status", "propuesta"),
@@ -245,6 +267,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           case_status: f.case_status,
           counts: { supports: m2.supports, contradicts: m2.contradicts, independent_cases: m2.independentCases },
           assessment: as ? { at: as.created_at, summary: as.summary, dimensions: dims.map((d) => ({ dimension: d.key, status: d.status, summary: d.summary, evidence: d.evidence_ids.map((e) => ({ ref: ref("evidence", e) })) })), gaps: ((as.gaps ?? []) as Gap[]).map((g) => GAPS[g]?.label ?? g) } : "sin evaluar todavía",
+          discovery: as?.discovery ?? null,
           economics: economics.map((e) => ({ variable: ECONOMICS[e.variable], value: e.value, basis: e.basis === "estimado" ? "inferido (estimación)" : e.basis, formula: e.formula, evidence: e.evidence_ids.map((x) => ({ ref: ref("evidence", x) })) })),
           opportunity_criteria: crit.items.map((i) => ({ criterion: i.label, met: i.ok, detail: i.detail })),
           evidence: rows.map((r) => ({
@@ -292,7 +315,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (!m.success) return { content: "Referencia inválida: usá 'contact:uuid'", isError: true };
       const id = m.data.split(":")[1];
       const [{ data: c }, { data: said }, { data: tasks }] = await Promise.all([
-        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, contact_links(companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
+        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, outreach_draft, contact_links(companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
         db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, observed_at, capture_id").eq("stated_by_contact_id", id).limit(40),
         db.from("tasks").select("id, title, status, due_on").eq("contact_id", id),
       ]);
@@ -301,6 +324,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         content: track(ctx, {
           ref: ref("contact", id),
           name: c.full_name, role: c.role_title, kind: c.contact_kind, may_contact: c.contact_permission, relationship: c.relationship_status,
+          outreach_draft: c.outreach_draft ?? null,
           companies: c.contact_links.flatMap((l) => (l.companies ? [{ ref: ref("company", l.companies.id), name: companyName(l.companies) }] : [])),
           stated: (said ?? []).map((e) => ({ ref: ref("evidence", e.id), statement: e.statement, provenance: provenanceOf(e, c.full_name), observed_at: e.observed_at, capture: e.capture_id ? { ref: ref("capture", e.capture_id) } : null })),
           tasks: (tasks ?? []).map((t) => ({ ref: ref("task", t.id), title: t.title, status: t.status, due_on: t.due_on })),
@@ -469,6 +493,57 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           recent_captures: (caps ?? []).map((k) => ({ ref: ref("capture", k.id), at: k.captured_at, summary: clip(k.ai_summary, 200), status: k.status, recent: k.captured_at >= since14 })),
           help_requests: (helps ?? []).filter((h) => h.finding_id && findingIds.has(h.finding_id)),
         }),
+      };
+    }
+    case "mission_brief": {
+      const m = typeof a.ref === "string" ? Str.regex(/^campaign:([0-9a-f-]{36})$/).safeParse(a.ref) : null;
+      if (m && !m.success) return { content: "Referencia inválida: usá 'campaign:uuid' o nada para la misión activa.", isError: true };
+      const brief = await missionBrief(db, m?.success ? m.data.split(":")[1] : null);
+      if (!brief) return { content: "No hay una misión activa.", isError: true };
+      return { content: track(ctx, brief) };
+    }
+    case "research_questions": {
+      let q = db.from("research_questions").select("id, code, kind, industry, dimension, question, next_action, source_url, question_findings(findings(id, statement))").order("code").limit(60);
+      if (a.aog === true) q = q.ilike("industry", "AOG%");
+      if (typeof a.kind === "string") q = q.eq("kind", a.kind as "entrevista");
+      if (typeof a.query === "string" && a.query.trim()) {
+        const term = `%${a.query.trim().replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ")}%`;
+        q = q.or(`question.ilike.${term},industry.ilike.${term},dimension.ilike.${term}`);
+      }
+      if (typeof a.finding_ref === "string") {
+        const f = Str.regex(/^finding:([0-9a-f-]{36})$/).safeParse(a.finding_ref);
+        if (!f.success) return { content: "Referencia inválida: usá 'finding:uuid'", isError: true };
+        const { data: ids } = await db.from("question_findings").select("question_id").eq("finding_id", f.data.split(":")[1]);
+        q = q.in("id", (ids ?? []).map((x) => x.question_id));
+      }
+      const { data } = await q;
+      return {
+        content: track(ctx, (data ?? []).map((r) => ({
+          code: r.code, kind: r.kind, about: r.industry, topic: r.dimension, question: r.question, next_action: r.next_action, source: r.source_url,
+          hypotheses: r.question_findings.flatMap((x) => (x.findings ? [{ ref: ref("finding", x.findings.id), statement: clip(x.findings.statement, 140) }] : [])),
+        }))),
+      };
+    }
+    case "signals": {
+      const days = typeof a.days === "number" ? a.days : 30;
+      let q = db.from("brief_signals").select("headline, summary, basis, change, happened_on, publisher, source_url, vertical, origin, company_ids, finding_ids, asset_ids, brief_stories(title)").gte("created_at", since(days)).order("happened_on", { ascending: false, nullsFirst: false }).limit(30);
+      if (typeof a.query === "string" && a.query.trim()) {
+        const term = `%${a.query.trim().replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ")}%`;
+        q = q.or(`headline.ilike.${term},summary.ilike.${term}`);
+      }
+      for (const [key, col] of [["company_ref", "company_ids"], ["finding_ref", "finding_ids"]] as const) {
+        if (typeof a[key] !== "string") continue;
+        const r = Str.regex(/^[a-z]+:([0-9a-f-]{36})$/).safeParse(a[key]);
+        if (!r.success) return { content: `Referencia inválida en ${key}`, isError: true };
+        q = q.contains(col, [r.data.split(":")[1]]);
+      }
+      const { data } = await q;
+      return {
+        content: track(ctx, (data ?? []).map((s) => ({
+          headline: s.headline, summary: clip(s.summary, 300), basis: s.basis, change: s.change, on: s.happened_on, publisher: s.publisher, source: s.source_url, vertical: s.vertical,
+          from: s.origin === "radar_sheet" ? "Radar" : s.origin === "captura" ? "captura" : "Morning Brief", story: s.brief_stories?.title ?? null,
+          memory: [...s.company_ids.map((id) => ({ ref: ref("company", id) })), ...s.finding_ids.map((id) => ({ ref: ref("finding", id) })), ...s.asset_ids.map((id) => ({ ref: ref("asset", id) }))],
+        }))),
       };
     }
     case "locate": {

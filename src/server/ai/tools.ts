@@ -359,12 +359,17 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
       return { content: track(ctx, { ref: ref("establishment", id), ...data, notes: clip(data.notes), company: data.company_id ? { ref: ref("company", data.company_id) } : null, ...(await claimsAndFindings("establishment_id")) }) };
     }
     case "asset": {
-      const { data } = await db.from("assets").select("id, title, kind, operation, address_text, locality, address_status, surface_m2, price_amount, price_currency, price_observed_on, price_source_id, verification_status, is_demo, notes").eq("id", id).maybeSingle();
+      const [{ data }, { data: prices }] = await Promise.all([
+        db.from("assets").select("id, title, kind, operation, category, address_text, locality, address_status, surface_m2, land_m2, capacity_text, occupancy_declared, owner_text, broker_text, operator_text, sale_reason, economics_note, price_amount, price_currency, price_observed_on, price_source_id, price_status, material_change, first_detected_on, last_checked_on, verification_status, is_demo, notes").eq("id", id).maybeSingle(),
+        db.from("asset_prices").select("amount, currency, operation, period, observed_on, source_url, publisher, basis, note, origin").eq("asset_id", id).order("observed_on", { ascending: false, nullsFirst: false }),
+      ]);
       if (!data) return notFound;
       return {
         content: track(ctx, {
           ref: ref("asset", id),
           ...data,
+          // Historial de precios: cada observación con su fuente. Precios distintos = INCONSISTENTE, nunca una baja calculada.
+          price_history: (prices ?? []).map((p) => ({ amount: Number(p.amount), currency: p.currency, operation: p.operation, period: p.period, observed_on: p.observed_on, source: p.source_url ?? p.publisher ?? null, basis: p.basis, note: p.note, origin: p.origin })),
           notes: clip(data.notes),
           price: data.price_amount != null ? { amount: data.price_amount, currency: data.price_currency, observed_on: data.price_observed_on, source: { ref: ref("source", data.price_source_id!) } } : "sin dato publicado",
           ...(await claimsAndFindings("asset_id")),

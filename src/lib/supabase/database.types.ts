@@ -469,13 +469,13 @@ isOneToOne: false
                   ]
                 },"campaign_targets": {
                   Row: {
-                    "asset_id": string | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"status": string,"updated_at": string,"workspace_id": string
+                    "asset_id": string | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"purpose": string | null,"status": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "asset_id"?: string | null,"campaign_id": string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"status"?: string,"updated_at"?: string,"workspace_id": string
+                    "asset_id"?: string | null,"campaign_id": string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "asset_id"?: string | null,"campaign_id"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"status"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "asset_id"?: string | null,"campaign_id"?: string,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"discard_reason"?: string | null,"establishment_id"?: string | null,"id"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"priority"?: number,"purpose"?: string | null,"status"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1001,13 +1001,13 @@ isOneToOne: false
                   ]
                 },"finding_assessments": {
                   Row: {
-                    "ai_run_id": string | null,"contradicts": number,"created_at": string,"created_by": string | null,"dimensions": NonNullable<Json>,"economics": NonNullable<Json>,"evidence_ids": (string)[],"finding_id": string,"gaps": (string)[],"id": string,"independent_cases": number,"summary": string | null,"supports": number,"workspace_id": string
+                    "ai_run_id": string | null,"baseline_campaign_id": string | null,"contradicts": number,"created_at": string,"created_by": string | null,"dimensions": NonNullable<Json>,"discovery": Json | null,"economics": NonNullable<Json>,"evidence_ids": (string)[],"finding_id": string,"gaps": (string)[],"id": string,"independent_cases": number,"summary": string | null,"supports": number,"workspace_id": string
                   }
                   Insert: {
-                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id": string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id": string
+                    "ai_run_id"?: string | null,"baseline_campaign_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"discovery"?: Json | null,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id": string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id": string
                   }
                   Update: {
-                    "ai_run_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id"?: string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id"?: string
+                    "ai_run_id"?: string | null,"baseline_campaign_id"?: string | null,"contradicts"?: number,"created_at"?: string,"created_by"?: string | null,"dimensions"?: NonNullable<Json>,"discovery"?: Json | null,"economics"?: NonNullable<Json>,"evidence_ids"?: (string)[],"finding_id"?: string,"gaps"?: (string)[],"id"?: string,"independent_cases"?: number,"summary"?: string | null,"supports"?: number,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1015,6 +1015,12 @@ isOneToOne: false
       columns: ["ai_run_id"]
 isOneToOne: false
       referencedRelation: "ai_runs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "finding_assessments_baseline_campaign_id_fkey"
+      columns: ["baseline_campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "finding_assessments_workspace_id_finding_id_fkey"

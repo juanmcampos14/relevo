@@ -43,6 +43,8 @@ function workbook(over: { hotelNext?: string; hotelNotes?: string } = {}): Parse
       sources: [
         r("FUENTES", 2, { ID: "SRC-9001", "Entidad vinculada": "AN-9023", Tipo: "Directorio de negocios", "Título / evidencia": "Hotel Prueba, ficha pública", "URL original": `https://maps.example/${RUN}`, "Fecha consulta": "2026-09-27", Calidad: "Media", "Hecho que sustenta": "Existencia, categoría y teléfono" }),
         r("FUENTES", 3, { ID: "SRC-9004", "Entidad vinculada": "Mercado", Tipo: "Gobierno provincial", "Título / evidencia": "Bypass Añelo", "URL original": `https://gob.example/${RUN}`, Calidad: "Alta" }),
+        // Misma URL que SRC-9004 con otro ID: una sola fuente en RELEVO con los dos IDs del Sheet.
+        r("FUENTES", 4, { ID: "SRC-9007", "Entidad vinculada": "Mercado", Tipo: "Gobierno provincial", "Título / evidencia": "Bypass Añelo (nota 2)", "URL original": `https://gob.example/${RUN}`, Calidad: "Alta" }),
       ],
     },
   };
@@ -87,7 +89,7 @@ describe("importador del CRM", () => {
     first = await stageImport(db, ws, workbook(), { fileName: "crm.xlsx", sha256: "a" });
     const rows = await rowsOf(first);
     expect(rows.map((x) => `${x.entity_type}:${x.external_id}:${x.action}`).sort()).toEqual([
-      "company:AN-9023:crear", "company:AN-9041:crear", "company:AN-9054:crear", "contact:CT-9005:crear", "contact:CT-9006:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "task:ACT-9003:crear",
+      "company:AN-9023:crear", "company:AN-9041:crear", "company:AN-9054:crear", "contact:CT-9005:crear", "contact:CT-9006:crear", "source:SRC-9001:crear", "source:SRC-9004:crear", "source:SRC-9007:crear", "task:ACT-9003:crear",
     ]);
     const codes = rows.flatMap((x) => (x.issues as { code: string }[]).map((i) => `${x.external_id}:${i.code}`));
     expect(codes).toEqual(expect.arrayContaining(["AN-9041:dato_en_campo_incorrecto", "CT-9005:canal_institucional", "CT-9006:sin_empresa", "SRC-9004:fuente_sin_entidad", "ACT-9003:responsable_compartido", "ACT-9003:responsable_desconocido"]));
@@ -105,7 +107,7 @@ describe("importador del CRM", () => {
     await approveAll(first);
     const res = await applyBatch(db, ws, first);
     expect(res.errors).toEqual([]);
-    expect(res.applied).toBe(8);
+    expect(res.applied).toBe(9);
 
     // Estado con detalle + fuente en texto libre: fuente citada por el CRM + evidencia, sin perder nada.
     const { data: modular } = await db.from("companies").select("id, verification_status, sources(kind, title)").eq("trade_name", "Modular Prueba").single();
@@ -136,8 +138,11 @@ describe("importador del CRM", () => {
 
     const { data: fixed } = await db.from("companies").select("website, public_phone").eq("trade_name", "Constructora Prueba").single();
     expect(fixed).toEqual({ website: "https://constructora.example/", public_phone: null });
-    const { count: refs } = await db.from("external_refs").select("id", { count: "exact", head: true });
-    expect(refs).toBe(8);
+    const { data: refs } = await db.from("external_refs").select("external_id, entity_id, last_values").eq("entity_type", "source");
+    expect(refs).toHaveLength(3);
+    const byExt = Object.fromEntries(refs!.map((x) => [x.external_id, x]));
+    expect(byExt["SRC-9007"].entity_id).toBe(byExt["SRC-9004"].entity_id);
+    expect((byExt["SRC-9007"].last_values as { _alias_of?: string })._alias_of).toBe("SRC-9004");
   });
 
   it("reimportar el mismo archivo no duplica nada", async () => {
@@ -149,7 +154,7 @@ describe("importador del CRM", () => {
     // declara, la nota de responsables compartidos y la fecha de carga por defecto no cuentan como edición.
     expect(edited.sort()).toEqual(["AN-9041"]);
     const closed = await applyBatch(db, ws, again);
-    expect(closed).toMatchObject({ applied: 0, unchanged: 8, errors: [] });
+    expect(closed).toMatchObject({ applied: 0, unchanged: 9, errors: [] });
     const { count } = await db.from("companies").select("id", { count: "exact", head: true });
     expect(count).toBe(3);
     const { count: ev } = await db.from("evidence").select("id", { count: "exact", head: true });

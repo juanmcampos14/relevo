@@ -41,8 +41,10 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
   }
 
   // 1. Activos y su historial de precios.
-  const { data: existingAssets } = await db.from("assets").select("id, radar_ref").eq("workspace_id", workspaceId).not("radar_ref", "is", null);
+  const { data: existingAssets } = await db.from("assets").select("id, radar_ref, locked_fields").eq("workspace_id", workspaceId).not("radar_ref", "is", null);
   const assetByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, a.id]));
+  // Campos corregidos a mano en RELEVO: el Sheet no los pisa (ni su estado de precio, si está bloqueado).
+  const lockedByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, new Set(a.locked_fields ?? [])]));
   for (const a of plan.assets) {
     const fields = {
       title: a.title, kind: a.kind, operation: a.operation, category: a.category, locality: a.locality, capacity_text: a.capacityText,
@@ -50,11 +52,13 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
       sale_reason: a.saleReason, economics_note: a.economics, first_detected_on: a.firstDetectedOn, last_checked_on: a.lastCheckedOn,
       material_change: a.materialChange, evidence_layer: a.evidenceLayer,
     };
-    if (a.materialChange?.startsWith("REVISAR")) r.assets.review.push(a.ref);
+    const locked = lockedByRef.get(a.ref) ?? new Set<string>();
+    if (a.materialChange?.startsWith("REVISAR") && !locked.has("material_change")) r.assets.review.push(a.ref);
     let id = assetByRef.get(a.ref);
     if (id) {
       r.assets.updated.push(a.ref);
-      if (!opts.dryRun) await db.from("assets").update(fields).eq("id", id);
+      const free = Object.fromEntries(Object.entries(fields).filter(([k]) => !locked.has(k))) as Partial<typeof fields>;
+      if (!opts.dryRun) await db.from("assets").update(free).eq("id", id);
     } else {
       r.assets.created.push(a.ref);
       if (!opts.dryRun) {
@@ -81,7 +85,7 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
     }
     const status = a.priceStatus === "inconsistente" ? "inconsistente" : priceStatusOf(hist);
     if (status === "inconsistente") r.assets.inconsistent.push(a.ref);
-    if (!opts.dryRun && id) await db.from("assets").update({ price_status: status }).eq("id", id);
+    if (!opts.dryRun && id && !locked.has("price_status")) await db.from("assets").update({ price_status: status }).eq("id", id);
   }
 
   // 2. Señales (todas las filas salvo los guiones de AOG), vinculadas a empresas y activos.

@@ -57,6 +57,7 @@ export const ISSUE_LABEL: Record<IssueCode, string> = {
   sin_nombre: "sin nombre",
   sin_empresa: "persona sin empresa: queda en Calidad para vincularla",
   duplicado_en_archivo: "misma empresa que otra fila del archivo",
+  alias_cambiado: "ID unificado con otro registro que cambió en el Sheet",
 };
 
 /** Empresas nuevas del mismo archivo que parecen la misma (el cruce con RELEVO ya viene del staging). */

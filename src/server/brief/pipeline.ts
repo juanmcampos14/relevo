@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { MAX, type BriefContent, type BriefDraft, type BriefSignalView } from "@/domain/brief/contract";
-import { briefDateAR, briefPeriod, changesOf, matchCompanies, verticalRadar } from "@/domain/brief/derive";
+import { briefDateAR, briefPeriod, changesOf, deliveryDue, matchCompanies, verticalRadar } from "@/domain/brief/derive";
 import { sameEvent, type Known } from "@/domain/brief/same-event";
 import { priceStatusOf } from "@/domain/radar/sheet";
 import { renderBriefEmail } from "@/domain/brief/render";
@@ -25,14 +25,17 @@ export const MAX_STEP_ATTEMPTS = 4;
 const MAX_SEND_ATTEMPTS = 5;
 
 export type BriefRecipient = { name: string; email: string };
-export type BriefSettings = { enabled: boolean; recipients: BriefRecipient[]; monthlyCapUsd: number };
+export type BriefSettings = { enabled: boolean; recipients: BriefRecipient[]; monthlyCapUsd: number; deliverAt: string };
+/** Hora de entrega (Argentina). La investigación corre antes (cron de las 05:00); el email espera hasta esta hora. */
+export const DEFAULT_DELIVER_AT = "07:00";
 /** Tope mensual de IA del brief (USD). Alcanzado, el brief sale igual en modo reducido: sin investigación web. */
 export const DEFAULT_MONTHLY_CAP_USD = 60;
 export function briefSettings(settings: unknown): BriefSettings {
   const b = (settings as { brief?: Partial<BriefSettings> } | null)?.brief;
   const recipients = Array.isArray(b?.recipients) ? b.recipients.filter((r): r is BriefRecipient => !!r && typeof r.email === "string" && r.email.includes("@")) : [];
   const cap = typeof b?.monthlyCapUsd === "number" && b.monthlyCapUsd > 0 ? b.monthlyCapUsd : DEFAULT_MONTHLY_CAP_USD;
-  return { enabled: b?.enabled === true, recipients, monthlyCapUsd: cap };
+  const deliverAt = typeof b?.deliverAt === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.deliverAt) ? b.deliverAt : DEFAULT_DELIVER_AT;
+  return { enabled: b?.enabled === true, recipients, monthlyCapUsd: cap, deliverAt };
 }
 
 /** Costo de IA de los briefs del mes (por fecha del brief). */
@@ -76,12 +79,16 @@ async function claim(db: Db, briefId: string): Promise<boolean> {
 }
 
 /** Ejecuta UN paso del brief. more = queda otro paso por correr (la ruta lo encadena). */
-export async function advanceBrief(db: Db, briefId: string, engines: Engines, opts: { siteUrl: string }): Promise<StepOutcome> {
+export async function advanceBrief(db: Db, briefId: string, engines: Engines, opts: { siteUrl: string; now?: Date }): Promise<StepOutcome> {
   const { data: b } = await db.from("briefs").select("*, workspaces(name, slug, settings)").eq("id", briefId).single();
   if (!b) return { briefId, did: "nada", status: "inexistente", more: false };
   const ws = b.workspaces as unknown as { name: string; slug: string; settings: unknown };
+  const { deliverAt } = briefSettings(ws.settings);
+  const due = deliveryDue(b.brief_date, deliverAt, opts.now ?? new Date());
 
   if (b.status === "generado") {
+    // Listo antes de hora: queda guardado y lo envía el cron de entrega (o el próximo reintento).
+    if (!due) return { briefId, did: `envío programado para las ${deliverAt}`, status: b.status, more: false };
     const sent = await deliverBrief(db, briefId, engines.email, { siteUrl: opts.siteUrl });
     return { briefId, did: `envíos: ${sent.sent} enviados, ${sent.failed} fallidos`, status: b.status, more: false, error: sent.failed ? sent.lastError ?? undefined : undefined };
   }
@@ -150,7 +157,7 @@ export async function advanceBrief(db: Db, briefId: string, engines: Engines, op
           { onConflict: "brief_id,recipient_email", ignoreDuplicates: true },
         );
       }
-      return { briefId, did: `brief generado (${content.signals.length} señales)`, status: "generado", more: recipients.length > 0 };
+      return { briefId, did: `brief generado (${content.signals.length} señales)`, status: "generado", more: recipients.length > 0 && due };
     }
     return { briefId, did: "nada", status: b.status, more: false };
   } catch (e) {
@@ -226,7 +233,10 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
   const draftSignals = draft.signals.slice(0, MAX.signals);
   // Lo ya conocido (señales recientes de briefs y del Radar, y las de este mismo brief): una fuente nueva
   // sobre un hecho conocido confirma o actualiza esa historia, no abre una señal nueva.
-  const knownSignals: Known[] = memory.recentSignals.map((x) => ({ id: x.id, headline: x.headline, summary: x.summary, happened_on: x.happened_on, story_id: x.story_id, company_ids: x.company_ids, asset_ids: x.asset_ids }));
+  // También el historial largo: una coincidencia fuerte vale a cualquier antigüedad.
+  const knownSignals: Known[] = [...memory.recentSignals, ...memory.historySignals].map((x) => ({ id: x.id, headline: x.headline, summary: x.summary, happened_on: x.happened_on, story_id: x.story_id, company_ids: x.company_ids, asset_ids: x.asset_ids }));
+  // Historias abiertas (sin fecha): un hecho de una historia conocida se suma a ella, aunque sea nuevo.
+  const knownStories: Known[] = memory.stories.map((x) => ({ id: x.id, headline: x.title, summary: x.summary, happened_on: null, story_id: x.id }));
   const assetCandidates: BriefDraft["candidates"] = [];
   const candidatePayload = new Map<string, Record<string, unknown>>();
   for (const [position, s] of draftSignals.entries()) {
@@ -238,6 +248,7 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
     const match = sameEvent({ headline: s.headline, summary: s.summary, happened_on: date(s.happened_on), company_ids: companyIds, asset_ids: assetIds }, knownSignals);
     if (match && change === "nuevo") change = "confirmado";
     if (match && !storyId && match.story_id) storyId = match.story_id;
+    if (!storyId) storyId = sameEvent({ headline: s.headline, summary: s.summary }, knownStories)?.story_id ?? null;
     const { data, error } = await db
       .from("brief_signals")
       .insert({

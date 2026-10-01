@@ -128,8 +128,11 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
   const evidenceLater: { row: Row; ids: EntityIds; v: Record<string, unknown> }[] = [];
 
   const refOf = (type: EntityType, ext: unknown) => (typeof ext === "string" ? ctx.refs.get(`${type}:${ext.toUpperCase()}`) : undefined);
-  const saveRef = async (row: Row, entityId: string, ids: EntityIds) => {
-    const last_values = { ...row.mapped.values, _ids: ids } as JsonObj;
+  // aliasOf: otro ID del Sheet ya representa esta entidad (empresa unificada, fuente con la misma URL).
+  const saveRef = async (row: Row, entityId: string, ids: EntityIds, aliasOf?: string) => {
+    const prior = ctx.refs.get(`${row.entity_type}:${row.external_id.toUpperCase()}`)?.last_values._alias_of;
+    const alias = aliasOf ?? (typeof prior === "string" ? prior : undefined);
+    const last_values = { ...row.mapped.values, _ids: ids, ...(alias ? { _alias_of: alias } : {}) } as JsonObj;
     const { error } = await db.from("external_refs").upsert(
       {
         workspace_id: workspaceId,
@@ -200,10 +203,14 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
           reference: `CRM ${row.external_id}`,
         };
         let id = entityId ?? ids.source!;
+        let alias: string | undefined;
         if (creating) {
           // La misma URL puede estar cargada a mano: se reutiliza en vez de duplicarla.
           const { data: same } = sourceRow.url ? await db.from("sources").select("id").eq("url", sourceRow.url).maybeSingle() : { data: null };
-          if (same) id = same.id;
+          if (same) {
+            id = same.id;
+            alias = [...ctx.refs.values()].find((r) => r.entity_type === "source" && r.entity_id === same.id && r.external_id !== row.external_id)?.external_id;
+          }
           else await upsertIgnore(db, "sources", { id, workspace_id: workspaceId, ...sourceRow });
           ids.source = id;
           if (v.entity_ref) evidenceLater.push({ row, ids, v });
@@ -217,7 +224,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
             if (error) throw error;
           }
         }
-        await saveRef(row, id, ids);
+        await saveRef(row, id, ids, alias);
       } else if (row.entity_type === "company") {
         const src = typeof v.source_ref === "string" && SRC_ID.test(v.source_ref) ? refOf("source", v.source_ref)?.entity_id ?? crmSource : crmSource;
         const owner = resolveOwners(v.owner_name as string | null, ctx.members).ids[0] ?? null;
@@ -250,7 +257,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
           const note = `También figura en el CRM como ${row.external_id} (unificada con ${v._same_as})${aliasData ? `: ${aliasData}` : ""}.`;
           const { data: withNotes } = await db.from("companies").select("notes").eq("id", canon.entity_id).single();
           if (!withNotes?.notes?.includes(note)) await db.from("companies").update({ notes: [withNotes?.notes, note].filter(Boolean).join("\n") }).eq("id", canon.entity_id);
-          await saveRef(row, canon.entity_id, { ...canonIds });
+          await saveRef(row, canon.entity_id, { ...canonIds }, v._same_as);
           if (v.evidence_note || (typeof v.source_ref === "string" && !SRC_ID.test(v.source_ref))) await ensureCompanyDerived(row, v, { company: canon.entity_id }, canon.entity_id);
         } else {
           const companyId = entityId ?? ids.company!;

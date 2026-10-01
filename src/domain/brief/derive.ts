@@ -48,3 +48,8 @@ export function briefPeriod(now: Date, lastGeneratedAt: Date | null): { start: D
 export function briefDateAR(now: Date): string {
   return new Date(now.getTime() - 3 * 3600_000).toISOString().slice(0, 10);
 }
+
+/** Investigar y entregar son horarios distintos: el email del brief de `briefDate` sale desde `deliverAt` (HH:MM, hora Argentina). */
+export function deliveryDue(briefDate: string, deliverAt: string, now: Date): boolean {
+  return now.getTime() >= new Date(`${briefDate}T${deliverAt}:00-03:00`).getTime();
+}

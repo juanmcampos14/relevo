@@ -91,9 +91,13 @@ describe("Morning Brief", () => {
   it("investigar → sintetizar: señales cruzadas con la memoria, historia nueva, candidatos filtrados", async () => {
     await atStep(briefId);
     const d = draft([signal({ related_company_ids: ["00000000-0000-0000-0000-000000000000"], related_finding_ids: [finding] })]);
-    expect(await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test" })).toMatchObject({ status: "sintetizando", more: true });
-    const out = await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test" });
-    expect(out).toMatchObject({ status: "generado", more: true });
+    // Investiga a las 05:30 (hora Argentina): queda generado, pero el envío espera a la hora de entrega.
+    const research = { siteUrl: "https://relevo.test", now: new Date("2026-10-16T08:30:00Z") };
+    expect(await advanceBrief(db, briefId, engines(d, email), research)).toMatchObject({ status: "sintetizando", more: true });
+    const out = await advanceBrief(db, briefId, engines(d, email), research);
+    expect(out).toMatchObject({ status: "generado", more: false });
+    expect(await advanceBrief(db, briefId, engines(d, email), research)).toMatchObject({ did: "envío programado para las 07:00", more: false });
+    expect(email.sent).toEqual([]);
 
     const { data: b } = await db.from("briefs").select("status, content, usage").eq("id", briefId).single();
     const c = b!.content as { signals: { company_ids: string[]; finding_ids: string[]; story_title: string }[]; candidates: { name: string }[]; connections: { memory_refs: string[] }[]; vertical_radar: { vertical: string }[] };
@@ -116,12 +120,13 @@ describe("Morning Brief", () => {
 
   it("si falla el email, el brief queda generado y se reintenta solo el envío (mismo objeto para los tres)", async () => {
     const d = draft([signal({})]);
-    const first = await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test" });
+    // Cron de entrega (07:00 hora Argentina).
+    const first = await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test", now: new Date("2026-10-16T10:00:00Z") });
     expect(first.error).toMatch(/proveedor caído/);
     const { data: b } = await db.from("briefs").select("status").eq("id", briefId).single();
     expect(b!.status).toBe("generado");
     const calls = researchCalls;
-    await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test" });
+    await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test", now: new Date("2026-10-16T11:00:00Z") });
     expect(researchCalls).toBe(calls);
     const { data: deliveries } = await db.from("brief_deliveries").select("status, provider_message_id, attempts").eq("brief_id", briefId);
     expect(deliveries!.every((x) => x.status === "enviado")).toBe(true);
@@ -151,7 +156,7 @@ describe("Morning Brief", () => {
     expect(c.changes.actualizado).toHaveLength(1);
 
     // Sin proveedor configurado: el brief existe y los envíos quedan fallidos con el motivo, listos para reintentar.
-    const out = await advanceBrief(db, next, engines(d, null), { siteUrl: "https://relevo.test" });
+    const out = await advanceBrief(db, next, engines(d, null), { siteUrl: "https://relevo.test", now: new Date("2026-10-17T10:00:00Z") });
     expect(out.error).toMatch(/No hay proveedor de email/);
     const { data: dl } = await db.from("brief_deliveries").select("status").eq("brief_id", next);
     expect(dl!.every((x) => x.status === "fallido")).toBe(true);
@@ -182,5 +187,22 @@ describe("Morning Brief", () => {
     expect(prices!.map((p) => [Number(p.amount), p.origin])).toEqual([[750000, "radar_sheet"], [810000, "brief"]]);
     const { data: a } = await db.from("assets").select("price_status").eq("id", asset).single();
     expect(a!.price_status).toBe("inconsistente");
+  });
+
+  it("lo que RELEVO ya sabe pesa más que la ventana: un hecho reportado hace 60 días vuelve como CONFIRMADO, no como nuevo", async () => {
+    const old = (await pool.query(
+      `insert into brief_signals (workspace_id, origin, basis, signal_type, section, vertical, headline, summary, happened_on, change, relevance, position, created_at) values ($1, 'radar_sheet', 'hecho', 'infraestructura', 'anelo', 'Transversal', 'Adjudican el bypass de Añelo por ARS 45.000 M', 'Obra vial provincial adjudicada a Contreras', now()::date - 60, 'nuevo', 'media', 0, now() - interval '60 days') returning id`,
+      [ws],
+    )).rows[0].id;
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-19T08:00:00Z"));
+    await atStep(id, []);
+    const d = draft([signal({ key: "s1", headline: "El bypass de Añelo, adjudicado por ARS 45.000 M, arranca en noviembre", summary: "Contreras confirma el inicio de obra.", change: "nuevo", story_ref: "", source_url: "https://otro-medio.test/bypass", happened_on: "2026-10-19", companies: [] })], { stories: [], watchlist: [], candidates: [] });
+    await advanceBrief(db, id, engines(d, null), { siteUrl: "https://relevo.test" });
+    await advanceBrief(db, id, engines(d, null), { siteUrl: "https://relevo.test" });
+    const { data: b } = await db.from("briefs").select("content").eq("id", id).single();
+    const [sig] = (b!.content as { signals: { change: string; same_as: { headline: string } | null }[] }).signals;
+    expect(sig.change).toBe("confirmado");
+    expect(sig.same_as?.headline).toBe("Adjudican el bypass de Añelo por ARS 45.000 M");
+    void old;
   });
 });

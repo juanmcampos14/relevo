@@ -27,14 +27,16 @@ export async function saveBriefSettings(slug: string, _: ActionState, fd: FormDa
   const enabled = fd.get("enabled") === "on";
   const cap = Number(String(fd.get("monthly_cap_usd") ?? "").replace(",", "."));
   if (!Number.isFinite(cap) || cap < 5 || cap > 500) return { errors: { monthly_cap_usd: "Entre USD 5 y 500 por mes." } };
+  const deliverAt = String(fd.get("deliver_at") ?? "").trim();
+  if (!/^(0[6-9]|1[01]):[0-5]\d$/.test(deliverAt)) return { errors: { deliver_at: "Entre 06:00 y 11:59 (hora Argentina): la investigación corre a las 05:00." } };
   if (enabled && !parsed.data.length) return { errors: { recipients: "Agregá al menos un destinatario." } };
   const supabase = await createClient();
-  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), brief: { enabled, recipients: parsed.data, monthlyCapUsd: cap } };
+  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), brief: { enabled, recipients: parsed.data, monthlyCapUsd: cap, deliverAt } };
   const { data, error } = await supabase.from("workspaces").update({ settings }).eq("id", ctx.workspace.id).select("id");
   if (error) return { message: dbErrorMessage(error) };
   if (!data?.length) return { message: "Solo el owner puede cambiar esta configuración." };
   revalidatePath(`/w/${slug}/brief`);
-  return { ok: true, message: enabled ? `Morning Brief activado para ${parsed.data.length} destinatario(s).` : "Configuración guardada (Morning Brief desactivado)." };
+  return { ok: true, message: enabled ? `Morning Brief activado para ${parsed.data.length} destinatario(s), entrega ${deliverAt}.` : "Configuración guardada (Morning Brief desactivado)." };
 }
 
 async function ownerOnly(slug: string) {

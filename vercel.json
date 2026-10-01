@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/brief",
-      "schedule": "30 9 * * *"
+      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/cron/brief",

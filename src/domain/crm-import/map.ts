@@ -20,7 +20,8 @@ export type IssueCode =
   | "propietario_sin_validar"
   | "sin_nombre"
   | "sin_empresa"
-  | "duplicado_en_archivo";
+  | "duplicado_en_archivo"
+  | "alias_cambiado";
 
 export type Proposal = { label: string; patch: Record<string, unknown> };
 export type Issue = { code: IssueCode; severity: Severity; field?: string; message: string; proposal?: Proposal };

@@ -73,4 +73,12 @@ describe("migración del RADAR", () => {
     const { count } = await db.from("brief_signals").select("id", { count: "exact", head: true }).eq("workspace_id", ws);
     expect(count).toBe(4);
   });
+
+  it("una corrección manual (campos bloqueados) no la pisa la reimportación del Sheet", async () => {
+    await db.from("assets").update({ surface_m2: 38, capacity_text: "2 dormitorios · 4 camas", material_change: "Corregido en RELEVO", price_status: "vigente", locked_fields: ["surface_m2", "capacity_text", "material_change", "price_status"] }).eq("workspace_id", ws).eq("radar_ref", "RAD-ACT-902");
+    const r = await migrateRadar(db, ws, await book(740000), { dryRun: false });
+    expect(r.assets.review).toEqual([]);
+    const { data } = await db.from("assets").select("surface_m2, capacity_text, material_change, price_status, broker_text").eq("workspace_id", ws).eq("radar_ref", "RAD-ACT-902").single();
+    expect(data).toMatchObject({ surface_m2: 38, capacity_text: "2 dormitorios · 4 camas", material_change: "Corregido en RELEVO", price_status: "vigente" });
+  });
 });

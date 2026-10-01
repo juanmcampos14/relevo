@@ -25,7 +25,9 @@ export type Known = { id: string; headline: string; summary?: string | null; hap
 /**
  * Devuelve la señal conocida que describe el mismo hecho, o null.
  * Mismo hecho = (comparten una cifra significativa y al menos 2 palabras clave) o (comparten empresa o
- * activo y al menos 3 palabras clave) o (≥ 60 % de las palabras clave del más corto), dentro de `days`.
+ * activo y al menos 3 palabras clave) o (≥ 60 % de las palabras clave del más corto).
+ * La ventana de `days` solo filtra coincidencias débiles: lo que RELEVO ya sabe pesa más que la fecha, y
+ * una coincidencia fuerte (cifra + empresa/activo, o cifra + 3 palabras clave) vale a cualquier antigüedad.
  */
 export function sameEvent(s: { headline: string; summary?: string | null; happened_on?: string | null; company_ids?: string[]; asset_ids?: string[] }, known: Known[], days = 14, today = new Date()): Known | null {
   const text = `${s.headline} ${s.summary ?? ""}`;
@@ -33,13 +35,15 @@ export function sameEvent(s: { headline: string; summary?: string | null; happen
   const k = keywords(text);
   let best: { k: Known; score: number } | null = null;
   for (const x of known) {
-    if (x.happened_on && Math.abs(new Date(x.happened_on).getTime() - (s.happened_on ? new Date(s.happened_on) : today).getTime()) > days * 86_400_000) continue;
+    const outside = !!x.happened_on && Math.abs(new Date(x.happened_on).getTime() - (s.happened_on ? new Date(s.happened_on) : today).getTime()) > days * 86_400_000;
     const xt = `${x.headline} ${x.summary ?? ""}`;
     const xk = keywords(xt);
     const shared = [...k].filter((w) => xk.has(w)).length;
     const sharedFig = [...figures(xt)].some((n) => f.has(n));
     const sharedEntity = (s.company_ids ?? []).some((id) => x.company_ids?.includes(id)) || (s.asset_ids ?? []).some((id) => x.asset_ids?.includes(id));
     const ratio = shared / Math.max(1, Math.min(k.size, xk.size));
+    const strong = sharedFig && (sharedEntity || shared >= 3);
+    if (outside && !strong) continue;
     const same = (sharedFig && shared >= 2) || (sharedEntity && shared >= 3) || ratio >= 0.6;
     if (same && (!best || ratio > best.score)) best = { k: x, score: ratio };
   }

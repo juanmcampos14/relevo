@@ -263,8 +263,14 @@ export async function planImport(db: Db, workspaceId: string, parsed: ParsedWork
   const stage = async (entity_type: EntityType, m: Mapped<Record<string, unknown>>, extra: Issue[], current: (ref: Ref) => Promise<Record<string, unknown> | null>) => {
     m.issues.push(...extra);
     const ref = ctx.refs.get(refKey(entity_type, m.externalId)) ?? null;
-    const cur = ref ? await current(ref) : null;
+    // Un alias (otro ID del Sheet ya representa la entidad) se compara contra su propia última importación:
+    // los valores de la entidad son los de la fila canónica y no cuentan como edición en RELEVO.
+    const alias = typeof ref?.last_values._alias_of === "string" ? ref.last_values._alias_of : null;
+    const cur = ref ? (alias ? ref.last_values : await current(ref)) : null;
     const diff = threeWay(m.values, ref?.last_values ?? null, cur, COMPARED[entity_type]);
+    if (alias && diff.kind === "cambios") {
+      m.issues.push({ code: "alias_cambiado", severity: "revisar", message: `Este ID está unificado con ${alias}: el cambio del Sheet se aplicaría sobre ese registro. Revisá si corresponde.` });
+    }
     const blocked = m.issues.some((i) => i.severity === "bloquea") || !m.externalId;
     const action: Staged["action"] = blocked
       ? "rechazar"

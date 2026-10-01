@@ -90,7 +90,7 @@ export default async function AiPage({ params, searchParams }: PageProps<"/w/[sl
       <section className="min-w-0 space-y-4">
         <PageHeader
           title="RELEVO AI"
-          subtitle="Responde solo con registros de este workspace y cita cada dato. Propone acciones como borradores: nada se ejecuta sin tu aprobación. No navega internet."
+          subtitle="Responde con lo que sabe RELEVO y cita cada dato; si hace falta, busca afuera y lo dice. Lo que le dictás de tus contactos y reuniones lo registra solo y se puede deshacer; el resto lo propone para que lo apruebes."
         />
         {!configured && (
           <p className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">

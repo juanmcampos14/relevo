@@ -586,7 +586,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       try {
         const { summary, effects } = await applyContactEvent(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, campaignId: ctx.campaignId ?? null }, input.data);
         await ctx.saveApplied({ action: "contact_event", payload: input.data, summary, after: effects });
-        return { content: JSON.stringify({ applied: true, summary, calendar_link: effects.calendar_url, undo: "La persona puede deshacerlo desde la tarjeta de la conversación." }) };
+        return { content: JSON.stringify({ applied: true, summary, calendar: effects.calendar_url ? "La tarjeta de la conversación ya muestra el botón 'Agregar a Calendar': no pegues el link." : null, undo: "La persona puede deshacerlo desde la tarjeta de la conversación." }) };
       } catch (e) {
         return { content: `No pude registrarlo: ${(e as Error).message}`, isError: true };
       }

@@ -36,7 +36,7 @@ const ANELO = { latitude: ANELO_POINT.lat, longitude: ANELO_POINT.lng };
  * Google Places (Text Search): el primer resultado que sea ese lugar según classifyPlace (nombre distintivo,
  * a una distancia razonable; un barrio o una calle cuenta como zona → inferida).
  */
-async function google(key: string, name: string, address: string | null, locality: string | null, place: string): Promise<{ level: "aproximada" | "inferida"; lat: number; lng: number; matched: string } | null> {
+async function google(key: string, name: string, address: string | null, locality: string | null, place: string, kind: "establishment" | "asset"): Promise<{ level: "aproximada" | "inferida"; lat: number; lng: number; matched: string } | null> {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "places.displayName,places.location,places.formattedAddress,places.types" },
@@ -46,17 +46,17 @@ async function google(key: string, name: string, address: string | null, localit
   if (!res.ok) return null;
   const json = (await res.json()) as { places?: { displayName?: { text: string }; location: { latitude: number; longitude: number }; formattedAddress?: string; types?: string[] }[] };
   for (const p of json.places ?? []) {
-    const level = classifyPlace({ name, locality }, { name: p.displayName?.text ?? "", lat: p.location.latitude, lng: p.location.longitude, types: p.types ?? [] });
+    const level = classifyPlace({ name, locality, kind }, { name: p.displayName?.text ?? "", lat: p.location.latitude, lng: p.location.longitude, types: p.types ?? [] });
     if (level) return { level, lat: p.location.latitude, lng: p.location.longitude, matched: `${p.displayName?.text} · ${p.formattedAddress ?? ""}` };
   }
   return null;
 }
 
-export async function locate(name: string, address: string | null, locality: string | null): Promise<Omit<GeoResult, "kind" | "id" | "name">> {
+export async function locate(name: string, address: string | null, locality: string | null, kind: "establishment" | "asset" = "establishment"): Promise<Omit<GeoResult, "kind" | "id" | "name">> {
   const place = locality && !/vaca muerta/i.test(locality) ? locality : "Añelo";
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (key) {
-    const g = await google(key, name, address, locality, place).catch(() => null);
+    const g = await google(key, name, address, locality, place, kind).catch(() => null);
     if (g) return { query: `${name}, ${place}`, level: g.level, lat: g.lat, lng: g.lng, accuracy_m: g.level === "aproximada" ? 50 : 1500, matched: g.matched, source: g.level === "aproximada" ? "google:places" : "google:places:zona" };
   }
   // 1. El lugar por su nombre (un hotel, un comercio): aproximada si el mapa lo tiene con ese nombre.
@@ -89,7 +89,7 @@ export async function geocodeAll(db: Db, opts: { dryRun: boolean }): Promise<Geo
     ...(assets ?? []).map((a) => ({ kind: "asset" as const, id: a.id, name: a.title.split("·")[0].trim(), address: a.address_text, locality: a.locality, status: a.location_status })),
   ];
   for (const it of items) {
-    const r = { kind: it.kind, id: it.id, name: it.name, ...(await locate(it.name, it.address, it.locality)) };
+    const r = { kind: it.kind, id: it.id, name: it.name, ...(await locate(it.name, it.address, it.locality, it.kind)) };
     out.push(r);
     if (opts.dryRun || r.level === "sin_ubicacion") continue;
     // Una inferida solo se reemplaza por una aproximada (mejor precisión), nunca al revés.

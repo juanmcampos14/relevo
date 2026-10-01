@@ -10,6 +10,7 @@ const GENERIC = new Set([
   "industrial", "industriales", "servicios", "servicio", "grupo", "group", "base", "transporte", "transportes", "storage",
   "facility", "nuevo", "nueva", "sucursal", "sede", "productos", "limpieza", "empresa", "empresas", "rental", "truck", "center",
   "obra", "local", "casas", "casa", "ruta", "parque", "soluciones", "medicina",
+  "la", "el", "los", "las", "de", "del", "y", "en", "al", "sa", "srl",
 ]);
 /** Tipos de Google que describen una zona y no un lugar puntual. */
 const AREA_TYPES = new Set(["neighborhood", "sublocality", "sublocality_level_1", "locality", "political", "route", "administrative_area_level_1", "administrative_area_level_2", "postal_code", "plus_code", "colloquial_area"]);
@@ -44,12 +45,15 @@ export const ANELO_POINT = { lat: -38.3542, lng: -68.7877 };
 /**
  * Clasifica un resultado de Google Places para un registro: "aproximada" (es ese lugar), "inferida" (es la
  * zona: un barrio o una calle con ese nombre) o null (no es el lugar). Si el registro es de Añelo, el
- * resultado tiene que estar a 30 km; si no, a 200 km (Vaca Muerta y Neuquén capital).
+ * resultado tiene que estar a 30 km; si no, a 200 km (Vaca Muerta y Neuquén capital). Un activo, como mucho
+ * inferida.
  */
-export function classifyPlace(wanted: { name: string; locality: string | null }, place: { name: string; lat: number; lng: number; types: string[] }): "aproximada" | "inferida" | null {
+export function classifyPlace(wanted: { name: string; locality: string | null; kind?: "establishment" | "asset" }, place: { name: string; lat: number; lng: number; types: string[] }): "aproximada" | "inferida" | null {
   if (!sameDistinctiveName(wanted.name, place.name)) return null;
   const inAnelo = !wanted.locality || /a[nñ]elo/i.test(wanted.locality);
   const maxM = inAnelo ? 30_000 : 200_000;
   if (distanceM(ANELO_POINT, { lat: place.lat, lng: place.lng }) > maxM) return null;
+  // Un activo de un aviso casi nunca es un punto de Google: lo que coincide suele ser el barrio o la calle.
+  if (wanted.kind === "asset") return "inferida";
   return place.types.some((t) => AREA_TYPES.has(t)) ? "inferida" : "aproximada";
 }

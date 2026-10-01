@@ -27,6 +27,7 @@ describe("coincidencias de mapa sin inventar precisión (casos reales del primer
   });
   it("un barrio con ese nombre es la zona, no el lugar", () => {
     expect(classifyPlace({ name: "Complejo La Forestada", locality: "Añelo" }, place("La Forestada", anelo, ["neighborhood", "political"]))).toBe("inferida");
+    expect(classifyPlace({ name: "Departamento La Meseta", locality: "Añelo", kind: "asset" }, place("De la Meseta"))).toBe("inferida");
     expect(classifyPlace({ name: "Lavadero Titan", locality: "Añelo" }, place("Lavadero titan"))).toBe("aproximada");
   });
 });

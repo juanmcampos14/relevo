@@ -74,6 +74,11 @@ export const DraftSignal = z.object({
   verify: z.string().describe("qué falta comprobar para que esto importe (o '' )"),
   talk_to: z.string().describe("con quién hablar: rol, empresa o persona de la memoria (o '')"),
   ask: z.string().describe("qué preguntar en AOG o en terreno (o '')"),
+  asset_ref: z.string().describe("uuid de un ACTIVO de la memoria si la señal es sobre él, o ''"),
+  asset_name: z.string().describe("nombre del activo si es un activo publicado (o '')"),
+  asset_price: z.number().describe("precio publicado del activo, 0 si no hay"),
+  asset_currency: z.string().describe("USD | ARS | ''"),
+  asset_operation: z.string().describe("venta | alquiler | ''"),
 });
 
 export const BriefDraft = z.object({
@@ -91,8 +96,11 @@ export type BriefDraft = z.infer<typeof BriefDraft>;
 export type DraftSignalT = z.infer<typeof DraftSignal>;
 
 /** Lo que se guarda en briefs.content y se renderiza (pantalla y email). */
-export type BriefSignalView = Omit<DraftSignalT, "related_company_ids" | "related_finding_ids" | "related_campaign_ids" | "related_asset_ids" | "story_ref"> & {
+export type BriefSignalView = Omit<DraftSignalT, "related_company_ids" | "related_finding_ids" | "related_campaign_ids" | "related_asset_ids" | "story_ref" | "asset_ref" | "asset_name" | "asset_price" | "asset_currency" | "asset_operation"> & {
   id: string;
+  /** Si el hecho ya se conocía (otra fuente): cuándo se reportó. */
+  same_as?: { headline: string; on: string | null } | null;
+  asset_ids?: string[];
   story_id: string | null;
   story_title: string | null;
   company_ids: string[];

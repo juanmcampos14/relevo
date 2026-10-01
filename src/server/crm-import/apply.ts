@@ -246,7 +246,8 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
           if (canonIds.target && typeof v.priority === "number") {
             await db.from("campaign_targets").update({ priority: v.priority }).eq("id", canonIds.target).gt("priority", v.priority);
           }
-          const note = `También figura en el CRM como ${row.external_id} (unificada con ${v._same_as}).`;
+          const aliasData = [v.sector ? `sector «${v.sector}»` : null, v.activity ? `subsector «${v.activity}»` : null, v.last_verified_on ? `verificada ${v.last_verified_on}` : null].filter(Boolean).join(", ");
+          const note = `También figura en el CRM como ${row.external_id} (unificada con ${v._same_as})${aliasData ? `: ${aliasData}` : ""}.`;
           const { data: withNotes } = await db.from("companies").select("notes").eq("id", canon.entity_id).single();
           if (!withNotes?.notes?.includes(note)) await db.from("companies").update({ notes: [withNotes?.notes, note].filter(Boolean).join("\n") }).eq("id", canon.entity_id);
           await saveRef(row, canon.entity_id, { ...canonIds });

@@ -18,6 +18,7 @@ export function ExplorarTabs({ slug }: { slug: string }) {
     { href: `${base}/calidad`, label: "Calidad", active: pathname.startsWith(`${base}/calidad`) },
     { href: `${base}/fuentes`, label: "Fuentes", active: pathname.startsWith(`${base}/fuentes`) },
     { href: `${base}/verticales`, label: "Verticales", active: pathname.startsWith(`${base}/verticales`) },
+    { href: `/w/${slug}/radar`, label: "Radar", active: false },
     { href: `/w/${slug}/investigacion`, label: "Investigación", active: false },
   ];
   return (

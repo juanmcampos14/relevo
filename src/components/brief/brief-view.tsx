@@ -39,6 +39,7 @@ function SignalCard({ s, base }: { s: BriefSignalView; base: string }) {
           <span className="text-muted-foreground">sin fuente enlazable</span>
         )}
         {s.story_title && <span className="text-muted-foreground">Historia: {s.story_title}</span>}
+        {s.same_as && <span className="text-muted-foreground">Ya conocido{s.same_as.on ? ` desde el ${s.same_as.on}` : ""}: suma evidencia</span>}
         {s.company_ids.map((id, i) => (
           <Link key={id} href={`${base}/e/company/${id}`} className="text-primary hover:underline">empresa en RELEVO{s.company_ids.length > 1 ? ` ${i + 1}` : ""}</Link>
         ))}

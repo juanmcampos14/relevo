@@ -10,9 +10,13 @@ const esc = (s: string | null | undefined) =>
 const DATE_FMT = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 export const briefDateLabel = (d: string) => DATE_FMT.format(new Date(`${d}T12:00:00Z`));
 
-export function briefSubject(c: BriefContent, m: BriefMeta) {
-  const lead = c.headline_points[0]?.text ?? (c.quiet_day_note || "Sin cambios relevantes");
-  return `RELEVO · Morning Brief ${briefDateLabel(m.briefDate)} — ${lead.length > 90 ? `${lead.slice(0, 87)}…` : lead}`;
+const SHORT_FMT = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", timeZone: "UTC" });
+/** Asunto fijo y corto: la inteligencia va adentro. «RELEVO Morning Brief | 01 Oct | Vaca Muerta». */
+export function briefSubject(_c: BriefContent, m: BriefMeta) {
+  const parts = SHORT_FMT.formatToParts(new Date(`${m.briefDate}T12:00:00Z`));
+  const d = parts.find((p) => p.type === "day")?.value ?? "";
+  const mon = (parts.find((p) => p.type === "month")?.value ?? "").replace(".", "");
+  return `RELEVO Morning Brief | ${d} ${mon.charAt(0).toUpperCase()}${mon.slice(1, 3)} | Vaca Muerta`;
 }
 
 const C = { ink: "#111827", muted: "#6b7280", line: "#e5e7eb", accent: "#0f766e", warn: "#b45309", bad: "#b91c1c" };
@@ -35,6 +39,7 @@ ${s.reading ? `<p style="margin:0 0 4px"><b>Lectura RELEVO</b> <i>(inferencia)</
 ${s.verify ? `<p style="margin:0 0 4px"><b>Qué falta comprobar:</b> ${esc(s.verify)}</p>` : ""}
 ${s.talk_to ? `<p style="margin:0 0 4px"><b>Con quién hablar:</b> ${esc(s.talk_to)}</p>` : ""}
 ${s.ask ? `<p style="margin:0 0 4px"><b>Qué preguntar (AOG / campo):</b> ${esc(s.ask)}</p>` : ""}
+${s.same_as ? `<p style="margin:0 0 4px;color:${C.muted};font-size:12px">Ya conocido${s.same_as.on ? ` desde el ${esc(s.same_as.on)}` : ""}: esta fuente suma evidencia a «${esc(s.same_as.headline.slice(0, 90))}».</p>` : ""}
 ${s.story_title ? `<p style="margin:0 0 4px;color:${C.muted};font-size:12px">Historia: ${esc(s.story_title)}</p>` : ""}
 ${s.source_url ? `<p style="margin:0;font-size:12px"><a href="${esc(s.source_url)}" style="color:${C.accent}">${esc(s.publisher || s.source_title || "fuente")}</a></p>` : `<p style="margin:0;font-size:12px;color:${C.muted}">sin fuente enlazable</p>`}
 </div>`;

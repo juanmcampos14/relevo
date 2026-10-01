@@ -104,7 +104,7 @@ export async function decideCandidate(slug: string, candidateId: string, _: Acti
   const decision = String(fd.get("decision") ?? "");
   if (!["aprobar", "descartar"].includes(decision)) return { message: "Elegí aprobar o descartar." };
   const supabase = await createClient();
-  const { data: c } = await supabase.from("brief_candidates").select("id, kind, name, detail, source_url, status").eq("id", candidateId).maybeSingle();
+  const { data: c } = await supabase.from("brief_candidates").select("id, kind, name, detail, source_url, status, payload").eq("id", candidateId).maybeSingle();
   if (!c) return { message: "Candidato no encontrado." };
   if (c.status !== "candidato") return { message: "Ya se decidió." };
   const decided = { decided_by: ctx.user.id, decided_at: new Date().toISOString() };
@@ -135,6 +135,20 @@ export async function decideCandidate(slug: string, candidateId: string, _: Acti
       if (error) return { message: dbErrorMessage(error) };
       entityRef = `contact:${data.id}`;
     }
+  }
+  if (c.kind === "activo") {
+    // Activo detectado → activo del Radar (sin verificar) con su primer precio como observación publicada.
+    const p = (c.payload ?? {}) as { price?: number; currency?: "USD" | "ARS"; operation?: "venta" | "alquiler"; observed_on?: string; locality?: string | null; publisher?: string | null };
+    const { data: a, error } = await supabase
+      .from("assets")
+      .insert({ workspace_id: ctx.workspace.id, kind: "inmueble", operation: p.operation ?? "desconocida", title: c.name, locality: p.locality ?? null, verification_status: "unverified", first_detected_on: p.observed_on ?? null, last_checked_on: p.observed_on ?? null, price_status: "sin_validar" })
+      .select("id")
+      .single();
+    if (error) return { message: dbErrorMessage(error) };
+    if (p.price && p.currency) {
+      await supabase.from("asset_prices").insert({ workspace_id: ctx.workspace.id, asset_id: a.id, amount: p.price, currency: p.currency, operation: p.operation ?? "venta", observed_on: p.observed_on ?? null, source_url: c.source_url, publisher: p.publisher ?? null, origin: "brief", note: "Detectado por el Morning Brief" });
+    }
+    entityRef = `asset:${a.id}`;
   }
   await supabase.from("brief_candidates").update({ status: entityRef ? "incorporado" : "aprobado", entity_ref: entityRef, ...decided }).eq("id", candidateId);
   revalidatePath(`/w/${slug}`, "layout");

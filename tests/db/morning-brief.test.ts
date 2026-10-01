@@ -18,7 +18,7 @@ const signal = (o: Partial<DraftSignalT>): DraftSignalT => ({
   source_url: "https://www.vacamuertanews.com/actualidad/pecom-base.htm", source_title: "PECOM amplía", publisher: "Vaca Muerta News",
   basis: "declaracion", signal_type: "movimiento_empresa", section: "empresas", geography: "Añelo", vertical: "Servicios industriales", subsector: "",
   roles: ["contratista"], companies: ["PECOM"], people: [], why_it_matters: "Más personal en Añelo", reading: "Demanda de viandas y housing",
-  change: "nuevo", relevance: "alta", story_ref: "nueva:pecom-base", related_company_ids: [], related_finding_ids: [], related_campaign_ids: [], related_asset_ids: [], suggested_action: "Pedir intro a compras de PECOM", verify: "Si abre compras locales", talk_to: "Compras de PECOM", ask: "¿Cuántas personas suma la base?",
+  change: "nuevo", relevance: "alta", story_ref: "nueva:pecom-base", related_company_ids: [], related_finding_ids: [], related_campaign_ids: [], related_asset_ids: [], suggested_action: "Pedir intro a compras de PECOM", verify: "Si abre compras locales", talk_to: "Compras de PECOM", ask: "¿Cuántas personas suma la base?", asset_ref: "", asset_name: "", asset_price: 0, asset_currency: "", asset_operation: "",
   ...o,
 });
 
@@ -155,5 +155,32 @@ describe("Morning Brief", () => {
     expect(out.error).toMatch(/No hay proveedor de email/);
     const { data: dl } = await db.from("brief_deliveries").select("status").eq("brief_id", next);
     expect(dl!.every((x) => x.status === "fallido")).toBe(true);
+  });
+
+  it("fuente nueva ≠ señal nueva: el mismo hecho desde otro medio queda CONFIRMADO en su historia; el precio de un activo va a su historial", async () => {
+    const asset = (await pool.query(`insert into assets (workspace_id, kind, operation, title, verification_status) values ($1, 'inmueble', 'venta', 'Complejo Prueba 7 deptos', 'unverified') returning id`, [ws])).rows[0].id;
+    await pool.query(`insert into asset_prices (workspace_id, asset_id, amount, currency, observed_on, source_url) values ($1, $2, 750000, 'USD', '2026-10-17', 'https://portal-a.test/7d')`, [ws, asset]);
+    const { data: story } = await db.from("brief_stories").select("id").eq("workspace_id", ws).single();
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-18T08:00:00Z"));
+    await atStep(id, []);
+    const d = draft(
+      [
+        signal({ key: "s1", headline: "PECOM amplía su base en Añelo con 120 personas más", summary: "Otro medio replica la ampliación de la base de PECOM.", change: "nuevo", story_ref: "", source_url: "https://otro-medio.test/pecom", happened_on: "2026-10-18" }),
+        signal({ key: "s2", headline: "Complejo de 7 departamentos publicado a USD 810.000", summary: "Otra publicación del mismo complejo.", section: "activos", vertical: "Inmuebles / activos / fondos de comercio", change: "nuevo", story_ref: "", source_url: "https://portal-b.test/7d", asset_ref: asset, asset_price: 810000, asset_currency: "USD", asset_operation: "venta", happened_on: "2026-10-18", companies: [] }),
+      ],
+      { stories: [], watchlist: [], candidates: [] },
+    );
+    await advanceBrief(db, id, engines(d, null), { siteUrl: "https://relevo.test" });
+    await advanceBrief(db, id, engines(d, null), { siteUrl: "https://relevo.test" });
+    const { data: b } = await db.from("briefs").select("content").eq("id", id).single();
+    const sigs = (b!.content as { signals: { change: string; story_id: string | null; same_as: unknown }[] }).signals;
+    expect(sigs[0]).toMatchObject({ change: "confirmado", story_id: story!.id });
+    expect(sigs[0].same_as).toBeTruthy();
+    const { data: sources } = await db.from("brief_story_sources").select("url").eq("story_id", story!.id);
+    expect(sources!.map((x) => x.url)).toContain("https://otro-medio.test/pecom");
+    const { data: prices } = await db.from("asset_prices").select("amount, origin").eq("asset_id", asset).order("amount");
+    expect(prices!.map((p) => [Number(p.amount), p.origin])).toEqual([[750000, "radar_sheet"], [810000, "brief"]]);
+    const { data: a } = await db.from("assets").select("price_status").eq("id", asset).single();
+    expect(a!.price_status).toBe("inconsistente");
   });
 });

@@ -59,7 +59,7 @@ describe("email", () => {
   };
   it("mismo objeto → asunto, HTML escapado y texto, con el brief_id", () => {
     const e = renderBriefEmail(content, { briefId: "b-1", briefDate: "2026-10-16", workspaceName: "Daicou", url: "https://relevo.test/w/d/brief/b-1" });
-    expect(e.subject).toMatch(/^RELEVO · Morning Brief .*16 de octubre — Chevron acelera El Trapial <b>$/);
+    expect(e.subject).toBe("RELEVO Morning Brief | 16 Oct | Vaca Muerta");
     expect(e.html).toContain("Obra &lt;script&gt;");
     expect(e.html).not.toContain("<script>");
     for (const t of ["01 — Lo que importa hoy", "09 — Qué haría RELEVO hoy", "11 — Preguntas para campo", "12 — Watchlist", "brief b-1"]) expect(e.html).toContain(t);

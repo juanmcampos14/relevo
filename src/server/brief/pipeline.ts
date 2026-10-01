@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { MAX, type BriefContent, type BriefDraft, type BriefSignalView } from "@/domain/brief/contract";
 import { briefDateAR, briefPeriod, changesOf, matchCompanies, verticalRadar } from "@/domain/brief/derive";
+import { sameEvent, type Known } from "@/domain/brief/same-event";
+import { priceStatusOf } from "@/domain/radar/sheet";
 import { renderBriefEmail } from "@/domain/brief/render";
 import type { EmailProvider } from "@/server/email/provider";
 import { collectItems, type CollectedItem } from "./collect";
@@ -217,10 +219,20 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
   // Señales cruzadas con la memoria (ids del modelo verificados + coincidencia determinista de empresas).
   const signals: BriefSignalView[] = [];
   const draftSignals = draft.signals.slice(0, MAX.signals);
+  // Lo ya conocido (señales recientes de briefs y del Radar, y las de este mismo brief): una fuente nueva
+  // sobre un hecho conocido confirma o actualiza esa historia, no abre una señal nueva.
+  const knownSignals: Known[] = memory.recentSignals.map((x) => ({ id: x.id, headline: x.headline, summary: x.summary, happened_on: x.happened_on, story_id: x.story_id, company_ids: x.company_ids, asset_ids: x.asset_ids }));
+  const assetCandidates: BriefDraft["candidates"] = [];
+  const candidatePayload = new Map<string, Record<string, unknown>>();
   for (const [position, s] of draftSignals.entries()) {
     const companyIds = [...new Set([...only(s.related_company_ids, valid.company), ...matchCompanies([s.headline, s.summary, ...s.companies], memory.companies)])];
     const findingIds = only(s.related_finding_ids, valid.finding);
-    const storyId = storyIds.get(s.story_ref) ?? null;
+    const assetIds = [...new Set([...only(s.related_asset_ids, valid.asset), ...(valid.asset.has(s.asset_ref) ? [s.asset_ref] : [])])];
+    let storyId = storyIds.get(s.story_ref) ?? null;
+    let change = s.change;
+    const match = sameEvent({ headline: s.headline, summary: s.summary, happened_on: date(s.happened_on), company_ids: companyIds, asset_ids: assetIds }, knownSignals);
+    if (match && change === "nuevo") change = "confirmado";
+    if (match && !storyId && match.story_id) storyId = match.story_id;
     const { data, error } = await db
       .from("brief_signals")
       .insert({
@@ -228,14 +240,40 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
         headline: s.headline, summary: s.summary || null, happened_on: date(s.happened_on), source_url: url(s.source_url), source_title: s.source_title || null, publisher: s.publisher || null,
         basis: s.basis, signal_type: s.signal_type, section: s.section, geography: s.geography || null, vertical: s.vertical, subsector: s.subsector || null,
         roles: s.roles, companies: s.companies, people: s.people, why_it_matters: s.why_it_matters || null, reading: s.reading || null,
-        change: s.change, relevance: s.relevance, company_ids: companyIds, finding_ids: findingIds,
-        campaign_ids: only(s.related_campaign_ids, valid.campaign), asset_ids: only(s.related_asset_ids, valid.asset), suggested_action: s.suggested_action || null,
+        change, relevance: s.relevance, company_ids: companyIds, finding_ids: findingIds,
+        campaign_ids: only(s.related_campaign_ids, valid.campaign), asset_ids: assetIds, suggested_action: s.suggested_action || null,
       })
       .select("id")
       .single();
     if (error) throw error;
-    const { related_company_ids: _c, related_finding_ids: _f, related_campaign_ids: _k, related_asset_ids: _a, story_ref: _s, ...rest } = s;
-    signals.push({ ...rest, source_url: url(s.source_url) ?? "", id: data.id, story_id: storyId, story_title: storyId ? storyTitle.get(s.story_ref) ?? null : null, company_ids: companyIds, finding_ids: findingIds });
+    knownSignals.push({ id: data.id, headline: s.headline, summary: s.summary, happened_on: date(s.happened_on), story_id: storyId, company_ids: companyIds, asset_ids: assetIds });
+    // La fuente queda como evidencia de la historia (sin duplicar URL).
+    if (storyId && url(s.source_url)) {
+      await db.from("brief_story_sources").upsert({ workspace_id: workspaceId, story_id: storyId, url: url(s.source_url)!, title: s.source_title || null, publisher: s.publisher || null, signal_id: data.id, first_seen_on: briefDate }, { onConflict: "story_id,url", ignoreDuplicates: true });
+    }
+    // Precio de un activo: se persiste en su historial (observación, no conclusión) o queda como candidato.
+    const price = s.asset_price > 0 && (s.asset_currency === "USD" || s.asset_currency === "ARS") ? { amount: s.asset_price, currency: s.asset_currency as "USD" | "ARS" } : null;
+    if (price && assetIds[0]) {
+      const assetId = assetIds[0];
+      const { data: hist } = await db.from("asset_prices").select("amount, currency, source_url, observed_on").eq("asset_id", assetId);
+      const observed = date(s.happened_on) ?? briefDate;
+      const dup = (hist ?? []).some((h) => Number(h.amount) === price.amount && h.currency === price.currency && (h.source_url ?? "") === (url(s.source_url) ?? ""));
+      if (!dup) {
+        await db.from("asset_prices").insert({ workspace_id: workspaceId, asset_id: assetId, amount: price.amount, currency: price.currency, operation: s.asset_operation === "alquiler" ? "alquiler" : "venta", observed_on: observed, source_url: url(s.source_url), publisher: s.publisher || null, basis: "publicado", origin: "brief", note: `Morning Brief ${briefDate}` });
+        const status = priceStatusOf([...(hist ?? []).map((h) => ({ ...h, amount: Number(h.amount) })), { amount: price.amount, currency: price.currency, source_url: url(s.source_url), observed_on: observed }]);
+        await db.from("assets").update({ price_status: status, last_checked_on: briefDate }).eq("id", assetId);
+      }
+    } else if (price && s.section === "activos" && s.asset_name.trim()) {
+      assetCandidates.push({ kind: "activo", name: s.asset_name.trim(), detail: `${s.headline} · ${price.currency} ${price.amount.toLocaleString("es-AR")} (${s.asset_operation || "operación s/d"})`, source_url: s.source_url });
+      candidatePayload.set(`activo:${fold(s.asset_name)}`, { price: price.amount, currency: price.currency, operation: s.asset_operation === "alquiler" ? "alquiler" : "venta", observed_on: date(s.happened_on) ?? briefDate, locality: s.geography || null, publisher: s.publisher || null });
+    }
+    const { related_company_ids: _c, related_finding_ids: _f, related_campaign_ids: _k, related_asset_ids: _a, story_ref: _s, asset_ref: _ar, asset_name: _an, asset_price: _ap, asset_currency: _ac, asset_operation: _ao, ...rest } = s;
+    signals.push({
+      ...rest, change, source_url: url(s.source_url) ?? "", id: data.id, story_id: storyId,
+      story_title: storyId ? storyTitle.get(s.story_ref) ?? memory.stories.find((x) => x.id === storyId)?.title ?? null : null,
+      company_ids: companyIds, finding_ids: findingIds, asset_ids: assetIds,
+      same_as: match ? { headline: match.headline, on: match.happened_on } : null,
+    });
   }
 
   // Candidatos: nunca lo que ya está en el CRM ni lo ya propuesto (detectado ≠ validado).
@@ -243,12 +281,13 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
   const known = new Set((prev ?? []).map((p) => `${p.kind}:${fold(p.name)}`));
   const companyNames = new Set(memory.companies.map((c) => fold(c.name)));
   const candidates: BriefContent["candidates"] = [];
-  for (const c of draft.candidates.slice(0, MAX.candidates)) {
+  for (const c of [...draft.candidates, ...assetCandidates].slice(0, MAX.candidates + assetCandidates.length)) {
     const key = `${c.kind}:${fold(c.name)}`;
     if (!c.name.trim() || known.has(key)) continue;
     if (c.kind === "empresa" && (companyNames.has(fold(c.name)) || matchCompanies([c.name], memory.companies).length)) continue;
+    if (c.kind === "activo" && memory.assets.some((a) => fold(a.title) === fold(c.name))) continue;
     known.add(key);
-    const { data } = await db.from("brief_candidates").insert({ workspace_id: workspaceId, brief_id: briefId, kind: c.kind, name: c.name.trim(), detail: c.detail || null, source_url: url(c.source_url) }).select("id").single();
+    const { data } = await db.from("brief_candidates").insert({ workspace_id: workspaceId, brief_id: briefId, kind: c.kind, name: c.name.trim(), detail: c.detail || null, source_url: url(c.source_url), payload: (candidatePayload.get(key) ?? {}) as J }).select("id").single();
     if (data) candidates.push({ ...c, id: data.id });
   }
 

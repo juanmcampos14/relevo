@@ -36,7 +36,10 @@ function cellText(v: Cell): { text: string | null; link?: string; formula?: bool
   if (typeof v === "object") {
     if ("formula" in v || "sharedFormula" in v) {
       const r = cellText((v as { result?: Cell }).result ?? null);
-      return { ...r, formula: true };
+      // =HYPERLINK("url"; "texto"): el enlace vive en la fórmula, no en el resultado.
+      const f = String((v as { formula?: string }).formula ?? "");
+      const link = f.match(/^\s*HYPERLINK\(\s*"([^"]+)"/i)?.[1];
+      return { ...r, ...(link && /^https?:\/\//i.test(link) ? { link } : {}), formula: true };
     }
     if ("hyperlink" in v) {
       const t = (v as { text?: Cell }).text;
@@ -212,7 +215,10 @@ export async function parseTab(buffer: ArrayBuffer, sheetName: string, key: stri
     const values: Record<string, string | null> = {};
     (r.values as Cell[]).forEach((c, i) => {
       const h = header![i];
-      if (h) values[h] = cellText(c).text;
+      if (!h) return;
+      const { text, link } = cellText(c);
+      values[h] = text;
+      if (link) values[`${h}#link`] = link;
     });
     if (Object.values(values).some(Boolean)) out.push({ row: n, values });
   });

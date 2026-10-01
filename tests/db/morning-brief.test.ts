@@ -134,6 +134,10 @@ describe("Morning Brief", () => {
     expect(new Set(email.sent.map((m) => m.html)).size).toBe(1);
     expect(email.sent.every((m) => m.idempotencyKey.startsWith(`brief-${briefId}-`))).toBe(true);
     expect(email.sent[0].html).toContain(`https://relevo.test/w/`);
+    // La pasada de las 08:00 es solo reintento: con todo entregado no vuelve a mandar nada.
+    const sent = email.sent.length;
+    expect(await advanceBrief(db, briefId, engines(d, email), { siteUrl: "https://relevo.test", now: new Date("2026-10-16T11:00:00Z") })).toMatchObject({ did: "envíos: 0 enviados, 0 fallidos" });
+    expect(email.sent).toHaveLength(sent);
   });
 
   it("al día siguiente la misma historia se actualiza (no es noticia nueva) y pasa a watchlist con memoria", async () => {

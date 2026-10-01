@@ -71,7 +71,7 @@ export default async function BriefPage({ params }: PageProps<"/w/[slug]/brief">
         {isOwner && (
           <Section title="Configuración">
             <ActionForm action={saveBriefSettings.bind(null, slug)} className="max-w-xl">
-              <CheckboxField name="enabled" label="Generar y enviar el Morning Brief todos los días (investiga a las 05:00, hora Argentina)" defaultChecked={settings.enabled} />
+              <CheckboxField name="enabled" label="Generar y enviar el Morning Brief todos los días (investiga a las 05:00 y entrega a las 07:00, hora Argentina; a las 08:00 solo se reintenta lo que no se pudo entregar)" defaultChecked={settings.enabled} />
               <TextAreaField
                 name="recipients"
                 label="Destinatarios"
@@ -79,7 +79,6 @@ export default async function BriefPage({ params }: PageProps<"/w/[slug]/brief">
                 hint="Una persona por línea: «Nombre <email>». Todos reciben exactamente el mismo brief."
                 defaultValue={settings.recipients.map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join("\n")}
               />
-              <TextField name="deliver_at" label="Hora de entrega (Argentina)" type="time" defaultValue={settings.deliverAt} hint="El brief queda listo antes; el email sale en la primera pasada de envío (07:00 u 08:00) a partir de esta hora." />
               <TextField name="monthly_cap_usd" label="Tope mensual de IA (USD)" type="number" defaultValue={String(settings.monthlyCapUsd)} hint="Si se alcanza, el brief sigue saliendo en modo reducido (sin investigación web)." />
               <SubmitButton>Guardar</SubmitButton>
             </ActionForm>

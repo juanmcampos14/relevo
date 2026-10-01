@@ -34,7 +34,8 @@ export function briefSettings(settings: unknown): BriefSettings {
   const b = (settings as { brief?: Partial<BriefSettings> } | null)?.brief;
   const recipients = Array.isArray(b?.recipients) ? b.recipients.filter((r): r is BriefRecipient => !!r && typeof r.email === "string" && r.email.includes("@")) : [];
   const cap = typeof b?.monthlyCapUsd === "number" && b.monthlyCapUsd > 0 ? b.monthlyCapUsd : DEFAULT_MONTHLY_CAP_USD;
-  const deliverAt = typeof b?.deliverAt === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(b.deliverAt) ? b.deliverAt : DEFAULT_DELIVER_AT;
+  // La entrega está atada al cron de las 07:00 (vercel.json): solo se acepta una hora igual o anterior.
+  const deliverAt = typeof b?.deliverAt === "string" && /^0[0-7]:[0-5]\d$/.test(b.deliverAt) && b.deliverAt <= DEFAULT_DELIVER_AT ? b.deliverAt : DEFAULT_DELIVER_AT;
   return { enabled: b?.enabled === true, recipients, monthlyCapUsd: cap, deliverAt };
 }
 

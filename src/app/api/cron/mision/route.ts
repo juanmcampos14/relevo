@@ -2,6 +2,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { briefTargets } from "@/server/mission/targets";
 import { synthesizeMission } from "@/server/mission/synthesis";
+import { planAog } from "@/server/mission/aog";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export async function GET(request: NextRequest) {
         const t = await briefTargets(db, { workspaceId: m.workspace_id, campaignId: m.id });
         console.info("mision objetivos", m.id, JSON.stringify(t));
       }
+      const a = await planAog(db, { workspaceId: m.workspace_id, campaignId: m.id });
+      console.info("mision aog", m.id, a.ok ? `USD ${a.costUsd.toFixed(2)}` : a.message);
       const s = await synthesizeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
       console.info("mision sintesis", m.id, s.ok ? `USD ${s.costUsd.toFixed(2)}` : s.message);
     }

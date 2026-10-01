@@ -44,6 +44,7 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
           <div className="mt-auto space-y-1.5 border-t border-sidebar-border px-3 pt-4 text-xs text-sidebar-foreground/75">
             <Link href={`/w/${slug}/miembros`} className="block hover:underline">Miembros</Link>
             <Link href={`/w/${slug}/integraciones`} className="block hover:underline">Integraciones</Link>
+            <Link href={`/hoy/${slug}`} className="block font-medium text-primary hover:underline">Probar el nuevo RELEVO</Link>
             <Link href="/cuenta" className="block hover:underline">
               {profile?.display_name || ctx.user.email} · {roleCatalog.label(ctx.role)}
               {ctx.canApprove ? " · aprueba" : ""}

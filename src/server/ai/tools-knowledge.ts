@@ -14,6 +14,7 @@ import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type Plac
 import { geocode, memoryNearby, placesNearby } from "@/server/geo";
 import { processCapture } from "@/server/capture/process";
 import { missionBrief } from "./mission";
+import { fold } from "@/domain/crm-import/map";
 import { ContactEventInput, applyContactEvent } from "./contact-events";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
@@ -135,6 +136,11 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     name: "mission_brief",
     description: "Todo lo que el Brain sabe de una misión en una llamada (por defecto la misión activa, p. ej. Añelo): fechas y momento (preparación / en curso), documentos del plan, hipótesis con qué creemos, nivel de evidencia, gaps y quién puede ayudar, objetivos y prioridades, contactos con borrador de primer contacto listo, follow-ups hasta el fin de la misión, agenda, guiones AOG, activos del Radar con último precio, historias vivas, señales recientes y cobertura de ubicaciones. Usala para 'preparame el viaje', '¿qué estamos intentando comprobar?', '¿con quién hablo?', '¿qué hago esta semana para la misión?'. Es materia prima: sintetizá lo importante ahora, no la repitas.",
     input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" }, detail: { type: "boolean", description: "true para el detalle completo (hipótesis, guiones AOG, activos, follow-ups, señales). Por defecto trae solo lo que RELEVO ya preparó." } }),
+  },
+  {
+    name: "aog_plan",
+    description: "Plan de AOG Patagonia que RELEVO ya preparó: a quién buscar, por qué, qué sabemos, qué queremos descubrir, con quién hablar, qué preguntar y qué cambiaría con la respuesta; y qué no vale el tiempo. Usala para '¿a quién busco en AOG?' y para 'estoy frente a X, ¿entro?' (si X no está en el plan, buscala con find).",
+    input_schema: strict({ company: { type: "string", description: "Nombre de la empresa si preguntan por una en particular (opcional)" } }),
   },
   {
     name: "research_questions",
@@ -531,6 +537,15 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         };
       }
       return { content: track(ctx, brief) };
+    }
+    case "aog_plan": {
+      const { data: c } = await db.from("campaigns").select("synthesis").eq("kind", "mision").eq("status", "activa").order("starts_on").limit(1).maybeSingle();
+      const plan = (c?.synthesis as { aog?: { opening: string; targets: { company_ref: string; contact_ref: string; name: string; hypothesis_refs: string[] }[]; not_worth: string[]; computed_at: string } } | null)?.aog;
+      if (!plan) return { content: "Todavía no hay un plan de AOG preparado: respondé con lo que sepas (research_questions con aog=true y mission_brief) y decí que se está preparando." };
+      const q = typeof a.company === "string" ? fold(a.company) : null;
+      const targets = q ? plan.targets.filter((t) => fold(t.name).includes(q) || q.includes(fold(t.name))) : plan.targets;
+      for (const t of plan.targets) for (const r of [t.company_ref, t.contact_ref, ...t.hypothesis_refs]) if (r) ctx.seenRefs.add(r);
+      return { content: JSON.stringify(q ? { found_in_plan: targets.length > 0, targets } : plan) };
     }
     case "research_questions": {
       let q = db.from("research_questions").select("id, code, kind, industry, dimension, question, next_action, source_url, question_findings(findings(id, statement))").order("code").limit(60);

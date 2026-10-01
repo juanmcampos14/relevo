@@ -35,7 +35,7 @@ Reglas:
 - Lenguaje humano. Prohibido: "finding", "gap", "baseline", "evidencia nula", "geolocalizado", "workspace", "memoria", ids o códigos (H-VA-…, AN-…).
 - Usá solo referencias que aparezcan en el material.`;
 
-export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date }) {
+export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null }) {
   const brief = await missionBrief(db, opts.campaignId, opts.today, { withSynthesis: false });
   if (!brief) return { ok: false as const, message: "No hay misión" };
   const { data: targets } = await db.from("campaign_targets").select("briefing, companies(id, trade_name, legal_name)").eq("campaign_id", opts.campaignId).not("briefing", "is", null);
@@ -46,7 +46,7 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
     .map((t) => ({ company: `company:${t.company!.id}`, name: t.company!.trade_name ?? t.company!.legal_name, contact: t.b.contact ?? null, today: !!t.b.today, why: t.b.why, objective: t.b.objective, attention: t.b.attention }));
   const material = JSON.stringify({ ...brief, shortlist });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
-  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client });
+  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId });
   if (!r.ok) return r;
   const clean = (xs: z.infer<typeof Item>[], n: number) => xs.slice(0, n).map((x) => ({ ...x, refs: x.refs.filter((ref) => allowed.has(ref)) }));
   const synthesis: MissionSynthesis = {
@@ -57,7 +57,10 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
     computed_at: new Date().toISOString(),
     counts: { contacts_this_week: shortlist.length, attention_today: shortlist.filter((s) => s.today).length },
   };
-  const { error } = await db.from("campaigns").update({ synthesis: synthesis as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
+  // El plan de AOG se prepara aparte y se conserva al renovar la síntesis del día.
+  const { data: prev } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
+  const aog = (prev?.synthesis as { aog?: unknown } | null)?.aog;
+  const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(aog ? { aog } : {}) } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
   return { ok: true as const, synthesis, costUsd: r.costUsd };
 }

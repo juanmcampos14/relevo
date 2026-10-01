@@ -80,10 +80,31 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
     .sort((a, b) => Number(b.today) - Number(a.today));
   const synthesisAgeH = mission.synthesized_at ? (today.getTime() - new Date(mission.synthesized_at).getTime()) / 3_600_000 : null;
 
+  // Actualización operativa inmediata: lo que pasó DESPUÉS de preparar la síntesis (sin otra corrida de IA).
+  // La conversación ya sabe lo que la persona acaba de hacer, aunque la síntesis profunda se rehaga más tarde.
+  const after = mission.synthesized_at ?? t;
+  const [{ data: applied }, { data: closed }, { data: caps }] = opts.withSynthesis && mission.synthesis
+    ? await Promise.all([
+        db.from("ai_action_drafts").select("rationale, decided_at").eq("action", "contact_event").eq("status", "ejecutada").gt("decided_at", after).order("decided_at"),
+        db.from("tasks").select("id, title").eq("status", "done").gt("completed_at", after).limit(30),
+        db.from("captures").select("id, ai_summary, captured_at").gt("captured_at", after).order("captured_at").limit(10),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+  const doneTasks = new Set((closed ?? []).map((x) => ref("task", x.id)));
+  type Item = { title: string; why: string; refs: string[]; done?: boolean };
+  const mark = (xs: Item[] = []) => xs.map((x) => { const tasks = x.refs.filter((r) => r.startsWith("task:")); return tasks.length && tasks.every((r) => doneTasks.has(r)) ? { ...x, done: true } : x; });
+  const prepared = mission.synthesis as { today?: Item[]; this_week?: Item[] } | null;
+  const live = prepared ? { ...prepared, today: mark(prepared.today), this_week: mark(prepared.this_week) } : null;
+  const sincePrepared = {
+    actions: (applied ?? []).map((x) => ({ what: x.rationale, at: x.decided_at })),
+    tasks_closed: (closed ?? []).map((x) => ({ ref: ref("task", x.id), title: clip(x.title, 140) })),
+    captures: (caps ?? []).map((x) => ({ ref: ref("capture", x.id), summary: clip(x.ai_summary, 200), at: x.captured_at })),
+  };
+
   return {
     // Lo que RELEVO ya preparó (en background): respondé desde acá primero.
     ...(opts.withSynthesis && mission.synthesis
-      ? { prepared: { synthesis: mission.synthesis, computed_hours_ago: synthesisAgeH === null ? null : Math.round(synthesisAgeH), stale: synthesisAgeH !== null && synthesisAgeH > 30 } }
+      ? { prepared: { synthesis: live, computed_hours_ago: synthesisAgeH === null ? null : Math.round(synthesisAgeH), stale: synthesisAgeH !== null && synthesisAgeH > 30, since_prepared: sincePrepared } }
       : {}),
     contacts_to_move: { count: shortlist.length, attention_today: shortlist.filter((x) => x.today).length, items: shortlist.slice(0, 20) },
     mission: {

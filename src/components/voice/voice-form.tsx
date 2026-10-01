@@ -126,15 +126,24 @@ export function VoiceForm({ slug, definition: def, token, test, identity }: { sl
         <h2 className="text-xl font-semibold">{def.intro.title}</h2>
         <div className="mt-3 space-y-3 text-[15px] leading-relaxed">{def.intro.body.map((p, i) => <p key={i}>{p}</p>)}</div>
         <p className="mt-3 text-sm text-[#52676c]">{def.intro.window}</p>
-        <details className="mt-4 rounded-xl border border-[#ccd8d4] p-3 text-sm">
-          <summary className="cursor-pointer font-medium">Quién hace esto y qué hacemos con tus respuestas</summary>
-          <div className="mt-2 space-y-2 text-[#33494e]">
-            <p>Responsable: {identity.responsible ?? "a completar antes de publicar"}{identity.contact ? <> · <a className="underline" href={`mailto:${identity.contact}`}>{identity.contact}</a></> : null}</p>
-            <p>{identity.notice ?? "Las respuestas se guardan en la base privada de RELEVO, con acceso restringido a su equipo responsable. Se analizan de forma agregada y no se publican casos individuales. No se incorporan a ninguna base de contactos."}</p>
-            <p>Se conservan {Math.round(identity.retentionDays / 30)} meses y después se borran. Al terminar te damos un código: con él podés pedir que borremos tu respuesta escribiendo al contacto.</p>
-          </div>
-        </details>
-        <button className={`${primary} mt-5 w-full`} disabled={!session} onClick={begin}>Empezar</button>
+        {/* Aviso breve → aceptación → Voice. «Continuar» es la aceptación (queda como evento «inicio»). */}
+        <div className="mt-4 rounded-xl bg-[#e8eeeb] p-4 text-sm leading-relaxed">
+          <p>
+            <b>Antes de empezar:</b> tus respuestas serán procesadas por RELEVO y pueden ser analizadas mediante inteligencia artificial para identificar necesidades y oportunidades relacionadas con Añelo y Vaca Muerta. No compartas información sensible o confidencial que no estés autorizado a comunicar.
+          </p>
+          <p className="mt-2">Al continuar, confirmás que leíste y aceptás el aviso de privacidad.</p>
+          <details className="mt-3">
+            <summary className="cursor-pointer font-medium underline">Aviso de privacidad</summary>
+            <div className="mt-2 space-y-2 text-[#33494e]">
+              <p>Responsable: {identity.responsible ?? "a completar antes de publicar"}{identity.contact ? <> · <a className="underline" href={`mailto:${identity.contact}`}>{identity.contact}</a></> : null}</p>
+              {(identity.notice ?? "Las respuestas se guardan en la base privada de RELEVO, con acceso restringido a su equipo responsable. Se analizan de forma agregada y no se publican casos individuales. No se incorporan a ninguna base de contactos.")
+                .split(/\n\s*\n/)
+                .map((para, i) => <p key={i}>{para}</p>)}
+              <p>Se conservan {Math.round(identity.retentionDays / 30)} meses y después se borran. Al terminar te damos un código: con él podés pedir que borremos tu respuesta escribiendo al contacto.</p>
+            </div>
+          </details>
+        </div>
+        <button className={`${primary} mt-5 w-full`} disabled={!session} onClick={begin}>Continuar</button>
         <input ref={hp} name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute left-[-9999px] h-0 w-0 opacity-0" />
       </section>
     );

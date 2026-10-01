@@ -2,7 +2,7 @@
 //
 // Embudo (reglas de conteo, una sesión = una visita a la landing en un navegador):
 //   visitas      sesiones con evento "vista" (recargar la página no crea otra sesión)
-//   inicios      sesiones que tocaron "Empezar" o eligieron en la pantalla de un toque
+//   inicios      sesiones que aceptaron el aviso ("Continuar") o eligieron en la pantalla de un toque
 //   completas    respuestas enviadas (llegaron al final; no incluye "fuera de alcance")
 //   elegibles    completas con exposición a Añelo (días > 0 o vínculo habitual)
 //   útiles       elegibles con episodio concreto (o ausencia explícita de problema) + solución + frecuencia o costo

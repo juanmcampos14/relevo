@@ -3,14 +3,14 @@ import "server-only";
 // Entrega de email detrás de una interfaz: RELEVO orquesta, el proveedor solo entrega.
 // Hoy Resend (API HTTP simple, idempotencia por clave); se reemplaza sin tocar el brief.
 
-export type EmailMessage = { to: string; subject: string; html: string; text: string; idempotencyKey: string };
+export type EmailMessage = { to: string; subject: string; html: string; text: string; idempotencyKey: string; replyTo?: string | null };
 export type SendResult = { ok: true; messageId: string | null } | { ok: false; error: string; retryable: boolean };
 export interface EmailProvider {
   name: string;
   send(msg: EmailMessage): Promise<SendResult>;
 }
 
-export function resendProvider(apiKey: string, from: string): EmailProvider {
+export function resendProvider(apiKey: string, from: string, replyTo: string | null = null): EmailProvider {
   return {
     name: "resend",
     async send(msg) {
@@ -18,7 +18,7 @@ export function resendProvider(apiKey: string, from: string): EmailProvider {
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", "idempotency-key": msg.idempotencyKey, "user-agent": "RELEVO-OS/1.0" },
-          body: JSON.stringify({ from, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
+          body: JSON.stringify({ from, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text, ...((msg.replyTo ?? replyTo) ? { reply_to: msg.replyTo ?? replyTo } : {}) }),
           signal: AbortSignal.timeout(20_000),
         });
         const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string; name?: string };
@@ -35,5 +35,5 @@ export function resendProvider(apiKey: string, from: string): EmailProvider {
 export function configuredEmailProvider(): EmailProvider | null {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.BRIEF_FROM_EMAIL;
-  return key && from ? resendProvider(key, from) : null;
+  return key && from ? resendProvider(key, from, process.env.BRIEF_REPLY_TO || null) : null;
 }

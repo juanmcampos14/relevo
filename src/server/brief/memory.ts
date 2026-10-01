@@ -52,7 +52,7 @@ export function memoryDigest(m: BriefMemory): string {
   L.push("", "SEÑALES YA REPORTADAS EN LOS ÚLTIMOS 14 DÍAS (no las repitas como nuevas):");
   L.push(...(m.recentSignals.length ? m.recentSignals.map((s) => `- ${s.happened_on ?? "s/f"} · ${s.headline}${s.source_url ? ` · ${s.source_url}` : ""}${s.story_id ? ` · historia ${s.story_id}` : ""}${s.origin === "radar_sheet" ? " · (Radar)" : ""}`) : ["(ninguna todavía)"]));
   L.push("", "HIPÓTESIS ABIERTAS (finding · id · madurez · enunciado):", ...m.findings.map((f) => `finding · ${f.id} · ${f.maturity} · ${f.statement.slice(0, 200)}`));
-  L.push("", "ACTIVOS (asset · id · tipo · título · localidad · último precio · estado del precio):", ...m.assets.map((a) => `asset · ${a.id} · ${a.kind} · ${a.title} · ${a.locality ?? ""}${a.lastPrice ? ` · ${a.lastPrice.currency} ${a.lastPrice.amount} (${a.lastPrice.observed_on ?? "s/f"}${a.lastPrice.source_url ? `, ${a.lastPrice.source_url}` : ""})` : " · sin precio"}${a.price_status === "inconsistente" ? " · PRECIO INCONSISTENTE" : ""}`));
+  L.push("", "ACTIVOS (asset · id · tipo · título · localidad · último precio · estado del precio):", ...m.assets.map((a) => `asset · ${a.id} · ${a.kind} · ${a.title} · ${a.locality ?? ""}${a.lastPrice ? ` · ${a.lastPrice.currency} ${a.lastPrice.amount} (${a.lastPrice.observed_on ?? "s/f"}${a.lastPrice.source_url ? `, aviso: ${a.lastPrice.source_url}` : ""})` : " · sin precio"}${a.price_status === "inconsistente" ? " · PRECIO INCONSISTENTE" : ""}`));
   L.push("", "EMPRESAS EN RELEVO/CRM (company · id · nombre · sector):", ...m.companies.map((c) => `company · ${c.id} · ${c.name}${c.sector ? ` · ${c.sector}` : ""}`));
   return L.join("\n");
 }

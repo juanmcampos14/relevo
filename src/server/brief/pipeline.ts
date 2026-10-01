@@ -272,12 +272,16 @@ export async function saveDraft(db: Db, input: SaveInput): Promise<BriefContent>
     if (price && assetIds[0]) {
       const assetId = assetIds[0];
       const { data: hist } = await db.from("asset_prices").select("amount, currency, source_url, observed_on").eq("asset_id", assetId);
+      const { data: lock } = await db.from("assets").select("locked_fields").eq("id", assetId).single();
       const observed = date(s.happened_on) ?? briefDate;
       const dup = (hist ?? []).some((h) => Number(h.amount) === price.amount && h.currency === price.currency && (h.source_url ?? "") === (url(s.source_url) ?? ""));
       if (!dup) {
         await db.from("asset_prices").insert({ workspace_id: workspaceId, asset_id: assetId, amount: price.amount, currency: price.currency, operation: s.asset_operation === "alquiler" ? "alquiler" : "venta", observed_on: observed, source_url: url(s.source_url), publisher: s.publisher || null, basis: "publicado", origin: "brief", note: `Morning Brief ${briefDate}` });
         const status = priceStatusOf([...(hist ?? []).map((h) => ({ ...h, amount: Number(h.amount) })), { amount: price.amount, currency: price.currency, source_url: url(s.source_url), observed_on: observed }]);
-        await db.from("assets").update({ price_status: status, last_checked_on: briefDate }).eq("id", assetId);
+        // Estado corregido a mano: un monto ya conocido no lo cambia; un monto nuevo sí (es información nueva).
+        const knownAmount = (hist ?? []).some((h) => Number(h.amount) === price.amount && h.currency === price.currency);
+        const keep = (lock?.locked_fields ?? []).includes("price_status") && knownAmount;
+        await db.from("assets").update({ ...(keep ? {} : { price_status: status }), last_checked_on: briefDate }).eq("id", assetId);
       }
     } else if (price && s.section === "activos" && s.asset_name.trim()) {
       assetCandidates.push({ kind: "activo", name: s.asset_name.trim(), detail: `${s.headline} · ${price.currency} ${price.amount.toLocaleString("es-AR")} (${s.asset_operation || "operación s/d"})`, source_url: s.source_url });

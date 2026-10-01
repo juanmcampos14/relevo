@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { fold } from "@/domain/crm-import/map";
+import { ANELO_POINT, classifyPlace, sameDistinctiveName } from "@/domain/geo-match";
 
 // Ubicación en lote de establecimientos y activos, sin inventar precisión. Niveles (location_status):
 //   verified     = confirmada (solo una persona o el GPS en el lugar; este lote NUNCA la asigna)
@@ -29,40 +29,39 @@ async function nominatim(q: string): Promise<Hit[]> {
   return res.ok ? ((await res.json()) as Hit[]) : [];
 }
 
-/** ¿El resultado es ese lugar? Comparte palabras significativas del nombre. */
-function sameName(name: string, hit: Hit): boolean {
-  const words = (s: string) => new Set(fold(s).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !["hotel", "anelo", "neuquen", "grupo", "servicios"].includes(w)));
-  const a = words(name);
-  const b = words(hit.name ?? hit.display_name.split(",")[0]);
-  return [...a].some((w) => b.has(w));
-}
 
-const ANELO = { latitude: -38.3542, longitude: -68.7877 };
+const ANELO = { latitude: ANELO_POINT.lat, longitude: ANELO_POINT.lng };
 
-/** Google Places (Text Search): solo acepta un lugar con el mismo nombre cerca de Añelo → aproximada. */
-async function google(key: string, name: string, address: string | null, place: string): Promise<{ lat: number; lng: number; matched: string } | null> {
+/**
+ * Google Places (Text Search): el primer resultado que sea ese lugar según classifyPlace (nombre distintivo,
+ * a una distancia razonable; un barrio o una calle cuenta como zona → inferida).
+ */
+async function google(key: string, name: string, address: string | null, locality: string | null, place: string): Promise<{ level: "aproximada" | "inferida"; lat: number; lng: number; matched: string } | null> {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "places.displayName,places.location,places.formattedAddress" },
+    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "places.displayName,places.location,places.formattedAddress,places.types" },
     body: JSON.stringify({ textQuery: [name, address, place, "Neuquén"].filter(Boolean).join(", "), languageCode: "es", regionCode: "AR", maxResultCount: 5, locationBias: { circle: { center: ANELO, radius: 50_000 } } }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) return null;
-  const json = (await res.json()) as { places?: { displayName?: { text: string }; location: { latitude: number; longitude: number }; formattedAddress?: string }[] };
-  const hit = (json.places ?? []).find((p) => sameName(name, { lat: "", lon: "", class: "", type: "", display_name: p.displayName?.text ?? "", name: p.displayName?.text }));
-  return hit ? { lat: hit.location.latitude, lng: hit.location.longitude, matched: `${hit.displayName?.text} · ${hit.formattedAddress ?? ""}` } : null;
+  const json = (await res.json()) as { places?: { displayName?: { text: string }; location: { latitude: number; longitude: number }; formattedAddress?: string; types?: string[] }[] };
+  for (const p of json.places ?? []) {
+    const level = classifyPlace({ name, locality }, { name: p.displayName?.text ?? "", lat: p.location.latitude, lng: p.location.longitude, types: p.types ?? [] });
+    if (level) return { level, lat: p.location.latitude, lng: p.location.longitude, matched: `${p.displayName?.text} · ${p.formattedAddress ?? ""}` };
+  }
+  return null;
 }
 
 export async function locate(name: string, address: string | null, locality: string | null): Promise<Omit<GeoResult, "kind" | "id" | "name">> {
   const place = locality && !/vaca muerta/i.test(locality) ? locality : "Añelo";
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (key) {
-    const g = await google(key, name, address, place).catch(() => null);
-    if (g) return { query: `${name}, ${place}`, level: "aproximada", lat: g.lat, lng: g.lng, accuracy_m: 50, matched: g.matched, source: "google:places" };
+    const g = await google(key, name, address, locality, place).catch(() => null);
+    if (g) return { query: `${name}, ${place}`, level: g.level, lat: g.lat, lng: g.lng, accuracy_m: g.level === "aproximada" ? 50 : 1500, matched: g.matched, source: g.level === "aproximada" ? "google:places" : "google:places:zona" };
   }
   // 1. El lugar por su nombre (un hotel, un comercio): aproximada si el mapa lo tiene con ese nombre.
   const byName = await nominatim(`${name}, ${place}, Neuquén`);
-  const poi = byName.find((h) => POI.has(h.class) && sameName(name, h));
+  const poi = byName.find((h) => POI.has(h.class) && sameDistinctiveName(name, h.name ?? h.display_name.split(",")[0]));
   if (poi) return { query: `${name}, ${place}`, level: "aproximada", lat: Number(poi.lat), lng: Number(poi.lon), accuracy_m: 150, matched: poi.display_name, source: "osm:nominatim:nombre" };
   if (address) {
     // 2. La dirección: con número o edificio, aproximada; solo la ruta o la calle, inferida.

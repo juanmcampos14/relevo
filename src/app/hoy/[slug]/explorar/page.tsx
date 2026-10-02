@@ -24,17 +24,17 @@ export default async function Explorar({ params, searchParams }: PageProps<"/hoy
   return (
     <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} canEdit={ctx.canEdit} tab="explorar" screen="Explorar"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="¿Qué querés descubrir?">
-      <SurfaceTitle title="¿Qué hay para mirar?" intro="Lo que hay cerca tuyo y lo que apareció mientras no estabas." />
-      <SectionLabel>Cerca tuyo</SectionLabel>
-      <Nearby slug={slug} base={base} />
+      <SurfaceTitle title="¿Qué hay para mirar?" intro="Lo que encontré sin que me lo pidieras y por qué importa, y lo que hay cerca tuyo." />
       {away.length > 0 && (
         <>
-          <SectionLabel>{hello.mission ? `En ${hello.mission.short}, mientras no estabas` : "Mientras no estabas"}</SectionLabel>
+          <SectionLabel>{hello.mission ? `Lo que encontré en ${hello.mission.short}` : "Lo que encontré"}</SectionLabel>
           <ul className="space-y-3">
-            {away.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} href={askHref(base, it.ask)} />)}
+            {away.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} links={it.links} then={it.then} href={askHref(base, it.ask)} />)}
           </ul>
         </>
       )}
+      <SectionLabel>Cerca tuyo</SectionLabel>
+      <Nearby slug={slug} base={base} />
     </Conversation>
   );
 }

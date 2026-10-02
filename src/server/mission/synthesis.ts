@@ -67,12 +67,12 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
     computed_at: new Date().toISOString(),
     counts: { contacts_this_week: shortlist.length, attention_today: shortlist.filter((s) => s.today).length },
   };
-  // El plan de AOG se prepara aparte y se conserva al renovar la síntesis del día. El foco se actualiza con lo
+  // El plan de AOG y el estado de la misión se preparan aparte y se conservan al renovar la síntesis del día. El foco se actualiza con lo
   // nuevo sin pisar lo que la persona decidió (se relee por si cambió mientras se pensaba).
   const { data: latest } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
-  const keep = (latest?.synthesis ?? {}) as { aog?: unknown; focus?: Focus };
+  const keep = (latest?.synthesis ?? {}) as { aog?: unknown; focus?: Focus; state?: unknown };
   const merged = mergeSynthesis(keep.focus?.items ? keep.focus : EMPTY_FOCUS, { today: synthesis.today, week: synthesis.this_week }, new Date(), randomUUID);
-  const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(keep.aog ? { aog: keep.aog } : {}), focus: merged } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
+  const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(keep.aog ? { aog: keep.aog } : {}), ...(keep.state ? { state: keep.state } : {}), focus: merged } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
   return { ok: true as const, synthesis, costUsd: r.costUsd };
 }

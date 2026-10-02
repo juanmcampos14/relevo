@@ -15,12 +15,13 @@ import { advance, correctFocus, markSent } from "@/app/hoy/[slug]/actions";
 import { parseReply, speakable, type ReadyMessage } from "./reply";
 import { FocusList, type FocusChange, type FocusView } from "./focus-list";
 
-// RELEVO (Surface): un solo producto. Conversar, Explorar y Oportunidades son tres formas de hablar con el
-// mismo Brain, con la misma entrada (escribir, hablar, mostrar). La calle es la oficina, el teléfono el
+// RELEVO (Surface): un solo producto. Ahora, Explorar, Oportunidades y Misión son cuatro formas de mirar el
+// mismo Brain; conversar no es una sección: es cómo se opera todo, desde cualquier lugar, con la misma
+// entrada (escribir, hablar, mostrar). La calle es la oficina, el teléfono el
 // sensor, la voz la interfaz. La Surface no explica el sistema: mueve la oportunidad.
 
 export type Interrupt = { id: string; title: string; detail: string | null } | null;
-export type SurfaceTab = "conversar" | "explorar" | "oportunidades";
+export type SurfaceTab = "ahora" | "explorar" | "oportunidades" | "mision";
 type Sent = { line: string; draft: PanelDraft | null } | "enviando" | { error: string };
 type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: boolean };
 type Here = { lat: number; lng: number; accuracy: number };
@@ -96,6 +97,8 @@ export function Conversation(props: {
   scope?: string;
   screen?: string;
   greeting?: string | null; intro?: string | null;
+  /** Qué es RELEVO y en qué estamos, en una línea (quien lo abre por primera vez entiende sin explicación). */
+  about?: { text: string; href: string } | null;
   focus?: FocusView[]; focusVersion?: string;
   missionLabel?: string | null; interrupt?: Interrupt;
   /** Pregunta que llega desde otra pantalla ("Contame" en Explorar): se hace sola al entrar. */
@@ -253,9 +256,10 @@ export function Conversation(props: {
   const listening = recorder.state === "recording";
   const started = messages.length > 0;
   const tabs: { key: SurfaceTab; label: string; href: string }[] = [
-    { key: "conversar", label: "Conversar", href: `/hoy/${slug}` },
+    { key: "ahora", label: "Ahora", href: `/hoy/${slug}` },
     { key: "explorar", label: "Explorar", href: `/hoy/${slug}/explorar` },
     { key: "oportunidades", label: "Oportunidades", href: `/hoy/${slug}/oportunidades` },
+    { key: "mision", label: "Misión", href: `/hoy/${slug}/mision` },
   ];
 
   return (
@@ -263,7 +267,7 @@ export function Conversation(props: {
       <header className="sticky top-0 z-30 bg-[#FAF8F3]/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-5">
           <div className="flex min-w-0 items-center gap-3">
-            {tab === "conversar" && !scope
+            {tab === "ahora" && !scope
               ? <button type="button" onClick={reset} className="text-[15px] font-semibold tracking-[0.18em]" aria-label="RELEVO · empezar de nuevo">RELEVO</button>
               : <Link href={`/hoy/${slug}`} className="text-[15px] font-semibold tracking-[0.18em]">RELEVO</Link>}
             <button type="button" onClick={() => locate(true)} className="flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[13px] text-[#6F6A60] hover:bg-[#F1EDE4]" aria-label="Actualizar dónde estoy">
@@ -291,10 +295,15 @@ export function Conversation(props: {
           </section>
         )}
 
-        {(greeting || intro || props.focus) && (
+        {(greeting || intro || props.focus || props.about) && (
           <section className={cn("pt-10 transition-opacity duration-500 sm:pt-14", started && "opacity-60")}>
             {greeting && <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.02em] sm:text-[40px]">{greeting}</h1>}
-            {intro && <p className="mt-3 max-w-[38rem] text-[18px] leading-relaxed text-[#4A463F]">{intro}</p>}
+            {props.about && (
+              <p className="mt-3 max-w-[38rem] text-[17px] leading-relaxed text-[#6F6A60]">
+                {props.about.text} <Link href={props.about.href} className="whitespace-nowrap text-[#9A4B1F] underline decoration-[#E3C9B4] underline-offset-4 hover:decoration-[#9A4B1F]">Ver la misión</Link>
+              </p>
+            )}
+            {intro && <p className={cn("max-w-[38rem] text-[18px] leading-relaxed text-[#4A463F]", props.about ? "mt-6 font-medium text-[#1C1B19]" : "mt-3")}>{intro}</p>}
             {props.focus && (
               <FocusList key={props.focusVersion} initial={props.focus} disabled={pending} canEdit={canEdit} onAdvance={advanceItem} onChange={changeFocus} />
             )}

@@ -97,8 +97,8 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const prepared = mission.synthesis as { today?: Item[]; this_week?: Item[]; focus?: Focus } | null;
   // Lo que hoy se ve en el home (el foco vivo, con las correcciones de la persona) manda sobre la síntesis.
   const focusNow = prepared?.focus?.items ? visible(prepared.focus, today) : null;
-  const { focus: _f, aog: _a, ...rest } = (prepared ?? {}) as { focus?: unknown; aog?: unknown } & Record<string, unknown>;
-  void _f; void _a;
+  const { focus: _f, aog: _a, state: _s, ...rest } = (prepared ?? {}) as { focus?: unknown; aog?: unknown; state?: unknown } & Record<string, unknown>;
+  void _f; void _a; void _s;
   const live = prepared
     ? { ...rest, today: mark(prepared.today), this_week: mark(prepared.this_week), ...(focusNow ? { now_on_home: focusNow.map((x) => ({ focus_id: x.id, title: x.title, why: x.why, refs: x.refs, done_with: x.done_refs ?? [] })), recent_corrections: correctionsForBrain(prepared.focus!, today).slice(0, 6) } : {}) }
     : null;

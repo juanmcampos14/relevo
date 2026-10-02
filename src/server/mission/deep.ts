@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type * as z from "zod/v4";
@@ -53,4 +54,9 @@ export async function deepCall<S extends z.ZodType>(
     .select("id")
     .single();
   return value ? { ok: true, value, runId: run?.id ?? null, costUsd: cost } : { ok: false, message: error ?? "Error" };
+}
+
+/** Huella de lo que el modelo leería: si no cambió, no se vuelve a pagar el mismo trabajo. */
+export function fingerprint(...parts: string[]): string {
+  return createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 32);
 }

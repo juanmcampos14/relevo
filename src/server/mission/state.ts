@@ -5,7 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { missionBrief } from "@/server/ai/mission";
-import { deepCall } from "./deep";
+import { deepCall, fingerprint, type DeepModel } from "./deep";
 
 // Estado de la misión: lo que RELEVO ya sabe, contado como lo contaría alguien del equipo. Recupera el valor
 // del CRM sin el CRM: qué estamos intentando conseguir, dónde estamos, qué creemos por frente y con qué
@@ -43,7 +43,12 @@ export const StateSchema = z.object({
     next: z.string().describe("Qué haría ahora, en una oración."),
   }),
 });
-export type MissionState = z.infer<typeof StateSchema> & { computed_at: string };
+// Medido el 2026-10-02 (mismo material, en seco): Sonnet 5.5 escribe el estado con la misma calidad que Opus
+// 5.5 por ~57% menos y en la mitad del tiempo. La síntesis del día se queda en Opus: Sonnet no respetaba las
+// prioridades que la persona puso primero.
+const STATE_MODEL: DeepModel = "claude-sonnet-5-5";
+
+export type MissionState = z.infer<typeof StateSchema> & { computed_at: string; material_hash?: string };
 
 const SYSTEM = `Sos RELEVO contando el estado de una misión de investigación de oportunidades de negocio a alguien del equipo que la abre sin contexto (puede ser un socio que nunca vio el sistema). Con el plan de la misión y lo que el Brain sabe, escribís en lenguaje humano, corto y claro.
 Reglas:
@@ -54,7 +59,7 @@ Reglas:
 - Lo que el equipo definió (contexto declarado: lo que busca, su presupuesto, su concepto) NO es evidencia: va en searching. "Lo que sabemos" y "found" son solo hechos del mundo.
 - since_start compara la foto del comienzo con lo que apareció después: decí con honestidad si todavía no apareció nada.`;
 
-export async function describeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; userId?: string | null }) {
+export async function describeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; userId?: string | null; force?: boolean; model?: DeepModel; dryRun?: boolean }) {
   const brief = await missionBrief(db, opts.campaignId, new Date(), { withSynthesis: false });
   if (!brief) return { ok: false as const, message: "No hay misión" };
   const [{ data: docs }, { data: dropped }, { data: findings }] = await Promise.all([
@@ -73,7 +78,12 @@ export async function describeMission(db: Db, opts: { workspaceId: string; campa
     brain: brief,
   });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
-  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL (JSON):\n${material}`, schema: StateSchema, client: opts.client, userId: opts.userId });
+  // Si lo que leería el modelo no cambió (sin contar la fecha de hoy), el estado guardado sigue valiendo.
+  const { data: prev } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
+  const prevState = (prev?.synthesis as { state?: MissionState } | null)?.state ?? null;
+  const material_hash = fingerprint(PROMPT_VERSION, SYSTEM, material.replace(/"(today|days_to_start|moment)":("[^"]*"|-?\d+|null),?/g, ""));
+  if (!opts.force && !opts.dryRun && prevState?.material_hash === material_hash) return { ok: true as const, state: prevState, costUsd: 0, skipped: true };
+  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL (JSON):\n${material}`, schema: StateSchema, client: opts.client, userId: opts.userId, model: opts.model ?? STATE_MODEL });
   if (!r.ok) return r;
   const state: MissionState = {
     ...r.value,
@@ -82,9 +92,11 @@ export async function describeMission(db: Db, opts: { workspaceId: string; campa
     changed: r.value.changed.slice(0, 3),
     questions: r.value.questions.slice(0, 4),
     computed_at: new Date().toISOString(),
+    material_hash,
   };
+  if (opts.dryRun) return { ok: true as const, state, costUsd: r.costUsd, skipped: false };
   const { data: latest } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
   const { error } = await db.from("campaigns").update({ synthesis: { ...((latest?.synthesis ?? {}) as object), state } as unknown as Json }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
-  return { ok: true as const, state, costUsd: r.costUsd };
+  return { ok: true as const, state, costUsd: r.costUsd, skipped: false };
 }

@@ -21,7 +21,7 @@ describe.skipIf(!process.env.TURN || !process.env.USER_ID || !process.env.TEXT |
     if (!res.ok) return;
     const { data: msgs } = await db.from("ai_messages").select("role, api_content").eq("conversation_id", res.conversationId).order("created_at");
     const tools = JSON.stringify(msgs).match(/"type":"(?:server_)?tool_use"[^}]*?"name":"([a-z_]+)"/g)?.map((m) => m.match(/"name":"([a-z_]+)"/)![1]) ?? [];
-    const { data: run } = await db.from("ai_runs").select("model, cost_usd, duration_ms, input_tokens, output_tokens").eq("user_id", process.env.USER_ID!).order("created_at", { ascending: false }).limit(1).single();
+    const { data: run } = await db.from("ai_runs").select("model, cost_usd, duration_ms, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, tool_calls").eq("user_id", process.env.USER_ID!).order("created_at", { ascending: false }).limit(1).single();
     writeFileSync(process.env.OUT!, JSON.stringify({ seconds, conversationId: res.conversationId, tools, run, drafts: res.draftIds.length, text: res.text, citations: res.citations.length }, null, 2));
   });
 });

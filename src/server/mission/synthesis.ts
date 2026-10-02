@@ -5,7 +5,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { missionBrief } from "@/server/ai/mission";
-import { deepCall } from "./deep";
+import { deepCall, type DeepModel } from "./deep";
 import { randomUUID } from "node:crypto";
 import { EMPTY_FOCUS, correctionsForBrain, mergeSynthesis, type Focus } from "@/domain/focus";
 
@@ -41,7 +41,7 @@ Reglas:
 - Si hoy hay una sola cosa realmente importante, proponé una sola.
 - Si la misión tiene equipo (equipo_de_la_mision), decí de quién es cada movimiento (for) cuando corresponde a alguien en particular; si puede hacerlo cualquiera, dejalo vacío.`;
 
-export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null }) {
+export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null; model?: DeepModel; dryRun?: boolean }) {
   const brief = await missionBrief(db, opts.campaignId, opts.today, { withSynthesis: false });
   if (!brief) return { ok: false as const, message: "No hay misión" };
   const { data: targets } = await db.from("campaign_targets").select("briefing, companies(id, trade_name, legal_name)").eq("campaign_id", opts.campaignId).not("briefing", "is", null);
@@ -64,7 +64,7 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   const members = (crew ?? []).map((c) => ({ user_id: c.user_id, name: team[c.user_id]?.short ?? profs?.find((p) => p.user_id === c.user_id)?.display_name?.split(/\s+/)[0] ?? "Alguien" }));
   const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections, equipo_de_la_mision: members.length > 1 ? members.map((m) => m.name) : [] });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
-  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId });
+  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId, model: opts.model });
   if (!r.ok) return r;
   const byName = new Map(members.map((m) => [m.name.toLowerCase(), m.user_id]));
   const clean = (xs: z.infer<typeof Item>[], n: number) => xs.slice(0, n).map((x) => ({ ...x, refs: x.refs.filter((ref) => allowed.has(ref)), for_user: members.length > 1 ? byName.get(x.for.trim().toLowerCase()) ?? null : null }));
@@ -78,6 +78,7 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   };
   // El plan de AOG y el estado de la misión se preparan aparte y se conservan al renovar la síntesis del día. El foco se actualiza con lo
   // nuevo sin pisar lo que la persona decidió (se relee por si cambió mientras se pensaba).
+  if (opts.dryRun) return { ok: true as const, synthesis, costUsd: r.costUsd };
   const { data: latest } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
   const keep = (latest?.synthesis ?? {}) as { aog?: unknown; focus?: Focus; state?: unknown };
   const merged = mergeSynthesis(keep.focus?.items ? keep.focus : EMPTY_FOCUS, { today: synthesis.today, week: synthesis.this_week }, new Date(), randomUUID);

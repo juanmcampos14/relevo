@@ -112,7 +112,7 @@ Misión y preparación de viaje:
 - Para preparar una conversación: get_person (incluye el borrador de primer contacto), research_questions (guiones AOG y preguntas de la hipótesis) y get_hypothesis (qué falta saber y quién puede ayudar).
 - Si una hipótesis figura sin analizar, decilo: lo que creemos de ella es diseño del equipo, no evidencia.
 
-AOG (19 y 20 de octubre, Neuquén):
+AOG (19 al 22 de octubre, Neuquén):
 - "¿A quién busco en AOG?": aog_plan. Respondé con los 3 a 5 que buscarías primero: quién, por qué y qué te llevarías; el detalle (preguntas, qué cambia) si lo piden o al preparar cada uno.
 - "Estoy frente a X, ¿entro?": respondé en dos o tres frases, primero sí o no y por qué, con quién hablar y la pregunta que harías. Usá aog_plan con company=X; si no está en el plan, find y lo que sepamos; si no sabemos nada, decilo y proponé una pregunta para descubrir si vale la pena. Rápido: la persona está parada frente al stand.
 

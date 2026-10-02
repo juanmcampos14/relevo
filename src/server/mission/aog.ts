@@ -7,7 +7,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { GAPS, type Gap } from "@/domain/readiness";
 import type { Discovery } from "@/domain/discovery";
 import { companyName } from "@/server/entities";
-import { deepCall } from "./deep";
+import { deepCall, fingerprint } from "./deep";
 
 // "¿A quién busco en AOG?": plan preparado en background. AOG no es recorrer stands: es resolver preguntas
 // de negocio. Por cada objetivo: por qué, qué sabemos, qué queremos descubrir, con quién hablar, qué
@@ -35,9 +35,9 @@ export const AogSchema = z.object({
   ).describe("Entre 5 y 10, por prioridad."),
   not_worth: z.array(z.string()).describe("Hasta 3 tipos de stands o conversaciones que no valen el tiempo en AOG, con el motivo."),
 });
-export type AogPlan = z.infer<typeof AogSchema> & { computed_at: string };
+export type AogPlan = z.infer<typeof AogSchema> & { computed_at: string; material_hash?: string };
 
-const SYSTEM = `Preparás AOG Patagonia (19 y 20 de octubre, Neuquén) para un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta. AOG no es recorrer stands: es resolver preguntas de negocio con quienes compran, pagan, asignan o deciden.
+const SYSTEM = `Preparás AOG Patagonia (19 al 22 de octubre, Neuquén) para un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta. AOG no es recorrer stands: es resolver preguntas de negocio con quienes compran, pagan, asignan o deciden.
 Reglas:
 - Priorizá operadoras, contratistas y compradores que pueden validar hipótesis desde el lado demanda; sumá operadores locales solo si cierran un gap que no se cierra en Añelo.
 - Usá los guiones existentes cuando haya: sus preguntas ya están pensadas.
@@ -73,7 +73,14 @@ export async function planAog(db: Db, opts: { workspaceId: string; campaignId: s
     "OBJETIVOS DEL LADO DEMANDA Y PRIORITARIOS (con lo que ya preparó RELEVO):",
     ...lines,
   ].join("\n");
+  // Sin guiones de AOG la misión no va a AOG: no hay plan que preparar.
+  if (!scripts?.length) return { ok: true as const, plan: null, costUsd: 0, skipped: true };
   const allowed = new Set([...prompt.matchAll(/((?:company|contact|finding):[0-9a-f-]{36})/g)].map((m) => m[1]));
+  // Si nada de lo que lee el plan cambió, el plan guardado sigue valiendo.
+  const material_hash = fingerprint(PROMPT_VERSION, SYSTEM, prompt);
+  const { data: prev } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
+  const prevPlan = (prev?.synthesis as { aog?: AogPlan } | null)?.aog ?? null;
+  if (prevPlan?.material_hash === material_hash) return { ok: true as const, plan: prevPlan, costUsd: 0, skipped: true };
   const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt, schema: AogSchema, client: opts.client, userId: opts.userId });
   if (!r.ok) return r;
   const plan: AogPlan = {
@@ -87,9 +94,10 @@ export async function planAog(db: Db, opts: { workspaceId: string; campaignId: s
     })),
     not_worth: r.value.not_worth.slice(0, 3),
     computed_at: new Date().toISOString(),
+    material_hash,
   };
   const { data: c } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
   const { error } = await db.from("campaigns").update({ synthesis: { ...((c?.synthesis as object) ?? {}), aog: plan } as unknown as Json }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
-  return { ok: true as const, plan, costUsd: r.costUsd };
+  return { ok: true as const, plan, costUsd: r.costUsd, skipped: false };
 }

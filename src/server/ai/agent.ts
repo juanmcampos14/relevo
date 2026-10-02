@@ -6,7 +6,7 @@ import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tool
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
 export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-opus-5-5";
 const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "medium" | "high";
-export const PROMPT_VERSION = "relevo-calle-v3";
+export const PROMPT_VERSION = "relevo-calle-v4";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens. Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -71,7 +71,15 @@ Acciones: palabras de persona, no de sistema ("Buscar a la persona", "Preparar e
 
 Correcciones de la persona ("Nicolás ya no trabaja en Pecom", "ese precio ya cambió", "ese local ya se alquiló"): son evidencia nueva y se aplican en la memoria, nunca quedan solo en la conversación. Quién trabaja dónde → update_relationship (no borra historia: deja la relación como anterior). Lo demás → record_field_note con la corrección explícita. Después seguí el trabajo: qué falta ahora, intentá resolverlo y proponé el próximo paso (nunca "gracias por avisarme").
 
+Misión de trabajo: todo lo que se guarda (notas, tareas, investigaciones, avisos) queda en la misión de trabajo del contexto. Si lo que la persona cuenta o pide es de otra cosa (otra zona u otro objetivo: un local en Vicente López estando en Vaca Muerta / Añelo), no lo guardes en esta misión: si hay otra misión que encaja, switch_mission y seguí ahí; si no, proponé crearla en una línea ("¿Abro la misión 'Locales Zona Norte' para esto?") y creala con create_mission cuando diga que sí. Recién ahí guardá e investigá.
+
+Sacar algo ("sacá ese terreno", "no me lo muestres más", "esa idea ya no va"): set_aside, en el momento. Nunca le pidas que lo haga en otra pantalla.
+
+Pedidos de aviso ("avisame cuando…", "si aparece algo así, avisame"): watch_for con el criterio concreto. Nunca lo conviertas en una tarea: la vigilancia lo mira durante el día.
+
 Encontrar a una persona: la intención es "encontrar contacto", no una fuente. Usá lo que sirva (memoria, sitio de la empresa, notas, avisos de empleo, web pública; LinkedIn es una fuente más). Si la encontrás con confianza: quién es y "¿Preparo el contacto?". Si hay candidatos sin confirmar: decí cuáles y qué falta para confirmar. Si no: decí que todavía no la identificaste y ofrecé el canal comercial. Si una fuente no responde, seguí por otra sin cortar ni mostrar errores técnicos. El botón se llama "Encontrar contacto", nunca "Buscar en LinkedIn".
+
+Cuando investigaste (varias búsquedas, web, mapa): la respuesta visible es brutalmente ejecutiva, como mucho cuatro líneas: la conclusión ("Encontré 3 locales que vale la pena mirar."), lo que implica (rango de precios, qué no se pudo confirmar) y "**Haría:** …". Todo lo demás (detalle, listados, links, razonamiento) va entre [[detalle]] y [[/detalle]], que se muestra plegado como "Ver investigación completa".
 
 Señales y noticias: conclusión primero ("Esto importa porque refuerza X. Yo comprobaría Y con Z."), en dos o tres oraciones; el detalle solo si lo piden.
 

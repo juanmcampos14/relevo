@@ -135,7 +135,8 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
               locality: (p.locality as string | null) ?? null,
               // La superficie es lo que DICE la fuente; queda como dato del activo y como evidencia declarada.
               surface_m2: Number.isFinite(surface) && surface > 0 ? surface : null,
-              ...(hasGps ? { latitude: capture.latitude, longitude: capture.longitude, location_status: "gps_captured", location_accuracy_m: capture.location_accuracy_m, location_source: "gps" } : {}),
+              // La ubicación de quien captura es la del activo solo si está parado ahí (no si lo menciona de lejos).
+              ...(hasGps && p.here === true ? { latitude: capture.latitude, longitude: capture.longitude, location_status: "gps_captured", location_accuracy_m: capture.location_accuracy_m, location_source: "gps" } : {}),
               notes: `Creado desde una captura de campo (${capture.captured_at.slice(0, 10)}).`,
             },
             { onConflict: "id", ignoreDuplicates: true },
@@ -200,6 +201,14 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           const { error } = await db.from("contact_links").upsert(
             { workspace_id: ws, contact_id: resultId, company_id: companyId, relation: "otro" },
             { onConflict: "contact_id,company_id,establishment_id,asset_id", ignoreDuplicates: true },
+          );
+          if (error) throw error;
+        }
+        // "Es dueño de esas tierras": queda la relación estructurada persona → activo (propietario, sin verificar).
+        if (p.owns_asset === true && decided(asset) && asset!.result_id && resultId) {
+          const { error } = await db.from("asset_parties").upsert(
+            { workspace_id: ws, asset_id: asset!.result_id, contact_id: resultId, role: "propietario", notes: `Según una captura de campo (${capture.captured_at.slice(0, 10)}).` },
+            { onConflict: "asset_id,company_id,contact_id,role", ignoreDuplicates: true },
           );
           if (error) throw error;
         }

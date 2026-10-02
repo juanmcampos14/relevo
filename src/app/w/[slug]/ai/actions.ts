@@ -12,6 +12,7 @@ import { ProposeActionInput, executeDraft } from "@/server/ai/drafts";
 import { assessFinding } from "@/server/findings/assess";
 import { activeMission, applyCorrection } from "@/server/mission/focus";
 import { undoRelationship, type RelationshipEffects } from "@/server/ai/relationships";
+import { undoSetAside, type SetAsideEffects } from "@/server/ai/set-aside";
 import { undoContactEvent, type EventEffects } from "@/server/ai/contact-events";
 
 export async function sendMessage(slug: string, conversationId: string | null, _: ActionState, fd: FormData): Promise<ActionState> {
@@ -67,8 +68,14 @@ export async function undoDraft(slug: string, draftId: string): Promise<void> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return;
   const supabase = await createClient();
-  const { data: draft } = await supabase.from("ai_action_drafts").select("id, action, payload, after_state").eq("id", draftId).eq("status", "ejecutada").in("action", ["contact_event", "relationship_change"]).maybeSingle();
+  const { data: draft } = await supabase.from("ai_action_drafts").select("id, action, payload, after_state").eq("id", draftId).eq("status", "ejecutada").in("action", ["contact_event", "relationship_change", "set_aside"]).maybeSingle();
   if (!draft?.after_state) return;
+  if (draft.action === "set_aside") {
+    await undoSetAside(supabase, ctx.workspace.id, draft.after_state as unknown as SetAsideEffects);
+    await supabase.from("ai_action_drafts").update({ status: "deshecha", decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", draftId);
+    revalidatePath(`/w/${slug}`, "layout");
+    return;
+  }
   if (draft.action === "relationship_change") {
     const contactId = String((draft.payload as { contact_ref?: string }).contact_ref ?? "").split(":")[1];
     await undoRelationship(supabase, contactId, draft.after_state as unknown as RelationshipEffects);

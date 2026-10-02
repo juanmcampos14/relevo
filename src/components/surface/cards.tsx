@@ -34,4 +34,5 @@ export function LookCard({ kicker, title, line, links, then, href, cta = "Contam
   );
 }
 
-export const askHref = (base: string, q: string) => `${base}?q=${encodeURIComponent(q)}`;
+/** Preguntar desde una tarjeta; scope = el registro del que se habla (RELEVO lo consulta directo, no lo busca por nombre). */
+export const askHref = (base: string, q: string, scope?: string) => `${base}?q=${encodeURIComponent(q)}${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`;

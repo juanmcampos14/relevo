@@ -101,6 +101,8 @@ export function Conversation(props: {
   missionLabel?: string | null; interrupt?: Interrupt;
   /** Pregunta que llega desde otra pantalla ("Contame" en Explorar): se hace sola al entrar. */
   initialAsk?: string | null;
+  /** El registro del que trata esa pregunta (p. ej. el activo de una tarjeta de Explorar). */
+  initialScope?: string | null;
   placeholder?: string;
   /** La misión de trabajo (arriba, discreta, con su menú). */
   mission?: { short: string } | null;
@@ -171,7 +173,7 @@ export function Conversation(props: {
     if (res.navigate) router.push(res.navigate);
   }, [router, scope, voice]);
 
-  const ask = useCallback((q: string, opts: { viaVoice?: boolean } = {}) => {
+  const ask = useCallback((q: string, opts: { viaVoice?: boolean; scope?: string | null } = {}) => {
     const question = q.trim() || (photo ? "¿Qué ves acá? ¿Hay algo?" : "");
     if (!question || pending) return;
     spoke.current = !!opts.viaVoice;
@@ -194,7 +196,7 @@ export function Conversation(props: {
         if (!res.ok) { setError(res.message); return; }
         captureId = res.id;
       }
-      receive(await askRelevo(slug, { conversationId, scope, screen, text: question, here, place, captureId }));
+      receive(await askRelevo(slug, { conversationId, scope: opts.scope && /^[a-z]+:[0-9a-f-]{36}$/.test(opts.scope) ? opts.scope : scope, screen, text: question, here, place, captureId }));
     });
   }, [conversationId, here, missionId, pending, photo, place, receive, scope, screen, slug, workspaceId]);
 
@@ -203,9 +205,10 @@ export function Conversation(props: {
     if (!props.initialAsk || asked.current) return;
     asked.current = true;
     const q = props.initialAsk;
-    queueMicrotask(() => ask(q));
+    const sc = props.initialScope ?? null;
+    queueMicrotask(() => ask(q, { scope: sc }));
     router.replace(window.location.pathname, { scroll: false });
-  }, [ask, props.initialAsk, router]);
+  }, [ask, props.initialAsk, props.initialScope, router]);
 
   /** Avanzar una prioridad: si RELEVO ya la preparó, aparece al instante. */
   const advanceItem = (it: FocusView) => {
@@ -334,6 +337,14 @@ export function Conversation(props: {
                     <div className="text-[17px] leading-[1.65] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold [&_ul]:space-y-2">
                       <RichText text={r.body} labels={new Map(Object.entries(m.labels ?? {}))} />
                     </div>
+                  )}
+                  {r.detail && (
+                    <details className="group rounded-2xl bg-[#F4F1EA] px-5 py-3">
+                      <summary className="cursor-pointer list-none text-[14px] font-medium text-[#6F6A60] group-open:mb-2">Ver investigación completa</summary>
+                      <div className="text-[15px] leading-relaxed text-[#4A463F] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold">
+                        <RichText text={r.detail} labels={new Map(Object.entries(m.labels ?? {}))} />
+                      </div>
+                    </details>
                   )}
                   {r.messages.map((msg, k) => {
                     const key = `${i}-${k}`;

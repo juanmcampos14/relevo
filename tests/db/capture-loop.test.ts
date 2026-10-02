@@ -55,8 +55,8 @@ beforeAll(async () => {
     company: { name: "Empresa X", identified: true, existing_id: null, resolves: null, locality: "Añelo", activity: "Flota de camionetas" },
     asset: null,
     people: [
-      { key: "p1", name: null, role: "Encargado", institutional: true, existing_id: null, resolves: null },
-      { key: "p2", name: "Laura", role: "Compras", institutional: false, existing_id: null, resolves: null },
+      { key: "p1", name: null, role: "Encargado", institutional: true, existing_id: null, resolves: null, owns_asset: false },
+      { key: "p2", name: "Laura", role: "Compras", institutional: false, existing_id: null, resolves: null, owns_asset: false },
     ],
     evidence: [
       { key: "e1", statement: "Tienen 35 camionetas", quote: "Tienen 35 camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const },

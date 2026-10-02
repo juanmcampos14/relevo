@@ -29,8 +29,8 @@ export type ProposalDraft = { kind: ProposalKind; position: number; payload: Rec
 type ExtractionLike = {
   summary: string;
   company: { name: string; identified?: boolean; existing_id: string | null; resolves?: string | null; locality: string | null; activity: string | null; quote?: string | null } | null;
-  asset?: { title: string; kind: string; operation: string; address_text: string | null; locality: string | null; surface_m2: number | null; quote?: string | null } | null;
-  people: { key: string; name: string | null; role: string | null; institutional: boolean; existing_id: string | null; resolves?: string | null; quote?: string | null }[];
+  asset?: { title: string; kind: string; operation: string; address_text: string | null; locality: string | null; surface_m2: number | null; here?: boolean; quote?: string | null } | null;
+  people: { key: string; name: string | null; role: string | null; institutional: boolean; existing_id: string | null; resolves?: string | null; owns_asset?: boolean; quote?: string | null }[];
   evidence: {
     key: string;
     statement: string;
@@ -132,7 +132,7 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
 
   if (ex.asset?.title.trim()) {
     const a = ex.asset;
-    push("asset", { key: "a", title: a.title.trim(), kind: a.kind, operation: a.operation, address_text: a.address_text, locality: a.locality, surface_m2: a.surface_m2 }, a.quote ?? null);
+    push("asset", { key: "a", title: a.title.trim(), kind: a.kind, operation: a.operation, address_text: a.address_text, locality: a.locality, surface_m2: a.surface_m2, here: a.here === true }, a.quote ?? null);
   }
 
   const personKeys = new Set<string>();
@@ -151,7 +151,7 @@ export function buildProposals(ex: ExtractionLike, ctx: ProposalContext): Propos
             reason: ex.company && c.company && normalizeName(c.company) === normalizeName(ex.company.name) ? "mismo nombre y misma empresa" : "solo coincide el nombre: confirmá con la empresa o el cargo",
           }))
         : [];
-    push("person", { key: p.key, name: p.name?.trim() || null, role: p.role, institutional: p.institutional || !p.name, company_key: ex.company ? "c" : null, resolves: p.name?.trim() ? unresolvedOf(p.resolves, "actor") : null }, p.quote ?? null, matches);
+    push("person", { key: p.key, name: p.name?.trim() || null, role: p.role, institutional: p.institutional || !p.name, company_key: ex.company ? "c" : null, resolves: p.name?.trim() ? unresolvedOf(p.resolves, "actor") : null, owns_asset: p.owns_asset === true }, p.quote ?? null, matches);
   }
 
   const evidenceKeys = new Set<string>();

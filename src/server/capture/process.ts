@@ -170,6 +170,7 @@ export async function processCapture(
       capturedAt: formatAR(capture.captured_at),
       capturedBy: author.data?.display_name || author.data?.email || "el equipo",
       missionName: mission.data?.name ?? null,
+      team: Object.values(((opts.settings as { team?: Record<string, { short?: string; full?: string }> } | null)?.team) ?? {}).map((t) => [t.short, t.full ? `(${t.full})` : null].filter(Boolean).join(" ")).filter(Boolean).join(", ") || null,
       location: capture.latitude != null ? `${capture.latitude.toFixed(5)}, ${capture.longitude?.toFixed(5)} (GPS${capture.location_accuracy_m ? ` ±${Math.round(capture.location_accuracy_m)} m` : ""}, sin verificar)` : null,
       body: fullText,
       photos: images.filter((i): i is NonNullable<typeof i> => !!i),

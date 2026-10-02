@@ -3,17 +3,20 @@
 // sistema; la profundidad aparece cuando se pide.
 
 export type ReadyMessage = { to: string | null; text: string };
-export type Reply = { body: string; actions: string[]; messages: ReadyMessage[] };
+export type Reply = { body: string; actions: string[]; messages: ReadyMessage[]; detail: string | null };
 
 const ACTION = /\[\[acci[oó]n:\s*([^\]]+)\]\]/gi;
 const MESSAGE = /\[\[mensaje(?:\s+para:\s*((?:contact|company):[0-9a-f-]{36}))?\]\]([\s\S]*?)\[\[\/mensaje\]\]/gi;
 const CITE = /\s?\[\[[a-z]+:[0-9a-f-]{36}\]\]/g;
+const DETAIL = /\[\[detalle\]\]([\s\S]*?)(?:\[\[\/detalle\]\]|$)/i;
 
 export function parseReply(text: string): Reply {
   const actions = [...text.matchAll(ACTION)].map((m) => m[1].trim()).slice(0, 2);
   const messages = [...text.matchAll(MESSAGE)].map((m) => ({ to: m[1] ?? null, text: m[2].trim().replace(CITE, "") })).filter((m) => m.text);
-  const body = text.replace(ACTION, "").replace(MESSAGE, "").replace(CITE, "").replace(/\s?\[referencia no verificada\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
-  return { body, actions, messages };
+  const detailMatch = text.match(DETAIL);
+  const detail = detailMatch ? detailMatch[1].replace(ACTION, "").replace(CITE, "").replace(/\s?\[referencia no verificada\]/g, "").trim() || null : null;
+  const body = text.replace(DETAIL, "").replace(ACTION, "").replace(MESSAGE, "").replace(CITE, "").replace(/\s?\[referencia no verificada\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { body, actions, messages, detail };
 }
 
 /** Texto para decir en voz alta: sin marcas ni formato; si dejó mensajes listos, lo dice en una frase. */

@@ -131,13 +131,17 @@ export async function nearby(slug: string, at: { lat: number; lng: number }): Pr
   await getWorkspaceContext(slug);
   if (!Number.isFinite(at.lat) || !Number.isFinite(at.lng)) return [];
   const supabase = await createClient();
-  const points = await memoryNearby(supabase, slug, { lat: at.lat, lng: at.lng }, 1500);
-  return points.filter((p) => p.kind !== "capture").slice(0, 4).map((p) => ({
+  const [points, mission] = await Promise.all([memoryNearby(supabase, slug, { lat: at.lat, lng: at.lng }, 1500), activeMission(supabase)]);
+  // Lo que se sacó de la misión no vuelve a aparecer.
+  const { data: out } = mission ? await supabase.from("campaign_targets").select("asset_id, establishment_id").eq("campaign_id", mission).eq("status", "descartado") : { data: [] };
+  const gone = new Set((out ?? []).flatMap((t) => [t.asset_id && `asset:${t.asset_id}`, t.establishment_id && `establishment:${t.establishment_id}`]).filter(Boolean));
+  return points.filter((p) => p.kind !== "capture" && !gone.has(p.ref)).slice(0, 4).map((p) => ({
     id: p.ref,
     kicker: `Cerca · ${formatDistance(p.distance_m)}`,
     title: p.name,
     line: p.detail ?? null,
     ask: `Contame de ${p.name}, que está acá cerca.`,
+    scope: p.ref,
   }));
 }
 

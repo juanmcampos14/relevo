@@ -19,11 +19,11 @@ import { ingestDiscovery, type Discovered } from "./ingest";
 // nada = silencio. Si no hay nada nuevo, no se llama a la IA.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-vigilancia-v1";
+const PROMPT_VERSION = "mision-vigilancia-v2";
 const MAX_ITEMS = 30;
 const MAX_ALERTS_PER_DAY = 3;
 
-export type WatchConfig = { queries?: string[]; sites?: string[]; region?: string | null; context?: string | null };
+export type WatchConfig = { queries?: string[]; sites?: string[]; region?: string | null; context?: string | null; criteria?: { text: string; at: string; by?: string | null }[] };
 export type WatchMission = { id: string; workspace_id: string; slug: string; settings: unknown; name: string; objective: string | null; watch: WatchConfig | null };
 
 const Ref = z.string();
@@ -40,7 +40,8 @@ export const WatchSchema = z.object({
     finding_refs: z.array(Ref).describe("'finding:…' de la misión que fortalece o debilita."),
     asset_refs: z.array(Ref),
     action: z.string().describe("Qué haría, en una oración, o '' si nada."),
-    alert: z.boolean().describe("true SOLO si cambia algo material (una hipótesis, un actor importante nuevo, un activo, o merece una acción ya). Casi siempre false."),
+    alert: z.boolean().describe("true SOLO si cambia algo material (una hipótesis, un actor importante nuevo, un activo, o merece una acción ya) o si cumple un pedido de aviso de la persona. Casi siempre false."),
+    matches_request: z.string().describe("Si cumple un pedido de aviso, cuál (en sus palabras); si no, ''."),
     discovered: z.array(z.object({
       kind: z.enum(["empresa", "persona", "activo"]),
       name: z.string(),
@@ -53,12 +54,12 @@ export const WatchSchema = z.object({
 
 const SYSTEM = `Sos el radar de RELEVO para una misión de investigación de oportunidades de negocio. Recibís notas nuevas y la memoria de la misión. Tu criterio es el producto: no sos un agregador.
 Para cada nota preguntate: ¿esto cambia algo de lo que sabemos, creemos o estamos siguiendo? ¿crea o modifica una señal, un actor, una relación, una hipótesis, una oportunidad o una acción? Una nota grande de una operadora puede no cambiar nada; una chica donde aparece por primera vez una contratista puede cambiar mucho.
-Devolvé solo las que cambian algo. Ruido = afuera. Nada de inventar: referencias solo de la memoria; actores nuevos solo si la nota los nombra.`;
+Devolvé solo las que cambian algo, o las que cumplen un pedido de aviso de la persona. Ruido = afuera. Nada de inventar: referencias solo de la memoria; actores nuevos solo si la nota los nombra.`;
 
 async function missionMemory(db: Db, m: WatchMission) {
   const [{ data: findings }, { data: targets }, { data: recent }] = await Promise.all([
     db.from("findings").select("id, statement").eq("campaign_id", m.id).eq("case_status", "activo").neq("review_status", "rechazado").limit(60),
-    db.from("campaign_targets").select("priority, companies(id, trade_name, legal_name), assets(id, title)").eq("campaign_id", m.id).limit(300),
+    db.from("campaign_targets").select("priority, companies(id, trade_name, legal_name), assets(id, title)").eq("campaign_id", m.id).neq("status", "descartado").limit(300),
     db.from("brief_signals").select("headline").contains("campaign_ids", [m.id]).gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString()).limit(60),
   ]);
   const companies = (targets ?? []).flatMap((t) => (t.companies ? [{ ref: `company:${t.companies.id}`, name: companyName(t.companies), priority: t.priority }] : []));
@@ -99,6 +100,7 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
 
   const prompt = JSON.stringify({
     mision: { nombre: m.name, objetivo: m.objective, contexto: m.watch?.context ?? null, zona: m.watch?.region ?? null },
+    pedidos_de_aviso: (m.watch?.criteria ?? []).map((c) => c.text),
     memoria: { hipotesis: memory.findings, empresas: memory.companies.map(({ ref, name }) => ({ ref, name })), activos: memory.assets, senales_recientes: memory.recent },
     notas: fresh.map((i, n) => ({ n, title: i.title, publisher: i.publisher, date: i.publishedAt, snippet: i.snippet })),
   });
@@ -115,8 +117,9 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
   let saved = 0;
   for (const s of r.value.signals) {
     const item = fresh[s.item];
-    if (!item || s.relevance === "baja") continue;
-    const alert = s.alert && s.relevance === "alta" && alerts < MAX_ALERTS_PER_DAY;
+    if (!item || (s.relevance === "baja" && !s.matches_request)) continue;
+    // Avisa lo material o lo que la persona pidió que le avisen (aunque no sea de relevancia alta).
+    const alert = s.alert && (s.relevance === "alta" || !!s.matches_request) && alerts < MAX_ALERTS_PER_DAY;
     const { data: row, error } = await db.from("brief_signals").insert({
       workspace_id: m.workspace_id, brief_id: null, origin: "vigilancia", headline: s.headline.slice(0, 400), summary: item.snippet?.slice(0, 1000) ?? null,
       happened_on: item.publishedAt?.slice(0, 10) ?? null, source_url: /^https?:\/\//.test(item.url) ? item.url : null, source_title: item.title.slice(0, 300), publisher: item.publisher,
@@ -126,7 +129,7 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
     } as never).select("id").single();
     if (error || !row) continue;
     saved++;
-    if (alert) { alerts++; toAlert.push({ headline: s.headline, matters: s.matters, url: item.url }); }
+    if (alert) { alerts++; toAlert.push({ headline: s.headline, matters: s.matches_request ? `${s.matters} (Me pediste que te avise: ${s.matches_request}.)` : s.matters, url: item.url }); }
     for (const d of s.discovered) discovered.push({ ...d, maybe: d.maybe && allowed.has(d.maybe) ? d.maybe : "", source_url: item.url, source_title: item.title, signal_id: (row as { id: string }).id });
   }
   const ingest = discovered.length ? await ingestDiscovery(db, { workspaceId: m.workspace_id, missionId: m.id }, discovered) : { ingested: 0, questions: 0 };
@@ -154,3 +157,11 @@ async function sendAlerts(m: WatchMission, alerts: { headline: string; matters: 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 export const watchJson = (w: WatchConfig) => w as unknown as Json;
+
+/** "Avisame si aparece algo así": queda como pedido de aviso de la misión (y, si hace falta, búsquedas nuevas). */
+export function addCriterion(w: WatchConfig | null, c: { text: string; queries?: string[]; by?: string | null }, now = new Date()): WatchConfig {
+  const base = w ?? {};
+  const criteria = [...(base.criteria ?? []).filter((x) => x.text.toLowerCase() !== c.text.toLowerCase()), { text: c.text.trim().slice(0, 300), at: now.toISOString(), by: c.by ?? null }].slice(-12);
+  const queries = [...new Set([...(base.queries ?? []), ...(c.queries ?? []).map((q) => q.trim()).filter(Boolean)])].slice(0, 12);
+  return { ...base, criteria, queries };
+}

@@ -138,7 +138,7 @@ export async function depthView(db: Db, findingId: string): Promise<DepthView | 
 // que hay cerca de donde está (memoria del Brain).
 // ---------------------------------------------------------------------------
 
-export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null };
+export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null; scope?: string };
 
 const ago = (iso: string) => {
   const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
@@ -203,7 +203,7 @@ export async function missionCounts(db: Db, missionId: string | null): Promise<M
   if (!missionId) return { companies: 0, people: 0, assets: 0, hypotheses: 0, evidence: 0, signals: 0 };
   const count = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0;
   const [{ data: targets }, { data: fc }, hypotheses, evidence, signals] = await Promise.all([
-    db.from("campaign_targets").select("company_id, asset_id").eq("campaign_id", missionId),
+    db.from("campaign_targets").select("company_id, asset_id").eq("campaign_id", missionId).neq("status", "descartado"),
     db.from("finding_companies").select("company_id, findings!inner(campaign_id)").eq("findings.campaign_id", missionId),
     count(db.from("findings").select("id", { count: "exact", head: true }).eq("campaign_id", missionId).eq("case_status", "activo").neq("review_status", "rechazado")),
     count(db.from("evidence").select("id", { count: "exact", head: true }).eq("campaign_id", missionId)),
@@ -211,12 +211,8 @@ export async function missionCounts(db: Db, missionId: string | null): Promise<M
   ]);
   const companies = [...new Set([...(targets ?? []).map((t) => t.company_id), ...(fc ?? []).map((x) => x.company_id)].filter((x): x is string => !!x))];
   const assets = new Set((targets ?? []).map((t) => t.asset_id).filter(Boolean)).size;
-  const people = new Set<string>();
-  for (let i = 0; i < companies.length; i += 150) {
-    const { data } = await db.from("contact_links").select("contact_id").in("company_id", companies.slice(i, i + 150)).is("valid_until", null);
-    for (const x of data ?? []) people.add(x.contact_id);
-  }
-  return { companies: companies.length, people: people.size, assets, hypotheses, evidence, signals };
+  const people = (await missionPeople(db, missionId)).length;
+  return { companies: companies.length, people, assets, hypotheses, evidence, signals };
 }
 
 /** "Ya conozco 102 empresas, 50 personas, 13 activos y 20 hipótesis." */
@@ -253,4 +249,48 @@ export async function learnedAlone(db: Db, missionId: string | null): Promise<Le
   if (!missionId) return [];
   const { data } = await db.from("ai_action_drafts").select("id, rationale, decided_at, status, after_state").eq("action", "ingest_candidate").in("status", ["ejecutada", "deshecha"]).gte("created_at", new Date(Date.now() - 3 * 86_400_000).toISOString()).order("created_at", { ascending: false }).limit(20);
   return (data ?? []).filter((d) => (d.after_state as { mission_id?: string } | null)?.mission_id === missionId).slice(0, 5).map((d) => ({ id: d.id, summary: d.rationale ?? "", at: d.decided_at ?? "", undone: d.status === "deshecha" }));
+}
+
+export type MissionPerson = { id: string; name: string; role: string | null; links: { with: string; current: boolean; until: string | null }[]; why: string };
+
+/**
+ * Las personas que la misión conoce (el número de "Lo que ya conozco" sale de acá, y se puede preguntar quiénes
+ * son): vinculadas a una empresa o un activo que la misión sigue (vigente o anterior: cambiar de trabajo no saca
+ * a nadie de la memoria), dueñas de un activo de la misión, o nombradas en su evidencia o en sus tareas.
+ */
+export async function missionPeople(db: Db, missionId: string): Promise<MissionPerson[]> {
+  const [{ data: targets }, { data: fc }] = await Promise.all([
+    db.from("campaign_targets").select("company_id, asset_id").eq("campaign_id", missionId).neq("status", "descartado"),
+    db.from("finding_companies").select("company_id, findings!inner(campaign_id)").eq("findings.campaign_id", missionId),
+  ]);
+  const companies = [...new Set([...(targets ?? []).map((t) => t.company_id), ...(fc ?? []).map((x) => x.company_id)].filter((x): x is string => !!x))];
+  const assets = [...new Set((targets ?? []).map((t) => t.asset_id).filter((x): x is string => !!x))];
+  const out = new Map<string, MissionPerson>();
+  const add = (id: string, name: string, role: string | null, why: string, link?: { with: string; current: boolean; until: string | null }) => {
+    const p = out.get(id) ?? { id, name, role, links: [], why };
+    if (link && !p.links.some((l) => l.with === link.with)) p.links.push(link);
+    out.set(id, p);
+  };
+  for (let i = 0; i < companies.length; i += 150) {
+    const { data } = await db.from("contact_links").select("valid_until, contacts(id, full_name, role_title), companies(trade_name, legal_name)").in("company_id", companies.slice(i, i + 150));
+    for (const l of data ?? []) if (l.contacts) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "trabaja o trabajó en una empresa de la misión", { with: l.companies?.trade_name ?? l.companies?.legal_name ?? "", current: !l.valid_until, until: l.valid_until });
+  }
+  if (assets.length) {
+    const [{ data: parties }, { data: links }] = await Promise.all([
+      db.from("asset_parties").select("role, contacts(id, full_name, role_title), assets(title)").in("asset_id", assets).not("contact_id", "is", null),
+      db.from("contact_links").select("valid_until, contacts(id, full_name, role_title), assets(title)").in("asset_id", assets),
+    ]);
+    for (const p of parties ?? []) if (p.contacts) add(p.contacts.id, p.contacts.full_name, p.contacts.role_title, `${p.role} de un activo de la misión`, { with: p.assets?.title ?? "", current: true, until: null });
+    for (const l of links ?? []) if (l.contacts) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "vinculada a un activo de la misión", { with: l.assets?.title ?? "", current: !l.valid_until, until: l.valid_until });
+  }
+  const [{ data: ev }, { data: tasks }] = await Promise.all([
+    db.from("evidence").select("contact_id, stated_by_contact_id").eq("campaign_id", missionId),
+    db.from("tasks").select("contact_id").eq("campaign_id", missionId).not("contact_id", "is", null),
+  ]);
+  const extra = [...new Set([...(ev ?? []).flatMap((e) => [e.contact_id, e.stated_by_contact_id]), ...(tasks ?? []).map((t) => t.contact_id)].filter((x): x is string => !!x && !out.has(x)))];
+  if (extra.length) {
+    const { data } = await db.from("contacts").select("id, full_name, role_title").in("id", extra);
+    for (const c of data ?? []) add(c.id, c.full_name, c.role_title, "aparece en lo que sabemos o hacemos en la misión");
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

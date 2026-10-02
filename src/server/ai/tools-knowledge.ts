@@ -18,6 +18,7 @@ import { fold } from "@/domain/crm-import/map";
 import { ContactEventInput, applyContactEvent } from "./contact-events";
 import { randomUUID } from "node:crypto";
 import { RelationshipInput, applyRelationship } from "./relationships";
+import { setAside } from "./set-aside";
 import { applyCorrection, forgetMovesAbout, liveFocus, stepTaken } from "@/server/mission/focus";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
@@ -176,6 +177,21 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
       note: { type: "string" },
       follow_up_on: { type: "string", description: "YYYY-MM-DD" },
     }, ["event"]),
+  },
+  {
+    name: "set_aside",
+    description: "La persona dice que algo ya no importa o que no se lo muestres más (\"sacá ese terreno\", \"esa empresa no nos sirve\", \"descartá esa idea\"). Lo descarta en la misión de trabajo SIN borrarlo: queda el motivo y la historia, y deja de aparecer. ref: 'asset:…', 'company:…', 'establishment:…' o 'finding:…' (identificalo antes). reason: en sus palabras. Lo hacés vos, en el momento; nunca le pidas que lo haga en otra pantalla. Se puede deshacer.",
+    input_schema: strict({ ref: { type: "string" }, reason: { type: "string" } }, ["ref", "reason"]),
+  },
+  {
+    name: "mission_people",
+    description: "Las personas que conoce la misión de trabajo (es exactamente el número de 'Lo que ya conozco'): con quién están o estuvieron, si la relación sigue vigente y por qué cuentan. Para \"¿quiénes son esas 44 personas?\", \"¿a quién conocemos de YPF?\", \"¿a quién conocemos relacionado con terrenos?\". query opcional filtra por nombre, empresa o activo.",
+    input_schema: strict({ query: { type: "string" } }),
+  },
+  {
+    name: "watch_for",
+    description: "La persona pide que le avisen si aparece algo (\"avisame cuando haya locales chicos en Añelo\", \"si aparece una contratista nueva, avisame\"). Queda como pedido de aviso de la misión: la vigilancia lo mira durante el día y avisa (mail + inicio) solo si aparece algo que lo cumple. criterion: qué tiene que aparecer, concreto y en sus palabras; queries: 1 a 3 búsquedas de noticias o avisos que ayuden a encontrarlo. No lo conviertas en una tarea. Confirmá en una línea.",
+    input_schema: strict({ criterion: { type: "string" }, queries: { type: "array", items: { type: "string" } } }, ["criterion"]),
   },
   {
     name: "switch_mission",
@@ -649,6 +665,40 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       } catch (e) {
         return { content: `No pude registrarlo: ${(e as Error).message}`, isError: true };
       }
+    }
+    case "set_aside": {
+      const r = typeof a.ref === "string" ? a.ref : "";
+      if (!/^(asset|company|establishment|finding):[0-9a-f-]{36}$/.test(r)) return { content: "Necesito la referencia de lo que hay que sacar (asset, company, establishment o finding).", isError: true };
+      if (!ctx.seenRefs.has(r)) return { content: `Antes identificá ${r} (find o get_record).`, isError: true };
+      if (!ctx.workspaceId || !ctx.missionId || !ctx.saveApplied) return { content: "No disponible en este contexto.", isError: true };
+      const reason = typeof a.reason === "string" && a.reason.trim() ? a.reason.trim().slice(0, 300) : "Ya no importa";
+      try {
+        const { summary, effects } = await setAside(db, { workspaceId: ctx.workspaceId, missionId: ctx.missionId }, r, reason);
+        await ctx.saveApplied({ action: "set_aside", payload: { ref: r, reason }, summary, after: effects });
+        ctx.onFocusChange?.();
+        return { content: JSON.stringify({ applied: true, summary, note: "Confirmá en una línea que ya no aparece (se puede deshacer desde la tarjeta)." }) };
+      } catch (e) {
+        return { content: `No pude sacarlo: ${(e as Error).message}`, isError: true };
+      }
+    }
+    case "mission_people": {
+      if (!ctx.missionId) return { content: "No hay una misión de trabajo.", isError: true };
+      const { missionPeople } = await import("@/server/surface");
+      const all = await missionPeople(db, ctx.missionId);
+      const q = typeof a.query === "string" && a.query.trim() ? fold(a.query) : null;
+      const rows = q ? all.filter((p) => fold(`${p.name} ${p.role ?? ""} ${p.links.map((l) => l.with).join(" ")}`).includes(q)) : all;
+      return { content: track(ctx, { total_in_mission: all.length, shown: rows.length, people: rows.map((p) => ({ ref: ref("contact", p.id), name: p.name, role: p.role, links: p.links, counts_because: p.why })) }) };
+    }
+    case "watch_for": {
+      if (!ctx.missionId) return { content: "No hay una misión de trabajo.", isError: true };
+      const criterion = Str.min(5).max(300).safeParse(a.criterion);
+      if (!criterion.success) return { content: "Decime qué tiene que aparecer para avisarte.", isError: true };
+      const { addCriterion } = await import("@/server/mission/watch");
+      const { data: m } = await db.from("campaigns").select("watch").eq("id", ctx.missionId).single();
+      const watch = addCriterion((m?.watch ?? null) as never, { text: criterion.data, queries: Array.isArray(a.queries) ? a.queries.filter((q): q is string => typeof q === "string").slice(0, 3) : [], by: ctx.userName ?? null });
+      const { error } = await db.from("campaigns").update({ watch: watch as never }).eq("id", ctx.missionId);
+      if (error) return { content: `No pude dejarlo: ${error.message}`, isError: true };
+      return { content: JSON.stringify({ applied: true, watching: watch.criteria?.map((c) => c.text), note: "Confirmá en una línea que lo vas a vigilar durante el día y que avisás solo si aparece algo que lo cumple." }) };
     }
     case "switch_mission": {
       const r = typeof a.mission_ref === "string" ? a.mission_ref : "";

@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v6";
+export const EXTRACT_PROMPT_VERSION = "captura-v7";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -36,6 +36,7 @@ export const ExtractionSchema = z.object({
       address_text: z.string().nullable(),
       locality: z.string().nullable(),
       surface_m2: z.number().nullable().describe("Solo si figura; es lo que DICE la fuente, no algo medido."),
+      here: z.boolean().describe("true SOLO si quien capturó está en el lugar del activo (lo está viendo, está parado ahí). false si lo menciona desde otro lado: entonces su ubicación NO es la del activo."),
     })
     .nullable()
     .describe("Un activo físico observado o mencionado (local, terreno, galpón, hotel, fondo de comercio), sobre todo si está en venta o alquiler. null si no hay."),
@@ -47,8 +48,9 @@ export const ExtractionSchema = z.object({
       institutional: z.boolean().describe("true si es un área o cargo sin persona identificada (\"Compras\", \"el encargado\" sin nombre)."),
       existing_id: z.string().nullable().describe("id de la lista de contactos existentes SOLO si es claramente la misma persona."),
       resolves: z.string().nullable().describe("id de la lista de entidades sin identificar si esta captura revela que es ese actor."),
+      owns_asset: z.boolean().describe("true si la nota dice que esta persona es dueña/propietaria del activo de la captura."),
     }),
-  ),
+  ).describe("Personas de afuera del equipo. Nunca incluyas a alguien del EQUIPO (quien captura y sus compañeros): no son contactos."),
   evidence: z.array(
     z.object({
       key: z.string().describe("Clave local: e1, e2…"),
@@ -150,6 +152,8 @@ export type ExtractionContext = {
   capturedAt: string;
   capturedBy: string;
   missionName: string | null;
+  /** El equipo (no son contactos): "Tano (Estanislao Vilamajo), Juan (Juan Campos)". */
+  team?: string | null;
   location: string | null;
   body: string | null;
   photos: { mediaType: "image/jpeg" | "image/png" | "image/webp"; base64: string }[];
@@ -182,7 +186,8 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
     ...ctx.unresolved.map((u) => `${u.id} · ${u.kind === "organization" ? "organización" : "persona"} · ${u.label}`),
   ].join("\n");
   const capture = [
-    `CAPTURA · ${ctx.capturedAt} · por ${ctx.capturedBy}${ctx.missionName ? ` · misión ${ctx.missionName}` : ""}${ctx.location ? ` · ubicación ${ctx.location}` : ""}`,
+    `CAPTURA · ${ctx.capturedAt} · por ${ctx.capturedBy}${ctx.missionName ? ` · misión ${ctx.missionName}` : ""}${ctx.location ? ` · ubicación de quien captura ${ctx.location}` : ""}`,
+    ctx.team ? `EQUIPO (no son personas a extraer ni contactos; lo que digan es del equipo: origin observado, stated_by null): ${ctx.team}` : null,
     ctx.focus ? `TEMA DE LA CONVERSACIÓN (contexto, no es parte de la nota; probablemente la nota se relaciona con esto): ${ctx.focus}` : null,
     `NOTA:\n${ctx.body?.trim() || "(sin texto; ver fotos)"}`,
   ].filter(Boolean).join("\n");

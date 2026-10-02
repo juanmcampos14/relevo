@@ -21,7 +21,7 @@ const NOTE = "Local en alquiler en Los Algarrobos, cartel en la vidriera: 35 m²
 const extraction: Extraction = {
   summary: "Local comercial en alquiler en Los Algarrobos.",
   company: null,
-  asset: { title: "Local comercial en Los Algarrobos", kind: "local", operation: "alquiler", address_text: "Los Algarrobos", locality: "Añelo", surface_m2: 35 },
+  asset: { title: "Local comercial en Los Algarrobos", kind: "local", operation: "alquiler", address_text: "Los Algarrobos", locality: "Añelo", surface_m2: 35, here: true },
   people: [],
   evidence: [
     { key: "e1", statement: "Se observó un cartel de alquiler en la vidriera", quote: "cartel en la vidriera", evidence_type: "observacion", origin: "observado", stated_by: null, declared_by: null, about: "asset" },

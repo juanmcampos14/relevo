@@ -6,7 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
 import { applyRelationship, undoRelationship } from "@/server/ai/relationships";
 import { ingestDiscovery } from "@/server/mission/ingest";
-import { missionCounts, opportunitiesView } from "@/server/surface";
+import { setAside, undoSetAside } from "@/server/ai/set-aside";
+import { missionCounts, missionPeople, opportunitiesView } from "@/server/surface";
 import { cleanup, createWorkspace, newPool } from "./harness";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -56,6 +57,10 @@ describe("el Brain aprende sin borrar historia", () => {
     expect((await db.from("contacts").select("role_title").eq("id", nicolas).single()).data!.role_title).toMatch(/^Antes:/);
     expect((await db.from("tasks").select("status").eq("id", outreach).single()).data!.status).toBe("done");
     expect((await db.from("tasks").select("title, campaign_id").eq("id", r.effects.created_task!).single()).data).toMatchObject({ title: expect.stringContaining("reemplaza a Nicolas Raviola en PECOM"), campaign_id: vm });
+    // Cambiar de trabajo no saca a nadie de la memoria: sigue contando entre las personas de la misión.
+    const people = await missionPeople(db, vm);
+    expect(people.find((p) => p.id === nicolas)?.links).toEqual([{ with: "PECOM", current: false, until: expect.any(String) }]);
+    expect((await missionCounts(db, vm)).people).toBe(1);
     await undoRelationship(db, nicolas, r.effects);
     const { data: back } = await db.from("contact_links").select("valid_until").eq("contact_id", nicolas).single();
     expect(back!.valid_until).toBeNull();
@@ -84,5 +89,17 @@ describe("el Brain aprende sin borrar historia", () => {
     expect(a.hypotheses).toBe(1);
     expect(b).toEqual({ companies: 0, people: 0, assets: 0, hypotheses: 0, evidence: 0, signals: 0 });
     expect((await opportunitiesView(db, zn)).closest).toEqual([]);
+  });
+
+  it("'sacá ese terreno': sale de la misión sin borrarse (con el motivo) y se puede deshacer", async () => {
+    const asset = (await pool.query(`insert into assets (workspace_id, kind, title) values ($1, 'terreno', 'Terreno 150 m² sobre ruta') returning id`, [ws])).rows[0].id as string;
+    await pool.query(`insert into campaign_targets (workspace_id, campaign_id, asset_id) values ($1, $2, $3)`, [ws, vm, asset]);
+    const before = (await missionCounts(db, vm)).assets;
+    const r = await setAside(db, { workspaceId: ws, missionId: vm }, `asset:${asset}`, "no es el terreno que buscamos");
+    expect((await missionCounts(db, vm)).assets).toBe(before - 1);
+    expect((await db.from("assets").select("id").eq("id", asset)).data).toHaveLength(1);
+    expect((await db.from("campaign_targets").select("status, discard_reason").eq("asset_id", asset).single()).data).toEqual({ status: "descartado", discard_reason: "no es el terreno que buscamos" });
+    await undoSetAside(db, ws, r.effects);
+    expect((await missionCounts(db, vm)).assets).toBe(before);
   });
 });

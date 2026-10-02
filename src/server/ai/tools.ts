@@ -151,7 +151,7 @@ export type ToolContext = {
   /** Registra un borrador; devuelve su id. */
   saveDraft: (input: z.infer<typeof ProposeActionInput>) => Promise<string>;
   /** Registra una acción que RELEVO ya aplicó (auditada y deshacible); devuelve el id del registro. */
-  saveApplied?: (rec: { action: "contact_event" | "relationship_change"; payload: Record<string, unknown>; summary: string; after: unknown }) => Promise<string>;
+  saveApplied?: (rec: { action: "contact_event" | "relationship_change" | "set_aside"; payload: Record<string, unknown>; summary: string; after: unknown }) => Promise<string>;
   /** Nombre de la persona con la que se habla (para dejar constancia de quién validó algo). */
   userName?: string | null;
 };

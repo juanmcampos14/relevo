@@ -10,6 +10,15 @@ describe("respuesta de RELEVO en la Surface", () => {
     expect(r.body).toBe("Los encararía distinto.");
     expect(r.messages).toEqual([{ to: C, text: "Hola Evangelina" }, { to: null, text: "Hola, administración" }]);
     expect(r.actions).toEqual(["Prepararlos", "Buscar contacto"]);
+    expect(r.detail).toBeNull();
+  });
+
+  it("la investigación completa queda plegada: arriba solo la conclusión y la acción", () => {
+    const r = parseReply("Encontré 3 locales que vale la pena mirar.\n**Haría:** validarlos en Añelo.\n[[detalle]]\nLocal 1… Local 2… Fuentes…\n[[/detalle]]\n[[acción: Ver en el mapa]]");
+    expect(r.body).toBe("Encontré 3 locales que vale la pena mirar.\n**Haría:** validarlos en Añelo.");
+    expect(r.detail).toBe("Local 1… Local 2… Fuentes…");
+    expect(r.actions).toEqual(["Ver en el mapa"]);
+    expect(speakable("Encontré 3 locales.[[detalle]]Largo…[[/detalle]]")).toBe("Encontré 3 locales.");
   });
 
   it("en voz no lee los mensajes: avisa que quedaron en pantalla", () => {

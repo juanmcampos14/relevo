@@ -28,6 +28,7 @@ export async function reassessFromSignals(db: Db, m: MissionRef, since: string):
   const { data: signals } = await db
     .from("brief_signals")
     .select("finding_ids, created_at")
+    .contains("campaign_ids", [m.id])
     .in("relevance", ["alta", "media"])
     .in("change", ["nuevo", "actualizado", "confirmado", "contradicho"])
     .gte("created_at", since)
@@ -53,10 +54,10 @@ export async function reassessFromSignals(db: Db, m: MissionRef, since: string):
 export async function changesSince(db: Db, missionId: string, since: string) {
   const count = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0;
   const [captures, actions, signals, assessments] = await Promise.all([
-    count(db.from("captures").select("id", { count: "exact", head: true }).gt("captured_at", since)),
+    count(db.from("captures").select("id", { count: "exact", head: true }).eq("campaign_id", missionId).gt("captured_at", since)),
     count(db.from("ai_action_drafts").select("id", { count: "exact", head: true }).eq("status", "ejecutada").gt("decided_at", since)),
-    count(db.from("brief_signals").select("id", { count: "exact", head: true }).in("relevance", ["alta", "media"]).gt("created_at", since)),
-    count(db.from("finding_assessments").select("id", { count: "exact", head: true }).gt("created_at", since)),
+    count(db.from("brief_signals").select("id", { count: "exact", head: true }).contains("campaign_ids", [missionId]).in("relevance", ["alta", "media"]).gt("created_at", since)),
+    count(db.from("finding_assessments").select("id, findings!inner(campaign_id)", { count: "exact", head: true }).eq("findings.campaign_id", missionId).gt("created_at", since)),
   ]);
   const { data: c } = await db.from("campaigns").select("synthesis").eq("id", missionId).maybeSingle();
   const log = ((c?.synthesis as { focus?: { log?: { at: string }[] } } | null)?.focus?.log ?? []).filter((l) => l.at > since).length;

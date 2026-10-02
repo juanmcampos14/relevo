@@ -48,8 +48,8 @@ export async function briefTargets(db: Db, opts: { workspaceId: string; campaign
   const day = today.toISOString().slice(0, 10);
   const [{ data: mission }, { data: targets }, { data: findings }] = await Promise.all([
     db.from("campaigns").select("name, starts_on, ends_on").eq("id", opts.campaignId).single(),
-    db.from("campaign_targets").select("id, priority, status, purpose, next_action, next_action_due, companies(id, trade_name, legal_name, sector, activity, locality, notes, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)), finding_companies(finding_id)), tasks(title, status, due_on)").eq("campaign_id", opts.campaignId).not("company_id", "is", null),
-    db.from("findings").select("id, dedup_key, statement, finding_assessments(created_at, gaps, discovery)").neq("review_status", "rechazado").eq("case_status", "activo"),
+    db.from("campaign_targets").select("id, priority, status, purpose, next_action, next_action_due, companies(id, trade_name, legal_name, sector, activity, locality, notes, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)), finding_companies(finding_id)), tasks(title, status, due_on)").eq("campaign_id", opts.campaignId).not("company_id", "is", null).is("companies.contact_links.valid_until", null),
+    db.from("findings").select("id, dedup_key, statement, finding_assessments(created_at, gaps, discovery)").eq("campaign_id", opts.campaignId).neq("review_status", "rechazado").eq("case_status", "activo"),
   ]);
   const hyps = (findings ?? []).map((f) => {
     const a = [...f.finding_assessments].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];

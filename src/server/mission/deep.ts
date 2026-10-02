@@ -17,7 +17,7 @@ export type DeepResult<T> = { ok: true; value: T; runId: string | null; costUsd:
 
 export async function deepCall<S extends z.ZodType>(
   db: Db,
-  opts: { workspaceId: string; promptVersion: string; system: string; prompt: string; schema: S; client?: Pick<Anthropic, "beta">; userId?: string | null },
+  opts: { workspaceId: string; promptVersion: string; system: string; prompt: string; schema: S; client?: Pick<Anthropic, "beta">; userId?: string | null; effort?: "low" | "medium" | "high" },
 ): Promise<DeepResult<z.infer<S>>> {
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, message: "La IA no está configurada en este entorno." };
   const started = Date.now();
@@ -32,7 +32,7 @@ export async function deepCall<S extends z.ZodType>(
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       thinking: { type: "adaptive" },
-      output_config: { effort: "medium", format: betaZodOutputFormat(opts.schema) },
+      output_config: { effort: opts.effort ?? "medium", format: betaZodOutputFormat(opts.schema) },
       system: opts.system,
       messages: [{ role: "user", content: opts.prompt }],
     });

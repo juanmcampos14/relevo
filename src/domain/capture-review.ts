@@ -37,3 +37,22 @@ export function captureExceptions(proposals: ReviewProposal[]): Map<string, stri
 export function approvalOrder<T extends ReviewProposal>(proposals: T[]): T[] {
   return [...proposals].sort((a, b) => APPROVAL_ORDER.indexOf(a.kind) - APPROVAL_ORDER.indexOf(b.kind));
 }
+
+const fold = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const STRONG = /^(mismo cuit|mismo dominio|mismo telefono|mismo nombre|mismo nombre y misma empresa)$/;
+
+/**
+ * ¿Es claramente alguien que ya está en RELEVO? Un solo candidato y, o una coincidencia fuerte (mismo CUIT,
+ * dominio, teléfono, nombre normalizado), o exactamente el mismo nombre. Entonces se vincula solo (auditado);
+ * si hay dos posibles o el nombre no es el mismo, se pregunta.
+ */
+export function clearMatch(p: ReviewProposal): string | null {
+  if (p.status !== "propuesta" || (p.kind !== "company" && p.kind !== "person")) return null;
+  if (typeof p.payload.link_to === "string" && p.payload.link_to) return null;
+  const matches = p.matches ?? [];
+  if (matches.length !== 1) return null;
+  const m = matches[0];
+  if (/^solo coincide el nombre/.test(m.reason)) return null;
+  const name = typeof p.payload.name === "string" ? p.payload.name : "";
+  return STRONG.test(m.reason) || (name && fold(name) === fold(m.name)) ? m.id : null;
+}

@@ -1,14 +1,16 @@
 import { ImageResponse } from "next/og";
 
-// Ícono de la app instalada (PWA / pantalla de inicio): bardas sobre el horizonte.
-// Colores en hex: el renderizador de imágenes no entiende oklch.
-export function brandIcon(size: number) {
+// Ícono de RELEVO (favicon y app instalada): las montañas del logo. El favicon va sin fondo; el de la
+// pantalla de inicio, sobre el crema de la marca. Colores en hex: el renderizador no entiende oklch.
+export function brandIcon(size: number, opts: { background?: string } = {}) {
+  const pad = opts.background ? 0.16 : 0.02;
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", background: "#c24f2b" }}>
-        <svg viewBox="0 0 32 32" width={size} height={size}>
-          <path d="M4 22 L10 14 L14 18 L19 10 L28 22 Z" fill="#fbf7f0" />
-          <rect x="4" y="23.5" width="24" height="2" rx="1" fill="#fbf7f0" opacity="0.6" />
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: opts.background ?? "transparent" }}>
+        <svg viewBox="608 232 384 184" width={size * (1 - pad * 2)} height={size * (1 - pad * 2) * (184 / 384)}>
+          <path d="M617 408 L736 240 L793 320 L728 408 Z" fill="#5B6B4E" />
+          <path d="M866 240 L983 408 L872 408 L808 320 Z" fill="#C9744F" />
+          <path d="M743 408 L800 328 L857 408 Z" fill="#E6CDB5" />
         </svg>
       </div>
     ),

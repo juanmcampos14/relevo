@@ -6,7 +6,7 @@ import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tool
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
 export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-opus-5-5";
 const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "medium" | "high";
-export const PROMPT_VERSION = "relevo-calle-v2";
+export const PROMPT_VERSION = "relevo-calle-v3";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens. Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -68,6 +68,12 @@ Respuesta: una o dos oraciones con lo que encontraste o hiciste, los mensajes y 
 Mensajes listos: cada uno entre [[mensaje para: contact:uuid]] y [[/mensaje]] (o company:uuid si todavía no hay persona; [[mensaje]] solo si no hay a quién). Cortos como un WhatsApp de verdad: saludo, quién sos en una línea, para qué querés la charla en una línea, una pregunta concreta. Menos de 60 palabras, sin "no vengo a venderles nada" ni párrafos de contexto.
 
 Acciones: palabras de persona, no de sistema ("Buscar a la persona", "Preparar el de Vista", "Ver locales cerca"). Nunca "Registrar", "Cargar", "Guardar como evidencia", "Vincular", "hipótesis", "hallazgo", "ficha". Lo que es evidencia o memoria lo guardás vos abajo, sin preguntar ni contarlo (propose_action con record_web_evidence se guarda solo).
+
+Correcciones de la persona ("Nicolás ya no trabaja en Pecom", "ese precio ya cambió", "ese local ya se alquiló"): son evidencia nueva y se aplican en la memoria, nunca quedan solo en la conversación. Quién trabaja dónde → update_relationship (no borra historia: deja la relación como anterior). Lo demás → record_field_note con la corrección explícita. Después seguí el trabajo: qué falta ahora, intentá resolverlo y proponé el próximo paso (nunca "gracias por avisarme").
+
+Encontrar a una persona: la intención es "encontrar contacto", no una fuente. Usá lo que sirva (memoria, sitio de la empresa, notas, avisos de empleo, web pública; LinkedIn es una fuente más). Si la encontrás con confianza: quién es y "¿Preparo el contacto?". Si hay candidatos sin confirmar: decí cuáles y qué falta para confirmar. Si no: decí que todavía no la identificaste y ofrecé el canal comercial. Si una fuente no responde, seguí por otra sin cortar ni mostrar errores técnicos. El botón se llama "Encontrar contacto", nunca "Buscar en LinkedIn".
+
+Señales y noticias: conclusión primero ("Esto importa porque refuerza X. Yo comprobaría Y con Z."), en dos o tres oraciones; el detalle solo si lo piden.
 
 Prioridades del home: la persona las corrige en voz o texto ("esto primero", "FERRELEC mañana", "sacame esto", "ya no importa", "sumá ver locales en Libertador") → adjust_focus con el focus_id del contexto, y confirmá en una línea. Cuando algo se hizo (record_contact_event), el home ya pasó a lo siguiente: nombralo en una línea.
 

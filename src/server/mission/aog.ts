@@ -46,9 +46,10 @@ Reglas:
 
 export async function planAog(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; userId?: string | null }) {
   const [{ data: scripts }, { data: targets }, { data: findings }] = await Promise.all([
-    db.from("research_questions").select("code, industry, dimension, question, next_action").ilike("industry", "AOG%").order("code"),
-    db.from("campaign_targets").select("purpose, priority, briefing, companies(id, trade_name, legal_name, sector, contact_links(contacts(id, full_name, role_title)))").eq("campaign_id", opts.campaignId).not("company_id", "is", null),
-    db.from("findings").select("id, statement, finding_assessments(created_at, gaps, discovery)").neq("review_status", "rechazado").eq("case_status", "activo"),
+    db.from("research_questions").select("code, industry, dimension, question, next_action").eq("campaign_id", opts.campaignId).ilike("industry", "AOG%").order("code"),
+    // Solo personas con relación vigente: a quien dejó la empresa no se lo recomienda.
+    db.from("campaign_targets").select("purpose, priority, briefing, companies(id, trade_name, legal_name, sector, contact_links(contacts(id, full_name, role_title)))").eq("campaign_id", opts.campaignId).not("company_id", "is", null).is("companies.contact_links.valid_until", null),
+    db.from("findings").select("id, statement, finding_assessments(created_at, gaps, discovery)").eq("campaign_id", opts.campaignId).neq("review_status", "rechazado").eq("case_status", "activo"),
   ]);
   const hyp = (findings ?? []).map((f) => {
     const a = [...f.finding_assessments].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];

@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { randomUUID } from "node:crypto";
+import { workingMission } from "./current";
 import { EMPTY_FOCUS, correct, mergeSynthesis, resolveByRefs, visible, type Correction, type Focus, type FocusItem } from "@/domain/focus";
 import type { ContactEvent } from "@/server/ai/contact-events";
 
@@ -12,9 +13,9 @@ import type { ContactEvent } from "@/server/ai/contact-events";
 
 type Db = SupabaseClient<Database>;
 
+/** La misión en la que se está trabajando (la elegida por la persona; en background, la primera). */
 export async function activeMission(db: Db): Promise<string | null> {
-  const { data } = await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("starts_on", { ascending: true, nullsFirst: false }).limit(1).maybeSingle();
-  return data?.id ?? null;
+  return workingMission(db);
 }
 
 export async function loadFocus(db: Db, campaignId: string): Promise<Focus> {
@@ -87,4 +88,13 @@ export async function stepTaken(db: Db, missionId: string, e: Pick<ContactEvent,
   const resolved = await resolveFocus(db, missionId, [...new Set(refs)], note);
   const next = visible(await loadFocus(db, missionId), new Date())[0] ?? null;
   return { resolved, next };
+}
+
+/** Algo cambió sobre estas personas o empresas: los Avanzar preparados que las mencionan se vuelven a preparar. */
+export async function forgetMovesAbout(db: Db, campaignId: string, refs: string[]): Promise<void> {
+  await updateFocus(db, campaignId, (f) => {
+    const hit = (t: string) => refs.some((r) => t.includes(r));
+    if (!f.items.some((x) => x.move && (hit(x.move.text) || x.refs.some((r) => refs.includes(r))))) return f;
+    return { ...f, items: f.items.map((x) => (x.move && (hit(x.move.text) || x.refs.some((r) => refs.includes(r))) ? { ...x, move: null } : x)) };
+  });
 }

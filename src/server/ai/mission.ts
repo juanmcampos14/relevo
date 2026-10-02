@@ -27,23 +27,25 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const week = new Date(today.getTime() - 7 * 86_400_000).toISOString();
 
   const [{ data: docs }, { data: findings }, { data: aog }, { data: drafts }, { data: targets }, { data: tasks }, { data: plans }, { data: assets }, { data: stories }, { data: signals }, evidence7, captures7, estabGeo, estabAll, assetsGeo] = await Promise.all([
-    db.from("context_documents").select("id, title, kind, summary").eq("status", "vigente"),
-    db.from("findings").select("id, dedup_key, statement, maturity, finding_companies(count), question_findings(count), finding_assessments(created_at, summary, gaps, discovery, baseline_campaign_id)").neq("review_status", "rechazado").eq("case_status", "activo").or(`campaign_id.eq.${mission.id},campaign_id.is.null`).limit(60),
-    db.from("research_questions").select("id, code, industry, dimension, question, next_action").ilike("industry", "AOG%").order("code"),
-    db.from("contacts").select("id, full_name, role_title, relationship_status, contact_links(companies(id, trade_name, legal_name))").not("outreach_draft", "is", null).limit(40),
+    db.from("context_documents").select("id, title, kind, summary").eq("status", "vigente").or(`campaign_id.eq.${mission.id},campaign_id.is.null`),
+    db.from("findings").select("id, dedup_key, statement, maturity, finding_companies(count), question_findings(count), finding_assessments(created_at, summary, gaps, discovery, baseline_campaign_id)").neq("review_status", "rechazado").eq("case_status", "activo").eq("campaign_id", mission.id).limit(60),
+    db.from("research_questions").select("id, code, industry, dimension, question, next_action").eq("campaign_id", mission.id).ilike("industry", "AOG%").order("code"),
+    db.from("contacts").select("id, full_name, role_title, relationship_status, contact_links(valid_until, companies(id, trade_name, legal_name))").not("outreach_draft", "is", null).limit(80),
     db.from("campaign_targets").select("id, status, priority, purpose, next_action, next_action_due, briefing, companies(id, trade_name, legal_name)").eq("campaign_id", mission.id).limit(200),
-    db.from("tasks").select("id, title, due_on, kind, channel, contact_id, contacts(full_name), campaign_targets(companies(id, trade_name, legal_name))").neq("status", "done").not("due_on", "is", null).lte("due_on", until).order("due_on").limit(60),
-    db.from("visit_plans").select("id, title, planned_on, visit_stops(count)").gte("planned_on", t).lte("planned_on", until).order("planned_on"),
-    db.from("assets").select("id, title, category, locality, price_status, latitude, asset_prices(amount, currency, operation, period, observed_on)").not("radar_ref", "is", null).limit(40),
-    db.from("brief_stories").select("id, title, status, watch_reason, last_seen_on").neq("status", "cerrada").order("last_seen_on", { ascending: false }).limit(12),
-    db.from("brief_signals").select("headline, basis, change, happened_on, publisher, source_url, vertical").gte("created_at", week).order("happened_on", { ascending: false, nullsFirst: false }).limit(12),
-    db.from("evidence").select("id", { count: "exact", head: true }).gte("created_at", week),
-    db.from("captures").select("id", { count: "exact", head: true }).gte("captured_at", week),
+    db.from("tasks").select("id, title, due_on, kind, channel, contact_id, contacts(full_name), campaign_targets(companies(id, trade_name, legal_name))").eq("campaign_id", mission.id).neq("status", "done").not("due_on", "is", null).lte("due_on", until).order("due_on").limit(60),
+    db.from("visit_plans").select("id, title, planned_on, visit_stops(count)").eq("campaign_id", mission.id).gte("planned_on", t).lte("planned_on", until).order("planned_on"),
+    db.from("campaign_targets").select("assets!inner(id, title, category, locality, price_status, latitude, asset_prices(amount, currency, operation, period, observed_on))").eq("campaign_id", mission.id).not("asset_id", "is", null).limit(40),
+    // Las historias del Morning Brief son de la misión que el Brief sigue (la primera).
+    db.from("brief_stories").select("id, title, status, watch_reason, last_seen_on").neq("status", "cerrada").order("last_seen_on", { ascending: false }).limit((await isBriefMission(db, mission.id)) ? 12 : 0),
+    db.from("brief_signals").select("headline, basis, change, happened_on, publisher, source_url, vertical").contains("campaign_ids", [mission.id]).gte("created_at", week).order("happened_on", { ascending: false, nullsFirst: false }).limit(12),
+    db.from("evidence").select("id", { count: "exact", head: true }).eq("campaign_id", mission.id).gte("created_at", week),
+    db.from("captures").select("id", { count: "exact", head: true }).eq("campaign_id", mission.id).gte("captured_at", week),
     db.from("establishments").select("id", { count: "exact", head: true }).not("latitude", "is", null),
     db.from("establishments").select("id", { count: "exact", head: true }),
     db.from("assets").select("id", { count: "exact", head: true }).not("latitude", "is", null),
   ]);
 
+  const missionCompanies = new Set((targets ?? []).map((x) => x.companies?.id).filter((x): x is string => !!x));
   const start = mission.starts_on ? new Date(`${mission.starts_on}T12:00:00-03:00`) : null;
   const daysToStart = start ? Math.ceil((start.getTime() - today.getTime()) / 86_400_000) : null;
   const latest = <T extends { created_at: string }>(xs: T[]) => [...xs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
@@ -87,8 +89,8 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const [{ data: applied }, { data: closed }, { data: caps }] = opts.withSynthesis && mission.synthesis
     ? await Promise.all([
         db.from("ai_action_drafts").select("rationale, decided_at").eq("action", "contact_event").eq("status", "ejecutada").gt("decided_at", after).order("decided_at"),
-        db.from("tasks").select("id, title").eq("status", "done").gt("completed_at", after).limit(30),
-        db.from("captures").select("id, ai_summary, captured_at").gt("captured_at", after).order("captured_at").limit(10),
+        db.from("tasks").select("id, title").eq("campaign_id", mission.id).eq("status", "done").gt("completed_at", after).limit(30),
+        db.from("captures").select("id, ai_summary, captured_at").eq("campaign_id", mission.id).gt("captured_at", after).order("captured_at").limit(10),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }];
   const doneTasks = new Set((closed ?? []).map((x) => ref("task", x.id)));
@@ -137,7 +139,11 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
       with_purpose: (targets ?? []).filter((x) => x.purpose).length,
       high_priority_without_next_action: { count: highNoAction.length, examples: highNoAction.slice(0, 6).map((x) => ({ ref: ref("company", x.companies!.id), name: companyName(x.companies!) })) },
     },
-    outreach_ready: (drafts ?? []).map((c) => ({ ref: ref("contact", c.id), name: c.full_name, role: c.role_title, relationship: c.relationship_status, company: c.contact_links[0]?.companies ? { ref: ref("company", c.contact_links[0].companies.id), name: companyName(c.contact_links[0].companies) } : null })),
+    // Personas con mensaje preparado y relación vigente con una empresa que sigue la misión.
+    outreach_ready: (drafts ?? []).flatMap((c) => {
+      const link = c.contact_links.find((l) => !l.valid_until && l.companies && missionCompanies.has(l.companies.id));
+      return link?.companies ? [{ ref: ref("contact", c.id), name: c.full_name, role: c.role_title, relationship: c.relationship_status, company: { ref: ref("company", link.companies.id), name: companyName(link.companies) } }] : [];
+    }).slice(0, 40),
     follow_ups: {
       overdue: overdue.length,
       until_end_of_mission: (tasks ?? []).length,
@@ -145,7 +151,7 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
     },
     agenda: (plans ?? []).map((p) => ({ title: p.title, on: p.planned_on, stops: p.visit_stops[0]?.count ?? 0 })),
     aog_scripts: (aog ?? []).map((q) => ({ code: q.code, entity: q.industry?.replace(/^AOG\s*·\s*/, "") ?? null, topic: q.dimension, opening: clip(q.question, 300), next_action: q.next_action })),
-    assets: (assets ?? []).map((a) => {
+    assets: (assets ?? []).map((x) => x.assets).map((a) => {
       const p = [...a.asset_prices].sort((x, y) => (y.observed_on ?? "").localeCompare(x.observed_on ?? ""))[0];
       return { ref: ref("asset", a.id), title: a.title, category: a.category, locality: a.locality, last_price: p ? `${p.currency} ${Number(p.amount).toLocaleString("es-AR")}${p.period ? `/${p.period}` : ""}` : null, prices_seen: a.asset_prices.length, price_status: a.price_status === "inconsistente" ? "PRECIO INCONSISTENTE" : a.price_status, located: a.latitude !== null };
     }),
@@ -161,3 +167,9 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   };
 }
 
+
+/** La misión que sigue el Morning Brief (por ahora, la primera misión del workspace). */
+export async function isBriefMission(db: Db, missionId: string): Promise<boolean> {
+  const { data } = await db.from("campaigns").select("id").eq("kind", "mision").order("created_at").limit(1).maybeSingle();
+  return data?.id === missionId;
+}

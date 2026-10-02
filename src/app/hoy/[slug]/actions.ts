@@ -15,6 +15,9 @@ import { askRelevo, type PanelReply } from "@/app/w/[slug]/ai/panel-actions";
 import { memoryNearby } from "@/server/geo";
 import { formatDistance } from "@/domain/geo";
 import type { LookItem } from "@/server/surface";
+import { rememberMission } from "@/server/mission/current";
+import { ingestDiscovery, undoIngest, type IngestEffects } from "@/server/mission/ingest";
+import { MissionDraftSchema, createMission, draftMission, type MissionDraft } from "@/server/mission/create";
 
 // Acciones del home (Surface): Avanzar responde al instante si RELEVO ya lo preparó; "¿Lo mandaste? Sí" y
 // las correcciones de prioridad cambian el presente en el momento.
@@ -136,4 +139,81 @@ export async function nearby(slug: string, at: { lat: number; lng: number }): Pr
     line: p.detail ?? null,
     ask: `Contame de ${p.name}, que está acá cerca.`,
   }));
+}
+
+/** Elegir en qué misión trabajar (al entrar o desde el nombre de la misión arriba). */
+export async function chooseMission(slug: string, missionId: string): Promise<{ ok: boolean }> {
+  await getWorkspaceContext(slug);
+  if (!/^[0-9a-f-]{36}$/.test(missionId)) return { ok: false };
+  const supabase = await createClient();
+  const { data } = await supabase.from("campaigns").select("id").eq("id", missionId).eq("kind", "mision").eq("status", "activa").maybeSingle();
+  if (!data) return { ok: false };
+  await rememberMission(data.id);
+  revalidatePath(`/hoy/${slug}`, "layout");
+  return { ok: true };
+}
+
+export type DraftResult = { ok: true; draft: MissionDraft } | { ok: false; message: string };
+
+/** "¿Qué querés investigar?" → nombre, objetivo, contexto y cómo vigilarla (y una pregunta si falta algo). */
+export async function draftNewMission(slug: string, text: string): Promise<DraftResult> {
+  const ctx = await getWorkspaceContext(slug);
+  const t = z.string().trim().min(10).max(3000).safeParse(text);
+  if (!t.success) return { ok: false, message: "Contame un poco más qué querés investigar." };
+  if (!ctx.canEdit) return { ok: false, message: "No tenés permiso para crear misiones." };
+  const supabase = await createClient();
+  const r = await draftMission(supabase, { workspaceId: ctx.workspace.id, userId: ctx.user.id, text: t.data });
+  return r.ok ? { ok: true, draft: r.value } : { ok: false, message: r.message };
+}
+
+export async function createNewMission(slug: string, draft: Omit<MissionDraft, "question">): Promise<{ ok: true } | { ok: false; message: string }> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { ok: false, message: "No tenés permiso para crear misiones." };
+  const d = MissionDraftSchema.omit({ question: true }).safeParse(draft);
+  if (!d.success) return { ok: false, message: "Falta el nombre o el objetivo." };
+  const supabase = await createClient();
+  const r = await createMission(supabase, { workspaceId: ctx.workspace.id, userId: ctx.user.id, slug, settings: ctx.workspace.settings, draft: d.data });
+  if (!r.ok) return r;
+  await rememberMission(r.id);
+  revalidatePath(`/hoy/${slug}`, "layout");
+  return { ok: true };
+}
+
+/** Responder la pregunta de RELEVO sobre algo que encontró: es la misma / es otra, seguila / no me interesa. */
+export async function answerQuestion(slug: string, id: string, answer: "misma" | "otra" | "no"): Promise<{ ok: boolean }> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit || !/^[0-9a-f-]{36}$/.test(id)) return { ok: false };
+  const supabase = await createClient();
+  const { data: c } = await supabase.from("brief_candidates").select("id, kind, name, detail, source_url, campaign_id, maybe_ref, payload").eq("id", id).eq("status", "candidato").maybeSingle();
+  if (!c || !c.campaign_id) return { ok: false };
+  const stamp = { decided_by: ctx.user.id, decided_at: new Date().toISOString() };
+  if (answer === "no") {
+    await supabase.from("brief_candidates").update({ ...stamp, status: "descartado" }).eq("id", id);
+  } else if (answer === "misma" && c.maybe_ref) {
+    const [type, refId] = c.maybe_ref.split(":");
+    if (type === "company" || type === "asset") {
+      const col = type === "company" ? "company_id" : "asset_id";
+      const { data: t } = await supabase.from("campaign_targets").select("id").eq("campaign_id", c.campaign_id).eq(col, refId).maybeSingle();
+      if (!t) await supabase.from("campaign_targets").insert({ workspace_id: ctx.workspace.id, campaign_id: c.campaign_id, [col]: refId } as never);
+    }
+    await supabase.from("brief_candidates").update({ ...stamp, status: "incorporado", entity_ref: c.maybe_ref }).eq("id", id);
+  } else {
+    await ingestDiscovery(supabase, { workspaceId: ctx.workspace.id, missionId: c.campaign_id, force: true }, [{ kind: c.kind as "empresa" | "persona" | "activo", name: c.name, detail: c.detail ?? "", company: String((c.payload as { company?: string } | null)?.company ?? ""), maybe: "", source_url: c.source_url }]);
+    await supabase.from("brief_candidates").update({ ...stamp, status: "incorporado" }).eq("id", id);
+  }
+  revalidatePath(`/hoy/${slug}/explorar`);
+  return { ok: true };
+}
+
+/** Deshacer algo que RELEVO sumó solo a la memoria. */
+export async function undoLearned(slug: string, draftId: string): Promise<{ ok: boolean }> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { ok: false };
+  const supabase = await createClient();
+  const { data: d } = await supabase.from("ai_action_drafts").select("id, after_state").eq("id", draftId).eq("action", "ingest_candidate").eq("status", "ejecutada").maybeSingle();
+  if (!d?.after_state) return { ok: false };
+  await undoIngest(supabase, d.after_state as unknown as IngestEffects);
+  await supabase.from("ai_action_drafts").update({ status: "deshecha", decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", draftId);
+  revalidatePath(`/hoy/${slug}/explorar`);
+  return { ok: true };
 }

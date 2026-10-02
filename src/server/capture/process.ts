@@ -55,8 +55,8 @@ export async function processCapture(
   }
 
   const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).gte("created_at", since);
-  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegaste al límite de ${DAILY_LIMIT} usos de IA en 24 horas.` };
+  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).eq("prompt_version", EXTRACT_PROMPT_VERSION).gte("created_at", since);
+  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegamos al tope de ${DAILY_LIMIT} capturas procesadas en 24 horas.` };
 
   // Reserva: una sola corrida por captura aunque se toque dos veces o haya dos pestañas.
   const { data: claimed } = await db.from("captures").update({ status: "procesando", status_error: null, ...(opts.force ? { duplicate_of: null } : {}) }).eq("id", capture.id).in("status", opts.force ? ["guardado", "error", "duplicado"] : ["guardado", "error"]).select("id");

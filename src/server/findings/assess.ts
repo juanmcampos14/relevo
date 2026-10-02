@@ -24,7 +24,7 @@ type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
 const PROMPT_VERSION = "finding-estado-v6";
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
-const DAILY_LIMIT = 60;
+const DAILY_LIMIT = 60; // evaluaciones de hipótesis por día (no cuenta la conversación)
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
 
 export const AssessmentSchema = z.object({
@@ -106,8 +106,8 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
   }
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, message: "La IA no está configurada en este entorno." };
   const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).gte("created_at", since);
-  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegaste al límite de ${DAILY_LIMIT} usos de IA en 24 horas.` };
+  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).like("prompt_version", "finding-estado%").gte("created_at", since);
+  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegamos al tope de ${DAILY_LIMIT} evaluaciones de hipótesis en 24 horas.` };
 
   const { data: finding } = await db
     .from("findings")
@@ -237,7 +237,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
 async function discoveryContext(db: Db, findingId: string, linked: Set<string>, workspaceId: string) {
   const { data: fa } = await db.from("findings").select("assets(id, title, kind, operation, locality, surface_m2, capacity_text, occupancy_declared, owner_text, broker_text, operator_text, price_status, asset_prices(amount, currency, operation, observed_on, source_url, publisher, basis, note))").eq("id", findingId).maybeSingle();
   const [{ data: fc }, { data: qf }, { data: sig }] = await Promise.all([
-    db.from("finding_companies").select("companies(id, trade_name, legal_name, sector, activity, locality, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)))").eq("finding_id", findingId),
+    db.from("finding_companies").select("companies(id, trade_name, legal_name, sector, activity, locality, contact_links(contacts(id, full_name, role_title, contact_kind, relationship_status, outreach_draft)))").eq("finding_id", findingId).is("companies.contact_links.valid_until", null),
     db.from("question_findings").select("research_questions(id, code, kind, industry, dimension, question)").eq("finding_id", findingId),
     db.from("brief_signals").select("id, headline, basis, happened_on, publisher, origin").contains("finding_ids", [findingId]).order("happened_on", { ascending: false }).limit(10),
   ]);
@@ -281,7 +281,7 @@ async function discoveryContext(db: Db, findingId: string, linked: Set<string>, 
 
   // Lado demanda: quienes compran, pagan, asignan o deciden, aunque no estén vinculados a esta hipótesis.
   const linkedCompanies = new Set(companies.map((c) => c.id));
-  const { data: demand } = await db.from("companies").select("id, trade_name, legal_name, sector, activity, contact_links(contacts(id, full_name, role_title))").eq("workspace_id", workspaceId).eq("is_demo", false).limit(400);
+  const { data: demand } = await db.from("companies").select("id, trade_name, legal_name, sector, activity, contact_links(contacts(id, full_name, role_title))").eq("workspace_id", workspaceId).eq("is_demo", false).is("contact_links.valid_until", null).limit(400);
   const buyers = (demand ?? [])
     .filter((c) => !linkedCompanies.has(c.id))
     .map((c) => ({ c, roles: c.contact_links.flatMap((l) => (l.contacts && BUYER_ROLE.test(l.contacts.role_title ?? "") ? [l.contacts] : [])) }))

@@ -9,6 +9,7 @@ import { configuredTranscriber } from "@/server/capture/transcribe";
 import { draftsView, type PanelDraft } from "@/server/ai/panel-view";
 import { decideDraft, undoDraft } from "./actions";
 import { structureLater } from "@/server/capture/background";
+import { rememberMission, workingMission } from "@/server/mission/current";
 import { CAPTURE_BUCKET } from "@/domain/capture";
 import { approveCaptureAction } from "../capturas/actions";
 import { decideProposal } from "@/server/capture/promote";
@@ -100,7 +101,13 @@ export async function askRelevo(slug: string, input: { conversationId: string | 
     place: input.place?.slice(0, 120) ?? null,
     images: images.length ? images : undefined,
     attachedCaptureId: captureId,
+    missionId: await workingMission(supabase),
   });
+  // Pidió trabajar en otra misión (o creó una): queda elegida y vuelve al inicio de esa misión.
+  if (res.ok && res.missionChanged) {
+    await rememberMission(res.missionChanged);
+    res.navigate = `/hoy/${slug}`;
+  }
   if (captureId) await structureLater(supabase, { workspaceId: ctx.workspace.id, settings: ctx.workspace.settings, userId: ctx.user.id, captureId, focus: text.data });
   if (!res.ok) return res;
   const labels = await labelRefs(supabase, slug, res.citations);

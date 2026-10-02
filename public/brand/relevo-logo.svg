@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 800" role="img" aria-label="RELEVO">
+  <rect width="1600" height="800" fill="#FAF8F3"/>
+  <path d="M617 408 L736 240 L793 320 L728 408 Z" fill="#5B6B4E"/>
+  <path d="M866 240 L983 408 L872 408 L808 320 Z" fill="#C9744F"/>
+  <path d="M743 408 L800 328 L857 408 Z" fill="#E6CDB5"/>
+  <text x="800" y="535" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="104" font-weight="400" letter-spacing="58" fill="#1C1B19">RELEVO</text>
+</svg>

@@ -33,11 +33,12 @@ export default async function Oportunidades({ params, searchParams }: PageProps<
   const sp = await searchParams;
   const ctx = await getWorkspaceContext(slug);
   const supabase = await createClient();
-  const [hello, { strong, closest }] = await Promise.all([surfaceHello(supabase, ctx), opportunitiesView(supabase)]);
+  const hello = await surfaceHello(supabase, ctx);
+  const { strong, closest } = await opportunitiesView(supabase, hello.mission?.id ?? null);
   const base = `/hoy/${slug}/oportunidades`;
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} canEdit={ctx.canEdit} tab="oportunidades" screen="Oportunidades"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="oportunidades" screen="Oportunidades"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="¿Qué querés mover?">
       {strong.length ? (
         <>

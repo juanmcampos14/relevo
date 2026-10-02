@@ -17,7 +17,8 @@ import { missionBrief } from "./mission";
 import { fold } from "@/domain/crm-import/map";
 import { ContactEventInput, applyContactEvent } from "./contact-events";
 import { randomUUID } from "node:crypto";
-import { applyCorrection, liveFocus, stepTaken } from "@/server/mission/focus";
+import { RelationshipInput, applyRelationship } from "./relationships";
+import { applyCorrection, forgetMovesAbout, liveFocus, stepTaken } from "@/server/mission/focus";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
 function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
@@ -44,6 +45,7 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
     description: "Hipótesis, findings y casos con su etapa (señal, en validación, caso, oportunidad), casos independientes, contraevidencia, faltantes, economía conocida y qué les falta para ser oportunidad. Filtros: maturity, with_economics, missing_buyer, include_inactive.",
     input_schema: strict({
       maturity: { type: "string", enum: ["idea", "hipotesis", "finding", "caso", "todas"] },
+      all_missions: { type: "boolean", description: "true para ver las de todas las misiones (por defecto, la de trabajo)" },
       with_economics: { type: "boolean" },
       missing_buyer: { type: "boolean" },
       include_inactive: { type: "boolean", description: "Incluir casos pausados, cerrados o descartados" },
@@ -157,7 +159,7 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "signals",
     description: "Señales externas guardadas (Morning Brief y Radar) con su historia: qué pasó, hecho/declaración/inferencia, fuente, fecha, vertical, empresas e hipótesis relacionadas. Filtros: query (texto), days (por defecto 30), company_ref, finding_ref. Son contexto: no prueban demanda.",
-    input_schema: strict({ query: { type: "string" }, days: { type: "integer", minimum: 1, maximum: 365 }, company_ref: { type: "string" }, finding_ref: { type: "string" } }),
+    input_schema: strict({ query: { type: "string" }, days: { type: "integer", minimum: 1, maximum: 365 }, company_ref: { type: "string" }, finding_ref: { type: "string" }, all_missions: { type: "boolean", description: "true para ver las de todas las misiones (por defecto, la de trabajo)" } }),
   },
   {
     name: "record_contact_event",
@@ -174,6 +176,34 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
       note: { type: "string" },
       follow_up_on: { type: "string", description: "YYYY-MM-DD" },
     }, ["event"]),
+  },
+  {
+    name: "switch_mission",
+    description: "Cambia la misión de trabajo cuando la persona lo pide (\"entrá a Vaca Muerta\", \"quiero trabajar en Locales Zona Norte\"). mission_ref = 'campaign:…' de las misiones del contexto. Después respondé en una línea en qué misión están y qué movería ahí.",
+    input_schema: strict({ mission_ref: { type: "string" } }, ["mission_ref"]),
+  },
+  {
+    name: "create_mission",
+    description: "Crea una misión nueva cuando la persona quiere investigar algo distinto (\"quiero investigar locales en San Isidro\"). Antes proponé en una línea nombre, objetivo y zona y preguntá solo si falta algo indispensable; creala cuando la persona dice que sí. Entra directo a trabajar en ella y RELEVO prepara un primer panorama por detrás.",
+    input_schema: strict({
+      name: { type: "string", description: "2 a 4 palabras" },
+      objective: { type: "string", description: "Una oración, con verbo" },
+      context: { type: "string", description: "zona · rubros · tipo de oportunidades" },
+      zone: { type: "string" },
+      queries: { type: "array", items: { type: "string" }, description: "3 a 6 búsquedas de noticias para vigilarla" },
+    }, ["name", "objective", "context"]),
+  },
+  {
+    name: "update_relationship",
+    description: "La persona corrige quién trabaja dónde (\"Nicolás Raviola ya no trabaja en Pecom\", \"ahora está en Vista como jefe de compras\"). Lo APLICA en el momento, sin borrar historia: change='ya_no_esta' deja la relación como anterior (fecha, quién lo validó, evidencia), deja de recomendar a esa persona para esa empresa, cierra los pendientes de contactarla y abre 'encontrar a quien la reemplaza'; change='ahora_esta' la vincula con su cargo (role). Antes identificá a la persona y la empresa (find / get_person). Después de aplicarlo, seguí el trabajo: buscá la persona nueva o el canal y proponé el próximo paso. Se puede deshacer.",
+    input_schema: strict({
+      change: { type: "string", enum: ["ya_no_esta", "ahora_esta"] },
+      contact_ref: { type: "string" },
+      company_ref: { type: "string" },
+      role: { type: "string", description: "Cargo actual (ahora_esta)" },
+      since: { type: "string", description: "YYYY-MM-DD, si se sabe desde cuándo" },
+      note: { type: "string", description: "Cómo lo supo, en sus palabras (\"lo vi en LinkedIn\")" },
+    }, ["change", "contact_ref", "company_ref"]),
   },
   {
     name: "research_in_background",
@@ -251,6 +281,8 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         .select("id, statement, maturity, case_status, finding_assessments(created_at, summary, gaps, dimensions, economics, independent_cases, contradicts, discovery), opportunity_findings(opportunities(status))")
         .neq("review_status", "rechazado")
         .limit(100);
+      // Las de la misión de trabajo (la memoria es compartida: all_missions=true para ver las de todas).
+      if (ctx.missionId && a.all_missions !== true) q = q.eq("campaign_id", ctx.missionId);
       if (typeof a.maturity === "string" && a.maturity !== "todas") q = q.eq("maturity", a.maturity);
       if (a.include_inactive !== true) q = q.eq("case_status", "activo");
       const { data } = await q;
@@ -357,7 +389,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (!m.success) return { content: "Referencia inválida: usá 'contact:uuid'", isError: true };
       const id = m.data.split(":")[1];
       const [{ data: c }, { data: said }, { data: tasks }] = await Promise.all([
-        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, outreach_draft, contact_links(companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
+        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, outreach_draft, contact_links(valid_until, ended_note, role_title, companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
         db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, observed_at, capture_id").eq("stated_by_contact_id", id).limit(40),
         db.from("tasks").select("id, title, status, due_on").eq("contact_id", id),
       ]);
@@ -367,7 +399,9 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           ref: ref("contact", id),
           name: c.full_name, role: c.role_title, kind: c.contact_kind, may_contact: c.contact_permission, relationship: c.relationship_status,
           outreach_draft: c.outreach_draft ?? null,
-          companies: c.contact_links.flatMap((l) => (l.companies ? [{ ref: ref("company", l.companies.id), name: companyName(l.companies) }] : [])),
+          companies: c.contact_links.flatMap((l) => (l.companies && !l.valid_until ? [{ ref: ref("company", l.companies.id), name: companyName(l.companies), role: l.role_title }] : [])),
+          // Dónde estuvo antes (no borrar historia; no presentarla como vigente).
+          former: c.contact_links.flatMap((l) => (l.companies && l.valid_until ? [{ ref: ref("company", l.companies.id), name: companyName(l.companies), was: l.role_title, until: l.valid_until, note: l.ended_note }] : [])),
           stated: (said ?? []).map((e) => ({ ref: ref("evidence", e.id), statement: e.statement, provenance: provenanceOf(e, c.full_name), observed_at: e.observed_at, capture: e.capture_id ? { ref: ref("capture", e.capture_id) } : null })),
           tasks: (tasks ?? []).map((t) => ({ ref: ref("task", t.id), title: t.title, status: t.status, due_on: t.due_on })),
         }),
@@ -528,7 +562,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "mission_brief": {
       const m = typeof a.ref === "string" ? Str.regex(/^campaign:([0-9a-f-]{36})$/).safeParse(a.ref) : null;
       if (m && !m.success) return { content: "Referencia inválida: usá 'campaign:uuid' o nada para la misión activa.", isError: true };
-      const brief = await missionBrief(db, m?.success ? m.data.split(":")[1] : null);
+      const brief = await missionBrief(db, m?.success ? m.data.split(":")[1] : ctx.missionId ?? null);
       if (!brief) return { content: "No hay una misión activa.", isError: true };
       // Primera respuesta rápida: solo lo preparado (síntesis del día + contactos para mover). El detalle, si lo piden.
       if (a.detail !== true && brief.prepared && !brief.prepared.stale) {
@@ -546,7 +580,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       return { content: track(ctx, brief) };
     }
     case "aog_plan": {
-      const { data: c } = await db.from("campaigns").select("synthesis").eq("kind", "mision").eq("status", "activa").order("starts_on").limit(1).maybeSingle();
+      const { data: c } = ctx.missionId ? await db.from("campaigns").select("synthesis").eq("id", ctx.missionId).maybeSingle() : { data: null };
       const plan = (c?.synthesis as { aog?: { opening: string; targets: { company_ref: string; contact_ref: string; name: string; hypothesis_refs: string[] }[]; not_worth: string[]; computed_at: string } } | null)?.aog;
       if (!plan) return { content: "Todavía no hay un plan de AOG preparado: respondé con lo que sepas (research_questions con aog=true y mission_brief) y decí que se está preparando." };
       const q = typeof a.company === "string" ? fold(a.company) : null;
@@ -579,6 +613,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "signals": {
       const days = typeof a.days === "number" ? a.days : 30;
       let q = db.from("brief_signals").select("headline, summary, basis, change, happened_on, publisher, source_url, vertical, origin, company_ids, finding_ids, asset_ids, brief_stories(title)").gte("created_at", since(days)).order("happened_on", { ascending: false, nullsFirst: false }).limit(30);
+      if (ctx.missionId && a.all_missions !== true) q = q.contains("campaign_ids", [ctx.missionId]);
       if (typeof a.query === "string" && a.query.trim()) {
         const term = `%${a.query.trim().replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ")}%`;
         q = q.or(`headline.ilike.${term},summary.ilike.${term}`);
@@ -615,6 +650,43 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         return { content: `No pude registrarlo: ${(e as Error).message}`, isError: true };
       }
     }
+    case "switch_mission": {
+      const r = typeof a.mission_ref === "string" ? a.mission_ref : "";
+      const id = /^campaign:[0-9a-f-]{36}$/.test(r) ? r.split(":")[1] : null;
+      const { data: m } = id ? await db.from("campaigns").select("id, name, objective").eq("id", id).eq("kind", "mision").eq("status", "activa").maybeSingle() : { data: null };
+      if (!m) return { content: "No encontré esa misión entre las activas.", isError: true };
+      ctx.onMissionChange?.(m.id);
+      return { content: JSON.stringify({ switched: true, mission: m.name, objective: m.objective }) };
+    }
+    case "create_mission": {
+      if (!ctx.workspaceId || !ctx.userId) return { content: "No disponible en este contexto.", isError: true };
+      const name = Str.min(2).max(120).safeParse(a.name);
+      const objective = Str.min(5).max(600).safeParse(a.objective);
+      const context = Str.min(2).max(400).safeParse(a.context);
+      if (!name.success || !objective.success || !context.success) return { content: "Falta nombre, objetivo o contexto.", isError: true };
+      const { createMission } = await import("@/server/mission/create");
+      const r = await createMission(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, slug: ctx.slug, settings: ctx.settings, draft: { name: name.data, objective: objective.data, context: context.data, zone: typeof a.zone === "string" ? a.zone : "", queries: Array.isArray(a.queries) ? a.queries.filter((q): q is string => typeof q === "string") : [] } });
+      if (!r.ok) return { content: `No pude crearla: ${r.message}`, isError: true };
+      ctx.seenRefs.add(`campaign:${r.id}`);
+      ctx.onMissionChange?.(r.id);
+      return { content: JSON.stringify({ created: true, ref: `campaign:${r.id}`, note: "Ya están trabajando en la misión nueva. Decí en una línea que la creaste y que estás armando un primer panorama que va a aparecer en el inicio." }) };
+    }
+    case "update_relationship": {
+      const input = RelationshipInput.safeParse(a);
+      if (!input.success) return { content: `No pude aplicarlo: ${input.error.issues.map((i) => i.message).join("; ")}`, isError: true };
+      for (const r of [input.data.contact_ref, input.data.company_ref]) {
+        if (!ctx.seenRefs.has(r)) return { content: `Antes identificá ${r} con find o get_person.`, isError: true };
+      }
+      if (!ctx.workspaceId || !ctx.userId || !ctx.saveApplied) return { content: "No disponible en este contexto.", isError: true };
+      try {
+        const { summary, effects } = await applyRelationship(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, userName: ctx.userName ?? null, campaignId: ctx.missionId ?? ctx.campaignId ?? null }, input.data);
+        await ctx.saveApplied({ action: "relationship_change", payload: input.data, summary, after: effects });
+        if (ctx.missionId) await forgetMovesAbout(db, ctx.missionId, [input.data.contact_ref, input.data.company_ref]).catch(() => null);
+        return { content: JSON.stringify({ applied: true, summary, next: "Seguí el trabajo: intentá encontrar a la persona nueva (memoria, web, sitio de la empresa, avisos de empleo) o el canal para pedirla, y proponé el próximo paso. No digas 'gracias por avisarme'." }) };
+      } catch (e) {
+        return { content: `No pude aplicarlo: ${(e as Error).message}`, isError: true };
+      }
+    }
     case "research_in_background": {
       const question = Str.min(5).max(2000).safeParse(a.question);
       const title = Str.min(3).max(120).safeParse(a.title);
@@ -622,7 +694,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (!ctx.workspaceId || !ctx.userId) return { content: "No disponible en este contexto.", isError: true };
       // Import diferido: la investigación usa el mismo motor que esta conversación.
       const { researchLater } = await import("@/server/mission/research");
-      await researchLater(db, { workspaceId: ctx.workspaceId, slug: ctx.slug, userId: ctx.userId, settings: ctx.settings, question: question.data, title: title.data, here: ctx.here ?? null, place: ctx.place ?? null });
+      await researchLater(db, { workspaceId: ctx.workspaceId, slug: ctx.slug, userId: ctx.userId, settings: ctx.settings, question: question.data, title: title.data, here: ctx.here ?? null, place: ctx.place ?? null, missionId: ctx.missionId ?? null });
       return { content: JSON.stringify({ started: true, note: "Respondé en una o dos oraciones qué vas a mirar y que lo dejás en el inicio. No inventes resultados." }) };
     }
     case "adjust_focus": {

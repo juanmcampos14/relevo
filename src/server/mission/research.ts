@@ -17,7 +17,11 @@ type Db = SupabaseClient<Database>;
 
 export type ResearchJob = {
   workspaceId: string; slug: string; userId: string; settings?: unknown;
+  /** La misión donde queda el resultado (la de trabajo cuando se pidió). */
+  missionId?: string | null;
   question: string; title: string;
+  /** Por qué aparece en el inicio (una línea). */
+  why?: string;
   here?: { lat: number; lng: number; accuracy?: number } | null; place?: string | null;
 };
 
@@ -33,7 +37,7 @@ export async function research(db: Db, j: ResearchJob, client?: Pick<Anthropic, 
     history: [],
     userText: j.question,
     context: CONTEXT(j, when),
-    tools: { db, slug: j.slug, seenRefs: new Set(), workspaceId: j.workspaceId, userId: j.userId, settings: j.settings, here: j.here ?? null, saveDraft: async () => { throw new Error("En la investigación no se registra nada."); } },
+    tools: { db, slug: j.slug, seenRefs: new Set(), workspaceId: j.workspaceId, userId: j.userId, settings: j.settings, here: j.here ?? null, missionId: j.missionId ?? null, campaignId: j.missionId ?? null, saveDraft: async () => { throw new Error("En la investigación no se registra nada."); } },
   });
   await db.from("ai_runs").insert({
     workspace_id: j.workspaceId, user_id: j.userId, model: AI_MODEL, prompt_version: "relevo-investigar-v1", status: r.status,
@@ -41,12 +45,12 @@ export async function research(db: Db, j: ResearchJob, client?: Pick<Anthropic, 
     tool_calls: r.usage.toolCalls, cost_usd: Number(r.usage.costUsd.toFixed(5)), error: r.error ?? null, duration_ms: Date.now() - started,
   });
   if (r.status !== "ok" || !r.text) return { ok: false, costUsd: r.usage.costUsd };
-  const mission = await activeMission(db);
+  const mission = j.missionId ?? (await activeMission(db));
   if (!mission) return { ok: false, costUsd: r.usage.costUsd };
   const id = randomUUID();
   const now = new Date();
   await updateFocus(db, mission, (f) => {
-    const next = correct(f, { kind: "agregar", id, title: j.title, why: "Lo investigué mientras caminabas.", refs: [], first: true }, null, now);
+    const next = correct(f, { kind: "agregar", id, title: j.title, why: j.why ?? "Lo investigué mientras caminabas.", refs: [], first: true }, null, now);
     const at = new Date().toISOString();
     return { ...next, items: next.items.map((x) => (x.id === id ? { ...x, source: "relevo" as const, move: { text: r.text, citations: r.citations, at }, updated_at: now.toISOString() } : x)) };
   });

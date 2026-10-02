@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { freshnessFor, revalidateAfter } from "@/domain/evidence";
 import type { evidenceType } from "@/domain/catalogs";
-import { approvalOrder, captureExceptions, type ReviewProposal } from "@/domain/capture-review";
+import { approvalOrder, captureExceptions, clearMatch, type ReviewProposal } from "@/domain/capture-review";
 import { mainQuantity } from "@/domain/quantities";
 
 type Db = SupabaseClient<Database>;
@@ -534,11 +534,17 @@ export async function approveCapture(
 ): Promise<{ accepted: number; pending: string[]; failed: string[]; affectedFindings: string[] }> {
   const { data } = await db.from("proposals").select("id, kind, status, payload, matches").eq("capture_id", opts.captureId).order("position");
   const all = (data ?? []) as unknown as ReviewProposal[];
+  // Lo que claramente ya está en RELEVO se vincula solo (no se duplica ni se deja esperando).
+  const links = new Map<string, string>();
+  for (const p of all) {
+    const id = clearMatch(p);
+    if (id) { links.set(p.id, id); p.payload = { ...p.payload, link_to: id }; }
+  }
   const exceptions = captureExceptions(all);
   const out = { accepted: 0, pending: [...exceptions.values()], failed: [] as string[], affectedFindings: [] as string[] };
   for (const p of approvalOrder(all)) {
     if (p.status !== "propuesta" || exceptions.has(p.id)) continue;
-    const res = await decideProposal(db, { ...opts, proposalId: p.id, decision: { action: "aceptar" } });
+    const res = await decideProposal(db, { ...opts, proposalId: p.id, decision: { action: "aceptar", ...(links.has(p.id) ? { edits: { link_to: links.get(p.id) } } : {}) } });
     if (res.ok) {
       out.accepted++;
       out.affectedFindings.push(...(res.affectedFindings ?? []));

@@ -9,13 +9,15 @@ import { liveFocus } from "@/server/mission/focus";
 import { prepareMoves } from "@/server/mission/moves";
 import { after } from "next/server";
 import { synthesizeMission } from "@/server/mission/synthesis";
-import { ANELO_POINT, distanceM } from "@/domain/geo-match";
+import { listMissions } from "@/server/mission/current";
 
 // Un turno de conversación con RELEVO: lo usan la página de RELEVO AI y el panel persistente.
 // Mismo motor, mismas herramientas, mismos permisos (el cliente del usuario → RLS).
 
 type Db = SupabaseClient<Database>;
-const DAILY_LIMIT = 60;
+// Tope de conversación por persona (lo que la persona le pide). El trabajo de fondo (evaluar, preparar,
+// investigar) tiene sus propios topes y no le consume este.
+const DAILY_LIMIT = 150;
 const HISTORY_ROWS = 6;
 
 const scopeLabel: Record<string, string> = {
@@ -31,7 +33,7 @@ const scopeLabel: Record<string, string> = {
 const scopeTool: Record<string, string> = { finding: "get_hypothesis", capture: "get_capture", contact: "get_person", campaign: "project_status" };
 
 export type TurnResult =
-  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null; captureIds: string[]; webSources: { url: string; title: string }[]; homeChanged: boolean }
+  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null; captureIds: string[]; webSources: { url: string; title: string }[]; homeChanged: boolean; missionChanged: string | null }
   | { ok: false; conversationId: string | null; message: string };
 
 export async function runTurn(
@@ -44,12 +46,14 @@ export async function runTurn(
     /** Fotos de este turno, ya guardadas como captura (captureId). */
     images?: { mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }[];
     attachedCaptureId?: string | null;
+    /** La misión en la que está trabajando la persona. */
+    missionId?: string | null;
   },
 ): Promise<TurnResult> {
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, conversationId: opts.conversationId, message: "RELEVO AI no está configurado en este entorno (falta ANTHROPIC_API_KEY)." };
   const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).gte("created_at", since);
-  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, conversationId: opts.conversationId, message: `Llegaste al límite de ${DAILY_LIMIT} consultas en 24 horas.` };
+  const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).eq("prompt_version", PROMPT_VERSION).gte("created_at", since);
+  if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, conversationId: opts.conversationId, message: `Por hoy llegamos al tope de ${DAILY_LIMIT} conversaciones. Lo que estoy haciendo por detrás sigue; mañana retomamos acá.` };
 
   let convId = opts.conversationId;
   if (!convId) {
@@ -81,13 +85,17 @@ export async function runTurn(
   const teamLine = Object.values(team).filter((t) => t.short).map((t) => (t.full ? `${t.short} (${t.full})` : t.short)).join(", ");
   const now = new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
   const [scopeType] = opts.scope.split(":");
-  const mission = scopeType === "campaign"
-    ? opts.scope.split(":")[1]
-    : (await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle()).data?.id ?? null;
+  // La misión es el contexto de trabajo (la que eligió la persona), no el lugar donde está parada.
+  const missions = await listMissions(db);
+  const mission = scopeType === "campaign" ? opts.scope.split(":")[1] : opts.missionId ?? missions[0]?.id ?? null;
+  const current = missions.find((m) => m.id === mission) ?? null;
+  const others = missions.filter((m) => m.id !== mission);
+  for (const m of missions) seenRefs.add(`campaign:${m.id}`);
   // Lo que hoy está en el home: la persona lo nombra ("esto primero", "FERRELEC mañana") y RELEVO lo corrige.
   const home = mission ? await liveFocus(db, mission).catch(() => null) : null;
   const context = [
     `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.${teamLine ? ` Equipo: ${teamLine}; en documentos y en el CRM pueden figurar con cualquiera de los dos nombres.` : ""}${firstName ? ` Hablás con ${firstName}: llamalo así.` : ""}`,
+    current ? `Misión de trabajo: ${current.name} [[campaign:${current.id}]]${current.objective ? ` — ${current.objective}` : ""}. Todo lo que pregunta, investiga o registra es en el contexto de esta misión, salvo que nombre otra. La memoria es compartida: si algo se conecta con otra misión, decilo en una línea.${others.length ? ` Otras misiones: ${others.map((m) => `${m.short} [[campaign:${m.id}]]`).join(", ")}.` : ""}` : null,
     opts.screen ? `Pantalla actual: ${opts.screen}.` : null,
     home?.now.length ? `Prioridades en el home ahora (focus_id · qué): ${home.now.map((x) => `${x.id} · ${x.title}${x.refs.length ? ` (${x.refs.join(", ")})` : ""}`).join(" | ")}.` : null,
     opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m)${opts.place ? `, en ${opts.place}` : ""}. "Acá" o "donde estoy" es ese punto.` : null,
@@ -101,11 +109,9 @@ export async function runTurn(
   let homeChanged = false;
   const captureIds: string[] = [];
   let navigate: string | null = null;
-  // Una nota de campo alimenta el proyecto que se está mirando; si no, la misión.
-  // Dónde está la persona no es la misión: lejos de la zona de la misión (p. ej. caminando por Buenos Aires),
-  // lo que captura queda en su lugar y no se carga a la misión, que sigue trabajando detrás.
-  const awayFromMission = !!opts.here && scopeType !== "campaign" && distanceM(ANELO_POINT, opts.here) > 150_000;
-  const campaignId = awayFromMission ? null : mission;
+  // Lo que se captura o se aprende queda en la misión de trabajo (o en el proyecto que se está mirando).
+  let missionChanged: string | null = null;
+  const campaignId = mission;
   const started = Date.now();
   const result = await runAgent({
     client: opts.client ?? new Anthropic(),
@@ -125,6 +131,8 @@ export async function runTurn(
       settings: opts.settings,
       campaignId,
       missionId: mission,
+      userName: firstName,
+      onMissionChange: (id) => { missionChanged = id; },
       onFocusChange: () => { homeChanged = true; },
       onCapture: (id) => captureIds.push(id),
       saveApplied: async ({ action, payload, summary, after }) => {
@@ -203,7 +211,7 @@ export async function runTurn(
   }
   if (homeChanged && mission) laterPrepare(db, { workspaceId: opts.workspaceId, campaignId: mission, slug: opts.slug, settings: opts.settings, userId: opts.userId });
   if (result.status === "error") return { ok: false, conversationId: convId, message: result.error ?? "No se pudo completar la consulta." };
-  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources, homeChanged };
+  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources, homeChanged, missionChanged };
 }
 
 /** Prepara en background el Avanzar de lo que quedó visible (dentro de un request: after; en scripts: no). */

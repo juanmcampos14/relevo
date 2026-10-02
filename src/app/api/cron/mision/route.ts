@@ -5,6 +5,8 @@ import { synthesizeMission } from "@/server/mission/synthesis";
 import { planAog } from "@/server/mission/aog";
 import { describeMission } from "@/server/mission/state";
 import { reassessFromSignals } from "@/server/mission/pulse";
+import { ingestBriefCandidates } from "@/server/mission/ingest";
+import { isBriefMission } from "@/server/ai/mission";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -33,6 +35,11 @@ export async function GET(request: NextRequest) {
       }
       const a = await planAog(db, { workspaceId: m.workspace_id, campaignId: m.id });
       console.info("mision aog", m.id, a.ok ? `USD ${a.costUsd.toFixed(2)}` : a.message);
+      // Lo que el Brief encontró y es claro entra solo a la memoria (lo dudoso queda como una pregunta).
+      if (await isBriefMission(db, m.id)) {
+        const ic = await ingestBriefCandidates(db, { workspaceId: m.workspace_id, missionId: m.id });
+        console.info("mision candidatos", m.id, JSON.stringify(ic));
+      }
       // Lo que el Brief de hoy detectó actualiza lo que creemos antes de priorizar.
       if (m.workspaces) {
         const ra = await reassessFromSignals(db, { id: m.id, workspace_id: m.workspace_id, slug: m.workspaces.slug, settings: m.workspaces.settings }, new Date(Date.now() - 30 * 3_600_000).toISOString());

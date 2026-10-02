@@ -21,7 +21,7 @@ export async function draftsView(slug: string, ids: string[]): Promise<PanelDraf
     preview: (d.preview as Preview | null) && Object.keys(d.preview as object).length ? (d.preview as Preview) : null,
     error: d.error,
     resultHref: d.result_ref ? labels.get(d.result_ref)?.href ?? null : null,
-    applied: d.action === "contact_event",
+    applied: d.action === "contact_event" || d.action === "relationship_change",
     calendarUrl: (d.after_state as { calendar_url?: string | null } | null)?.calendar_url ?? null,
   }));
 }

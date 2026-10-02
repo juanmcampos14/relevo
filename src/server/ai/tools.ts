@@ -140,6 +140,8 @@ export type ToolContext = {
   campaignId?: string | null;
   /** La misión activa (su foco es el home), aunque la persona esté lejos de su zona. */
   missionId?: string | null;
+  /** La persona pidió trabajar en otra misión (o creó una nueva). */
+  onMissionChange?: (id: string) => void;
   /** Cambiaron las prioridades del home (para refrescarlo). */
   onFocusChange?: () => void;
   /** Una nota de campo quedó guardada como captura (el panel muestra lo que entendió RELEVO). */
@@ -149,7 +151,9 @@ export type ToolContext = {
   /** Registra un borrador; devuelve su id. */
   saveDraft: (input: z.infer<typeof ProposeActionInput>) => Promise<string>;
   /** Registra una acción que RELEVO ya aplicó (auditada y deshacible); devuelve el id del registro. */
-  saveApplied?: (rec: { action: "contact_event"; payload: Record<string, unknown>; summary: string; after: unknown }) => Promise<string>;
+  saveApplied?: (rec: { action: "contact_event" | "relationship_change"; payload: Record<string, unknown>; summary: string; after: unknown }) => Promise<string>;
+  /** Nombre de la persona con la que se habla (para dejar constancia de quién validó algo). */
+  userName?: string | null;
 };
 
 function track(ctx: ToolContext, value: unknown) {
@@ -341,7 +345,7 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
       db.from("evidence").select("id, statement, quote, evidence_type, origin_kind, verification_status, observed_at, revalidate_after, next_verification_step, sources(id, title, url)").eq(fk, id).limit(40),
       db.from("findings").select("id, kind, statement, verification_status, review_status").eq(fk, id).limit(30),
       db.from("campaign_targets").select("id, status, next_action, campaigns(id, name), visits(id, visited_at, notes)").eq(fk, id),
-      db.from("contact_links").select("relation, contacts(id, full_name, role_title, contact_permission, verification_status)").eq(fk, id),
+      db.from("contact_links").select("relation, valid_until, ended_note, role_title, contacts(id, full_name, role_title, contact_permission, verification_status)").eq(fk, id),
     ]);
     return {
       evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
@@ -352,7 +356,9 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
         next_action: t.next_action,
         visits: t.visits.map((v) => ({ ref: ref("visit", v.id), visited_at: v.visited_at, notes_excerpt: clip(v.notes, 400) })),
       })),
-      contacts: (contacts ?? []).flatMap((l) => (l.contacts ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, relation: l.relation, role: l.contacts.role_title, may_contact: l.contacts.contact_permission, verification: l.contacts.verification_status }] : [])),
+      // Personas vigentes (a quién contactar) y, aparte, las que estuvieron (historia: no recomendarlas para acá).
+      contacts: (contacts ?? []).flatMap((l) => (l.contacts && !l.valid_until ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, relation: l.relation, role: l.role_title ?? l.contacts.role_title, may_contact: l.contacts.contact_permission, verification: l.contacts.verification_status }] : [])),
+      former_contacts: (contacts ?? []).flatMap((l) => (l.contacts && l.valid_until ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, was: l.role_title, until: l.valid_until, note: l.ended_note, current: "YA NO ESTÁ: no recomendarla para esta empresa" }] : [])),
     };
   };
   switch (type) {

@@ -68,12 +68,12 @@ beforeAll(async () => {
   const op = await q(`insert into companies (workspace_id, trade_name, sector) values ($1, 'Operadora Prueba', 'Comprador corporativo') returning id`, [ws]);
   buyer = await q(`insert into contacts (workspace_id, full_name, role_title) values ($1, 'Ana Compras', 'Gerente de Compras') returning id`, [ws]);
   await pool.query(`insert into contact_links (workspace_id, contact_id, company_id) values ($1, $2, $3)`, [ws, buyer, op]);
-  finding = await q(`insert into findings (workspace_id, source_id, kind, statement, maturity, dedup_key) values ($1, $2, 'necesidad', 'Rotación y asignación de vacancia pesan más que inventario total', 'hipotesis', 'crm:H-VA-09') returning id`, [ws, src]);
+  finding = await q(`insert into findings (workspace_id, source_id, kind, statement, maturity, dedup_key, campaign_id) values ($1, $2, 'necesidad', 'Rotación y asignación de vacancia pesan más que inventario total', 'hipotesis', 'crm:H-VA-09', $3) returning id`, [ws, src, mission]);
   await pool.query(`insert into finding_companies (workspace_id, finding_id, company_id) values ($1, $2, $3)`, [ws, finding, company]);
-  question = await q(`insert into research_questions (workspace_id, code, kind, industry, question, origin) values ($1, 'VO-Q04', 'entrevista', 'AOG · Hotel Prueba', '¿Cuánto dura una asignación de cama?', 'crm') returning id`, [ws]);
+  question = await q(`insert into research_questions (workspace_id, code, kind, industry, question, origin, campaign_id) values ($1, 'VO-Q04', 'entrevista', 'AOG · Hotel Prueba', '¿Cuánto dura una asignación de cama?', 'crm', $2) returning id`, [ws, mission]);
   await pool.query(`insert into question_findings (workspace_id, question_id, finding_id) values ($1, $2, $3)`, [ws, question, finding]);
   evidence = await q(`insert into evidence (workspace_id, source_id, company_id, statement, evidence_type, origin_kind, verification_status) values ($1, $2, $3, 'El encargado declaró 80% de ocupación', 'dato', 'crm_import', 'unverified') returning id`, [ws, src, company]);
-  signal = await q(`insert into brief_signals (workspace_id, origin, basis, signal_type, section, vertical, headline, change, relevance, position, finding_ids, happened_on) values ($1, 'radar_sheet', 'hecho', 'demanda', 'anelo', 'Alojamiento + campamentos', 'Nueva base con 120 personas', 'nuevo', 'media', 0, array[$2]::uuid[], '2026-09-30') returning id`, [ws, finding]);
+  signal = await q(`insert into brief_signals (workspace_id, origin, basis, signal_type, section, vertical, headline, change, relevance, position, finding_ids, happened_on, campaign_ids) values ($1, 'radar_sheet', 'hecho', 'demanda', 'anelo', 'Alojamiento + campamentos', 'Nueva base con 120 personas', 'nuevo', 'media', 0, array[$2]::uuid[], '2026-09-30', array[$3]::uuid[]) returning id`, [ws, finding, mission]);
   db = createClient<Database>(URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
   const { error: e } = await db.auth.signInWithPassword({ email, password });
   if (e) throw e;

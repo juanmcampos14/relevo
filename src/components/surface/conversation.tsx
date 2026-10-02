@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUp, Camera, Check, Copy, MapPin, Mic, Square, X } from "lucide-react";
+import { ArrowUp, Camera, Check, ChevronDown, Copy, MapPin, Mic, Square, X } from "lucide-react";
 import { cn } from "cn";
 import { RichText } from "@/components/ai/rich-text";
 import { compressPhoto, useRecorder } from "@/lib/capture/media";
@@ -86,8 +86,6 @@ function captureApi(): CaptureApi {
   };
 }
 
-/** ¿Está cerca de la zona de la misión (Añelo)? Lejos, lo que captura queda en su lugar y no en la misión. */
-const nearMission = (h: Here | null) => !!h && Math.hypot(h.lat + 38.3542, h.lng + 68.7877) < 1.4;
 const shadow = "shadow-[0_1px_2px_rgba(28,27,25,0.04),0_8px_28px_rgba(28,27,25,0.06)]";
 
 export function Conversation(props: {
@@ -104,6 +102,8 @@ export function Conversation(props: {
   /** Pregunta que llega desde otra pantalla ("Contame" en Explorar): se hace sola al entrar. */
   initialAsk?: string | null;
   placeholder?: string;
+  /** La misión de trabajo (arriba, discreta, con su menú). */
+  mission?: { short: string } | null;
   children?: ReactNode;
 }) {
   const { slug, workspaceId, missionId, canEdit, tab, greeting, intro, missionLabel } = props;
@@ -188,7 +188,7 @@ export function Conversation(props: {
         const res = await syncOne({
           clientId: crypto.randomUUID(), workspaceId, body: question, capturedAt: new Date().toISOString(),
           location: here ? { lat: here.lat, lng: here.lng, accuracy: here.accuracy } : null,
-          aiConsent: true, campaignId: nearMission(here) ? missionId : null, state: "pendiente", attempts: 0,
+          aiConsent: true, campaignId: missionId, state: "pendiente", attempts: 0,
           media: [{ id: crypto.randomUUID(), kind: "photo", mimeType: shot.mimeType, data: shot.data }],
         }, captureApi());
         if (!res.ok) { setError(res.message); return; }
@@ -259,27 +259,29 @@ export function Conversation(props: {
     { key: "ahora", label: "Ahora", href: `/hoy/${slug}` },
     { key: "explorar", label: "Explorar", href: `/hoy/${slug}/explorar` },
     { key: "oportunidades", label: "Oportunidades", href: `/hoy/${slug}/oportunidades` },
-    { key: "mision", label: "Misión", href: `/hoy/${slug}/mision` },
   ];
 
   return (
     <div className="relative min-h-dvh bg-[#FAF8F3] text-[#1C1B19] antialiased selection:bg-[#E9DFCB]">
       <header className="sticky top-0 z-30 bg-[#FAF8F3]/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-5">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2">
             {tab === "ahora" && !scope
-              ? <button type="button" onClick={reset} className="text-[15px] font-semibold tracking-[0.18em]" aria-label="RELEVO · empezar de nuevo">RELEVO</button>
-              : <Link href={`/hoy/${slug}`} className="text-[15px] font-semibold tracking-[0.18em]">RELEVO</Link>}
-            <button type="button" onClick={() => locate(true)} className="flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[13px] text-[#6F6A60] hover:bg-[#F1EDE4]" aria-label="Actualizar dónde estoy">
+              ? <button type="button" onClick={reset} className="shrink-0 text-[15px] font-semibold tracking-[0.18em]" aria-label="RELEVO · empezar de nuevo">RELEVO</button>
+              : <Link href={`/hoy/${slug}`} className="shrink-0 text-[15px] font-semibold tracking-[0.18em]">RELEVO</Link>}
+            {props.mission && <MissionMenu slug={slug} current={props.mission} />}
+          </div>
+          <div className="flex shrink-0 items-center gap-4">
+            <nav className="hidden items-center gap-5 text-[14px] text-[#6F6A60] sm:flex">
+              {tabs.map((t) => t.key === tab && !scope
+                ? <span key={t.key} className="text-[#1C1B19]">{t.label}</span>
+                : <Link key={t.key} href={t.href} className="hover:text-[#1C1B19]">{t.label}</Link>)}
+            </nav>
+            <button type="button" onClick={() => locate(true)} title={place ?? "Usar mi ubicación"} className="flex max-w-[9rem] items-center gap-1 rounded-full px-2 py-1 text-[13px] text-[#8A8478] hover:bg-[#F1EDE4]" aria-label={place ? `Estás en ${place}. Actualizar` : "Usar mi ubicación"}>
               <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">{place ?? (here ? "Ubicado" : "Usar mi ubicación")}</span>
+              <span className="truncate">{place ? place.split(",")[0] : here ? "Ubicado" : "Ubicación"}</span>
             </button>
           </div>
-          <nav className="hidden items-center gap-5 text-[14px] text-[#6F6A60] sm:flex">
-            {tabs.map((t) => t.key === tab && !scope
-              ? <span key={t.key} className="text-[#1C1B19]">{t.label}</span>
-              : <Link key={t.key} href={t.href} className="hover:text-[#1C1B19]">{t.label}</Link>)}
-          </nav>
         </div>
       </header>
 
@@ -476,6 +478,26 @@ function ActionObject({ d, canEdit, busy, onUndo, onDecide }: { d: PanelDraft; c
         </div>
       ) : (
         <p className="mt-2 text-[13px] text-[#9C968A]">{d.status === "ejecutada" ? "Hecho." : d.status === "rechazada" ? "Lo dejamos." : d.error ?? ""}</p>
+      )}
+    </div>
+  );
+}
+
+/** "Vaca Muerta / Añelo ▾": ver el estado de la misión, cambiar de misión o crear una nueva, sin salir del flujo. */
+function MissionMenu({ slug, current }: { slug: string; current: { short: string } }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative min-w-0">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[14px] font-medium text-[#4A463F] hover:bg-[#F1EDE4]">
+        <span className="truncate">{current.short}</span>
+        <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute top-full left-0 z-40 mt-1 w-60 overflow-hidden rounded-2xl bg-white py-1 text-[15px] shadow-[0_12px_40px_rgba(28,27,25,0.16)]">
+          <Link role="menuitem" href={`/hoy/${slug}/mision`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Ver estado de la misión</Link>
+          <Link role="menuitem" href={`/hoy/${slug}/misiones`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Cambiar misión</Link>
+          <Link role="menuitem" href={`/hoy/${slug}/nueva`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Nueva misión</Link>
+        </div>
       )}
     </div>
   );

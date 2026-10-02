@@ -47,9 +47,9 @@ export async function describeMission(db: Db, opts: { workspaceId: string; campa
   const brief = await missionBrief(db, opts.campaignId, new Date(), { withSynthesis: false });
   if (!brief) return { ok: false as const, message: "No hay misión" };
   const [{ data: docs }, { data: dropped }, { data: findings }] = await Promise.all([
-    db.from("context_documents").select("title, kind, body").eq("status", "vigente"),
-    db.from("findings").select("statement, review_note, case_status, review_status").or("case_status.neq.activo,review_status.eq.rechazado").limit(20),
-    db.from("findings").select("id, statement, verticals(name)").eq("case_status", "activo").neq("review_status", "rechazado").limit(80),
+    db.from("context_documents").select("title, kind, body").eq("status", "vigente").or(`campaign_id.eq.${opts.campaignId},campaign_id.is.null`),
+    db.from("findings").select("statement, review_note, case_status, review_status").eq("campaign_id", opts.campaignId).or("case_status.neq.activo,review_status.eq.rechazado").limit(20),
+    db.from("findings").select("id, statement, verticals(name)").eq("campaign_id", opts.campaignId).eq("case_status", "activo").neq("review_status", "rechazado").limit(80),
   ]);
   const material = JSON.stringify({
     plan: (docs ?? []).map((d) => ({ title: d.title, kind: d.kind, body: (d.body ?? "").slice(0, 9000) })),

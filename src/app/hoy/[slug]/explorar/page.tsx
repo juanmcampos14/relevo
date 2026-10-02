@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
-import { surfaceHello, whileAway } from "@/server/surface";
+import { learnedAlone, missionQuestions, surfaceHello, whileAway } from "@/server/surface";
+import { LearnedList, QuestionCard } from "@/components/surface/learned";
 import { Conversation } from "@/components/surface/conversation";
 import { LookCard, SectionLabel, SurfaceTitle, askHref } from "@/components/surface/cards";
 import { Nearby } from "@/components/surface/nearby";
@@ -18,19 +19,30 @@ export default async function Explorar({ params, searchParams }: PageProps<"/hoy
   const ctx = await getWorkspaceContext(slug);
   const supabase = await createClient();
   const hello = await surfaceHello(supabase, ctx);
-  const away = await whileAway(supabase, hello.mission?.short ?? null);
+  const [away, questions, learned] = await Promise.all([
+    whileAway(supabase, hello.mission?.short ?? null, hello.mission?.id ?? null),
+    missionQuestions(supabase, hello.mission?.id ?? null),
+    learnedAlone(supabase, hello.mission?.id ?? null),
+  ]);
   const base = `/hoy/${slug}/explorar`;
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} canEdit={ctx.canEdit} tab="explorar" screen="Explorar"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="explorar" screen="Explorar"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="¿Qué querés descubrir?">
       <SurfaceTitle title="¿Qué hay para mirar?" intro="Lo que encontré sin que me lo pidieras y por qué importa, y lo que hay cerca tuyo." />
+      {questions.length > 0 && <div className="mt-6 space-y-3">{questions.map((q) => <QuestionCard key={q.id} slug={slug} q={q} canEdit={ctx.canEdit} />)}</div>}
       {away.length > 0 && (
         <>
           <SectionLabel>{hello.mission ? `Lo que encontré en ${hello.mission.short}` : "Lo que encontré"}</SectionLabel>
           <ul className="space-y-3">
             {away.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} links={it.links} then={it.then} href={askHref(base, it.ask)} />)}
           </ul>
+        </>
+      )}
+      {learned.length > 0 && (
+        <>
+          <SectionLabel>Lo que sumé a la memoria</SectionLabel>
+          <LearnedList slug={slug} items={learned} canEdit={ctx.canEdit} />
         </>
       )}
       <SectionLabel>Cerca tuyo</SectionLabel>

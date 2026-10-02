@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { answerQuestion, undoLearned } from "@/app/hoy/[slug]/actions";
 import type { Learned, Question } from "@/server/surface";
-import { card } from "./cards";
+import { SourceLink, card } from "./cards";
 
 // Lo que RELEVO sumó solo a la memoria (con Deshacer) y, si tiene una duda, UNA pregunta.
 
@@ -17,6 +17,7 @@ export function QuestionCard({ slug, q, canEdit }: { slug: string; q: Question; 
       <p className="text-[13px] text-[#9C968A]">Una pregunta</p>
       <p className="mt-1 text-[17px] font-medium">{q.question}</p>
       {q.detail && <p className="mt-1 text-[15px] text-[#6F6A60]">{q.detail}</p>}
+      {q.source_url && <SourceLink source={{ name: null, url: q.source_url }} />}
       {canEdit && (
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" disabled={pending} onClick={() => go("misma")} className="rounded-full bg-[#1C1B19] px-4 py-2 text-[14px] font-medium text-white disabled:opacity-40">{q.kind === "activo" ? "Es el mismo" : "Es la misma"}</button>

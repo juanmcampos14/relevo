@@ -15,13 +15,14 @@ import { advance, catchUpSince, correctFocus, markSent } from "@/app/hoy/[slug]/
 import { parseReply, speakable, type ReadyMessage } from "./reply";
 import { hostOf } from "@/domain/links";
 import { FocusList, type FocusChange, type FocusView } from "./focus-list";
+import { SourceLink } from "./cards";
 
 // RELEVO (Surface): un solo producto. Ahora, Explorar, Oportunidades y Misión son cuatro formas de mirar el
 // mismo Brain; conversar no es una sección: es cómo se opera todo, desde cualquier lugar, con la misma
 // entrada (escribir, hablar, mostrar). La calle es la oficina, el teléfono el
 // sensor, la voz la interfaz. La Surface no explica el sistema: mueve la oportunidad.
 
-export type Interrupt = { id: string; title: string; detail: string | null } | null;
+export type Interrupt = { id: string; title: string; detail: string | null; source?: { name: string | null; url: string | null } } | null;
 export type SurfaceTab = "ahora" | "explorar" | "oportunidades" | "mision";
 type Sent = { line: string; draft: PanelDraft | null } | "enviando" | { error: string };
 type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: boolean; sources?: { url: string; title: string }[] };
@@ -311,6 +312,7 @@ export function Conversation(props: {
           <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
             <p className="text-[16px] font-medium">{interrupt.title}</p>
             {interrupt.detail && <p className="mt-1 text-[15px] leading-relaxed text-[#6F6A60]">{interrupt.detail}</p>}
+            {interrupt.source && <SourceLink source={interrupt.source} />}
             <div className="mt-3 flex gap-2">
               <button type="button" onClick={() => { dismiss(); ask(`Contame de esto: ${interrupt.detail ?? interrupt.title}`); }} className="rounded-full bg-[#1C1B19] px-4 py-2 text-[14px] font-medium text-white">Ver ahora</button>
               <button type="button" onClick={dismiss} className="rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">Después</button>

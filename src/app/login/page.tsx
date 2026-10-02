@@ -24,7 +24,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[oklch(0.18_0.03_248/0.92)] via-[oklch(0.18_0.03_248/0.35)] to-transparent" />
         <div className="absolute inset-x-0 bottom-0 space-y-2 p-6 text-white lg:p-10">
-          <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">Añelo · Vaca Muerta</p>
+          <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">Inteligencia de campo</p>
           <h2 className="max-w-md text-2xl font-semibold tracking-tight lg:text-4xl">
             De la primera visita a la decisión, con cada dato respaldado.
           </h2>

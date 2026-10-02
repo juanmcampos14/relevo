@@ -11,6 +11,7 @@ import { companyName } from "@/server/entities";
 import { configuredEmailProvider } from "@/server/email/provider";
 import { deepCall } from "./deep";
 import { ingestDiscovery, type Discovered } from "./ingest";
+import { originalUrl } from "@/server/news/original-url";
 
 // Vigilancia activa de cada misión: RELEVO no espera a que la persona entre. Durante el día:
 // DETECTAR (noticias nuevas de las búsquedas de la misión y de sus actores) → CRUZAR con lo que la misión
@@ -44,7 +45,7 @@ export const WatchSchema = z.object({
     matches_request: z.string().describe("Si cumple un pedido de aviso, cuál (en sus palabras); si no, ''."),
     discovered: z.array(z.object({
       kind: z.enum(["empresa", "persona", "activo"]),
-      name: z.string(),
+      name: z.string().describe("Nombre que identifica (un activo: qué es y dónde, nunca la promesa del vendedor como renta o capacidad proyectada)."),
       detail: z.string().describe("Qué es y por qué importa, en una línea."),
       company: z.string().describe("Persona: empresa donde está (o ''). Activo: dónde está (o '')."),
       maybe: Ref.describe("'company:…' o 'contact:…' de la memoria si podría ser el mismo y no estás seguro; '' si no."),
@@ -118,19 +119,21 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
   for (const s of r.value.signals) {
     const item = fresh[s.item];
     if (!item || (s.relevance === "baja" && !s.matches_request)) continue;
+    // La fuente que se guarda y se manda es la nota del medio, no la redirección de Google Noticias.
+    const url = await originalUrl(item.url);
     // Avisa lo material o lo que la persona pidió que le avisen (aunque no sea de relevancia alta).
     const alert = s.alert && (s.relevance === "alta" || !!s.matches_request) && alerts < MAX_ALERTS_PER_DAY;
     const { data: row, error } = await db.from("brief_signals").insert({
       workspace_id: m.workspace_id, brief_id: null, origin: "vigilancia", headline: s.headline.slice(0, 400), summary: item.snippet?.slice(0, 1000) ?? null,
-      happened_on: item.publishedAt?.slice(0, 10) ?? null, source_url: /^https?:\/\//.test(item.url) ? item.url : null, source_title: item.title.slice(0, 300), publisher: item.publisher,
+      happened_on: item.publishedAt?.slice(0, 10) ?? null, source_url: /^https?:\/\//.test(url) ? url : null, source_title: item.title.slice(0, 300), publisher: item.publisher,
       basis: s.basis, signal_type: s.signal_type, section: "general", why_it_matters: s.matters, reading: s.matters, change: s.change, relevance: s.relevance,
       company_ids: ids(s.company_refs, "company"), finding_ids: ids(s.finding_refs, "finding"), asset_ids: ids(s.asset_refs, "asset"), campaign_ids: [m.id],
       suggested_action: s.action || null, alerted_at: alert ? new Date().toISOString() : null,
     } as never).select("id").single();
     if (error || !row) continue;
     saved++;
-    if (alert) { alerts++; toAlert.push({ headline: s.headline, matters: s.matches_request ? `${s.matters} (Me pediste que te avise: ${s.matches_request}.)` : s.matters, url: item.url }); }
-    for (const d of s.discovered) discovered.push({ ...d, maybe: d.maybe && allowed.has(d.maybe) ? d.maybe : "", source_url: item.url, source_title: item.title, signal_id: (row as { id: string }).id });
+    if (alert) { alerts++; toAlert.push({ headline: s.headline, matters: s.matches_request ? `${s.matters} (Me pediste que te avise: ${s.matches_request}.)` : s.matters, url }); }
+    for (const d of s.discovered) discovered.push({ ...d, maybe: d.maybe && allowed.has(d.maybe) ? d.maybe : "", source_url: url, source_title: item.title, signal_id: (row as { id: string }).id });
   }
   const ingest = discovered.length ? await ingestDiscovery(db, { workspaceId: m.workspace_id, missionId: m.id }, discovered) : { ingested: 0, questions: 0 };
   if (toAlert.length) await sendAlerts(m, toAlert, opts.siteUrl).catch(() => null);

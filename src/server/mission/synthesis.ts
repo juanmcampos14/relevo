@@ -31,9 +31,9 @@ export const SynthesisSchema = z.object({
 });
 export type MissionSynthesis = z.infer<typeof SynthesisSchema> & { computed_at: string; counts: { contacts_this_week: number; attention_today: number } };
 
-const SYSTEM = `Sos RELEVO preparando la misión de campo de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta. Con el material del Brain, decidís qué haría la persona hoy y esta semana para preparar el viaje.
+const SYSTEM = `Sos RELEVO preparando la misión de un equipo que investiga oportunidades de negocio (la zona, el objetivo y las fechas salen del material de la misión). Con el material del Brain, decidís qué haría la persona hoy y esta semana para avanzar la misión.
 Reglas:
-- Investigamos para cerrar gaps: priorizá lo que abre puertas (presentaciones, AOG), los compromisos que vencen y validar hipótesis desde el lado comprador cuando corresponda.
+- Investigamos para cerrar gaps: priorizá lo que abre puertas (presentaciones, eventos del sector), los compromisos que vencen y validar hipótesis desde el lado comprador cuando corresponda.
 - Lo importante primero; dejá afuera casi todo. Nada de inventarios ni conteos internos.
 - Lenguaje humano. Prohibido: "finding", "gap", "baseline", "evidencia nula", "geolocalizado", "workspace", "memoria", ids o códigos (H-VA-…, AN-…).
 - Usá solo referencias que aparezcan en el material. Cada cosa lleva las referencias de las empresas o personas con las que hay que moverse.

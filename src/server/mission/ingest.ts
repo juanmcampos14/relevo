@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { normalizeName } from "@/domain/crm-import/dedupe";
+import { originalUrl } from "@/server/news/original-url";
 
 // Lo que RELEVO descubre (vigilancia, Morning Brief) entra a la memoria sin que nadie lo apruebe cuando la
 // identificación es clara: guardar → vincular a la misión → auditar → poder deshacer. Si podría ser algo que
@@ -54,7 +55,9 @@ async function ask(db: Db, workspaceId: string, missionId: string, d: Discovered
 export async function ingestDiscovery(db: Db, opts: { workspaceId: string; missionId: string; force?: boolean }, items: Discovered[]): Promise<{ ingested: number; questions: number }> {
   let ingested = 0;
   let questions = 0;
-  for (const d of items) {
+  for (const raw of items) {
+    // La fuente queda con la URL de la nota del medio (no la redirección de Google Noticias).
+    const d = raw.source_url ? { ...raw, source_url: await originalUrl(raw.source_url) } : raw;
     const name = d.name.trim();
     if (name.length < 2) continue;
     if (d.maybe && !opts.force) {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cn } from "cn";
+import { hostOf } from "@/domain/links";
 
 // Piezas de las pantallas de RELEVO: misma identidad que la conversación (limpia, cálida, una idea por tarjeta).
 
@@ -18,8 +19,19 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
   return <h2 className="mt-10 mb-3 px-1 text-[13px] font-medium tracking-[0.08em] text-[#9C968A] uppercase">{children}</h2>;
 }
 
+/** Fuente externa: un clic abre la página original; sin URL, se dice. */
+export function SourceLink({ source }: { source: { name: string | null; url: string | null } }) {
+  const label = source.name || (source.url ? hostOf(source.url) : null);
+  if (!source.url) return <p className="mt-1 text-[13px] text-[#9C968A]">Fuente: {label ?? "sin nombre"} · sin link verificable</p>;
+  return (
+    <p className="mt-1 text-[13px]">
+      <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-[#5B6B4E] underline underline-offset-2 hover:no-underline">Fuente: {label}</a>
+    </p>
+  );
+}
+
 /** Algo para mirar: qué es, una línea, y "Contame" (la pregunta se hace sola en la conversación de abajo). */
-export function LookCard({ kicker, title, line, links, then, href, cta = "Contame", mapHref, className }: { kicker?: string | null; title: string; line?: string | null; links?: string[]; then?: string | null; href: string; cta?: string; mapHref?: string | null; className?: string }) {
+export function LookCard({ kicker, title, line, links, then, href, cta = "Contame", mapHref, source, className }: { kicker?: string | null; title: string; line?: string | null; links?: string[]; then?: string | null; href: string; cta?: string; mapHref?: string | null; source?: { name: string | null; url: string | null } | null; className?: string }) {
   return (
     <li className={cn(card, "flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5", className)}>
       <div className="min-w-0 flex-1">
@@ -28,6 +40,7 @@ export function LookCard({ kicker, title, line, links, then, href, cta = "Contam
         {line && <p className="mt-1 text-[15px] leading-relaxed text-[#6F6A60]">{line}</p>}
         {links && links.length > 0 && <p className="mt-2 text-[14px] leading-relaxed text-[#6F6A60]"><span className="text-[#1C1B19]">Se relaciona con</span> {links.join(" · ")}</p>}
         {then && <p className="mt-1 text-[14px] leading-relaxed text-[#6F6A60]"><span className="text-[#1C1B19]">Haría:</span> {then}</p>}
+        {source && <SourceLink source={source} />}
       </div>
       <div className="flex shrink-0 gap-2 self-start">
         <Link href={href} scroll={false} className="rounded-full bg-[#EFEBE2] px-4 py-2 text-[14px] font-medium text-[#1C1B19] hover:bg-[#E6E0D3]">{cta}</Link>

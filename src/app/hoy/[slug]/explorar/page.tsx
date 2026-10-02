@@ -35,7 +35,7 @@ export default async function Explorar({ params, searchParams }: PageProps<"/hoy
         <>
           <SectionLabel>{hello.mission ? `Lo que encontré en ${hello.mission.short}` : "Lo que encontré"}</SectionLabel>
           <ul className="space-y-3">
-            {away.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} links={it.links} then={it.then} href={askHref(base, it.ask)} />)}
+            {away.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} links={it.links} then={it.then} source={it.source} href={askHref(base, it.ask)} />)}
           </ul>
         </>
       )}

@@ -157,7 +157,10 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
     aog_scripts: (aog ?? []).map((q) => ({ code: q.code, entity: q.industry?.replace(/^AOG\s*·\s*/, "") ?? null, topic: q.dimension, opening: clip(q.question, 300), next_action: q.next_action })),
     assets: (assets ?? []).map((x) => x.assets).map((a) => {
       const p = [...a.asset_prices].sort((x, y) => (y.observed_on ?? "").localeCompare(x.observed_on ?? ""))[0];
-      return { ref: ref("asset", a.id), title: a.title, category: a.category, locality: a.locality, last_price: p ? `${p.currency} ${Number(p.amount).toLocaleString("es-AR")}${p.period ? `/${p.period}` : ""}` : null, prices_seen: a.asset_prices.length, price_status: a.price_status === "inconsistente" ? "PRECIO INCONSISTENTE" : a.price_status, located: a.latitude !== null };
+      return { ref: ref("asset", a.id), title: a.title, category: a.category, locality: a.locality, last_price: a.price_status === "inconsistente" ? null : p ? `${p.currency} ${Number(p.amount).toLocaleString("es-AR")}${p.period ? `/${p.period}` : ""}` : null,
+        // Dos fuentes que no coinciden: se muestran todas las cifras; RELEVO no elige cuál es la correcta.
+        prices_in_conflict: a.price_status === "inconsistente" ? [...new Set(a.asset_prices.map((x) => `${x.currency} ${Number(x.amount).toLocaleString("es-AR")}`))] : undefined,
+        prices_seen: a.asset_prices.length, price_status: a.price_status === "inconsistente" ? "PRECIO INCONSISTENTE — verificar" : a.price_status, located: a.latitude !== null };
     }),
     stories: (stories ?? []).map((s) => ({ title: s.title, status: s.status, watch_reason: s.watch_reason, last_seen_on: s.last_seen_on })),
     recent_signals: (signals ?? []).map((s) => ({ headline: s.headline, basis: s.basis, change: s.change, on: s.happened_on, publisher: s.publisher, source: s.source_url, vertical: s.vertical })),

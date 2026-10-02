@@ -7,6 +7,7 @@ import { MAX_BRIEF_ITEMS, MissionBriefSchema, tidyBrief, type MissionBrief } fro
 import { deepCall } from "@/server/mission/deep";
 import type { CollectedItem } from "./collect";
 import { OPPORTUNITY_QUERIES, RESEARCH_BASE, missionContext, pilotCollect, research } from "./pilot";
+import { originalUrl } from "@/server/news/original-url";
 
 // El Morning Brief (elegido después de los pilotos): una sola corrida diaria que parte de la misión y lee
 // lo que pasa afuera también con lente de oportunidad. Los pasos se usan desde la máquina de estados del
@@ -53,7 +54,10 @@ export async function writeMissionBrief(db: Db, o: { workspaceId: string; missio
     prompt: `${mission.text}\n\nMEMO DE INVESTIGACIÓN:\n${o.memo}\n\nNOTAS RECOLECTADAS:\n${o.items.map((i) => `- ${i.publisher} · ${i.publishedAt ?? "s/f"} · ${i.title} · ${i.url}${i.alreadySeen ? " · (ya la vimos antes)" : ""}`).join("\n")}`,
   });
   if (!s.ok) throw new Error(s.message);
-  return { brief: tidyBrief(s.value, mission.refs), costUsd: s.costUsd };
+  const brief = tidyBrief(s.value, mission.refs);
+  // Cada fuente, a la nota del medio: un clic en el mail o en RELEVO abre el artículo, no Google Noticias.
+  const items = await Promise.all(brief.items.map(async (x) => ({ ...x, source_url: x.source_url ? await originalUrl(x.source_url) : "" })));
+  return { brief: { ...brief, items }, costUsd: s.costUsd };
 }
 
 const BASIS: Record<MissionBrief["items"][number]["basis"], "hecho" | "declaracion" | "inferencia"> = { hecho: "hecho", declaracion: "declaracion", aviso_comercial: "declaracion", hipotesis: "inferencia" };

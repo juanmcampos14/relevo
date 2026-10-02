@@ -16,7 +16,7 @@ type Db = SupabaseClient<Database>;
 const PROMPT_VERSION = "mision-estado-v3";
 
 export const StateSchema = z.object({
-  purpose: z.string().describe("Qué estamos intentando conseguir, en una oración (p. ej. 'Descubrir y validar oportunidades de negocio e inversión alrededor del crecimiento de Vaca Muerta')."),
+  purpose: z.string().describe("Qué estamos intentando conseguir, en una oración (p. ej. 'Descubrir y validar oportunidades de negocio e inversión alrededor del crecimiento de una zona')."),
   stage: z.string().describe("Dónde estamos hoy, en una oración corta (p. ej. 'Research previo y preparación de la primera etapa de terreno')."),
   thesis: z.string().describe("La tesis de trabajo en dos oraciones como mucho, en lenguaje simple."),
   fronts: z.array(z.object({

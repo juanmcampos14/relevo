@@ -15,6 +15,7 @@ import { Section, formatDate } from "@/components/app/bits";
 import { PhonePendingNote } from "@/components/app/capture/capture-dock";
 import { setHomeView } from "./home-actions";
 import { ExecutiveView } from "./executive";
+import { isMissionBriefContent } from "@/domain/brief/mission-brief";
 
 function todayAR() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
@@ -230,11 +231,13 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
   const topUnknowns = [...gapCount].sort((a, b) => b[1] - a[1]).slice(0, 3);
   const disputed = [...latestByFinding.values()].filter((a) => (a.gaps as Gap[]).includes("contradiccion_sin_resolver"));
   // Morning Brief: lo que importa hoy afuera (el brief completo vive en su página y llega por email).
-  const briefPoints = ((lastBrief?.content as { headline_points?: { text: string }[]; quiet_day_note?: string } | null)?.headline_points ?? []).slice(0, 5);
+  const briefPoints = isMissionBriefContent(lastBrief?.content)
+    ? lastBrief.content.brief.items.map((x) => ({ text: x.title }))
+    : ((lastBrief?.content as { headline_points?: { text: string }[]; quiet_day_note?: string } | null)?.headline_points ?? []).slice(0, 5);
   const Brief = lastBrief ? (
     <Section title={lastBrief.brief_date === today ? "Morning Brief de hoy" : `Último Morning Brief (${formatDate(lastBrief.brief_date)})`} actions={<Link href={`${base}/brief/${lastBrief.id}`} className={linkCls}>Abrir</Link>}>
       <List>
-        {briefPoints.length ? briefPoints.map((p, i) => <Row key={i} href={`${base}/brief/${lastBrief.id}`} title={p.text} />) : <Row href={`${base}/brief/${lastBrief.id}`} title={(lastBrief.content as { quiet_day_note?: string }).quiet_day_note || "Sin cambios relevantes"} />}
+        {briefPoints.length ? briefPoints.map((p, i) => <Row key={i} href={`${base}/brief/${lastBrief.id}`} title={p.text} />) : <Row href={`${base}/brief/${lastBrief.id}`} title={isMissionBriefContent(lastBrief.content) ? lastBrief.content.brief.opening : (lastBrief.content as { quiet_day_note?: string }).quiet_day_note || "Sin cambios relevantes"} />}
       </List>
     </Section>
   ) : null;
@@ -329,7 +332,7 @@ export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
         <div className="relative flex flex-col gap-3 p-5 text-white sm:flex-row sm:items-end sm:justify-between sm:p-6">
           <div className="space-y-0.5">
             <p className="text-xs font-medium tracking-[0.2em] text-[oklch(0.85_0.1_60)] uppercase">Hoy · {formatDate(today)} · {profile?.display_name || ctx.user.email}</p>
-            <h1 className="text-2xl font-semibold tracking-tight">RELEVO — {mission?.name ?? "Añelo / Vaca Muerta"}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">RELEVO — {mission?.name ?? "tu misión"}</h1>
             <p className="max-w-2xl text-sm text-white/85">{mission?.objective || MISSION}</p>
             {mission && (
               <p className="text-sm text-white/85">

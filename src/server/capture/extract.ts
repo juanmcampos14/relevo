@@ -29,7 +29,7 @@ export const ExtractionSchema = z.object({
     .describe("La empresa u organización principal de la captura, si se menciona o se ve (cartel con nombre). null si no hay."),
   asset: z
     .object({
-      title: z.string().describe("Nombre corto: \"Local comercial en Los Algarrobos\"."),
+      title: z.string().describe("Nombre corto que identifica el activo (qué es y dónde): \"Local comercial en Los Algarrobos\". Nunca la narrativa del vendedor (renta, capacidad proyectada, \"oportunidad única\"): eso va como lo que declara el vendedor."),
       kind: z.enum(["inmueble", "terreno", "local", "fondo_de_comercio", "otro"]),
       operation: z.enum(["venta", "alquiler", "asociacion", "desconocida"]),
       address_text: z.string().nullable(),
@@ -129,7 +129,7 @@ export function fromWire(value: unknown, t: z.ZodType = ExtractionSchema): unkno
   return value;
 }
 
-export const SYSTEM = `Estructurás capturas de campo de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta (Argentina). Una captura es material crudo: una nota escrita o dictada, fotos y la ubicación.
+export const SYSTEM = `Estructurás capturas de campo de un equipo que investiga oportunidades de negocio en Argentina (la zona y el objetivo los define la misión). Una captura es material crudo: una nota escrita o dictada, fotos y la ubicación.
 
 Tu trabajo es PROPONER, no decidir: todo lo que devolvés lo revisa una persona antes de guardarse.
 

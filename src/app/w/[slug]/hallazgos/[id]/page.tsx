@@ -48,7 +48,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
 
   const { data: f } = await supabase
     .from("findings")
-    .select("id, statement, kind, analysis, review_status, maturity, case_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
+    .select("id, statement, kind, analysis, review_status, maturity, case_status, created_at, created_by, company_id, companies(id, trade_name, legal_name), sources(title, url, reference), finding_evidence(stance, note, created_at, evidence(id, statement, quote, sources(title, url), verification_status, origin_kind, observed_at, revalidate_after, company_id, stated_by_contact_id, capture_id, capture_media_id, media_start_ms, visit_id, source_id, declared_by, companies(trade_name, legal_name), stated_by:contacts!evidence_workspace_id_stated_by_contact_id_fkey(full_name, role_title)))")
     .eq("id", id)
     .maybeSingle();
   if (!f) notFound();
@@ -378,6 +378,9 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
                     </Link>
                   )}
                   {e.visit_id && <Link href={`${base}/agenda/visita/${e.visit_id}`} className="text-primary hover:underline">· visita</Link>}
+                  {e.sources?.url ? (
+                    <a href={e.sources.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">· {e.sources.title || "fuente"}</a>
+                  ) : e.sources ? <span>· {e.sources.title} (sin link verificable)</span> : null}
                 </p>
                 {note && <p className="text-xs">Nota: {note}</p>}
               </li>

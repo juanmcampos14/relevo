@@ -10,7 +10,7 @@ import { BASIS, CHANNEL, evidenceProvenance, isStrongSource } from "@/domain/pro
 import { companyName } from "@/server/entities";
 import { qualityChecks } from "@/server/quality";
 import type { ToolContext } from "./tools";
-import { ANELO, PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type PlaceCategory, type Point } from "@/domain/geo";
+import { PLACE_CATEGORIES, PLACE_CATEGORY_KEYS, formatDistance, type PlaceCategory, type Point } from "@/domain/geo";
 import { geocode, memoryNearby, placesNearby } from "@/server/geo";
 import { structureLater } from "@/server/capture/background";
 import { missionBrief } from "./mission";
@@ -20,13 +20,22 @@ import { randomUUID } from "node:crypto";
 import { RelationshipInput, applyRelationship } from "./relationships";
 import { setAside } from "./set-aside";
 import { applyCorrection, forgetMovesAbout, liveFocus, stepTaken } from "@/server/mission/focus";
+import { isMissionBriefContent } from "@/domain/brief/mission-brief";
 
-/** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
-function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
+/**
+ * Centro de una consulta territorial: el punto pedido, donde está el usuario o la zona de la misión (el centro
+ * de sus activos ubicados). Si no hay ninguno, no se supone un lugar: se pide.
+ */
+async function centerOf(a: Record<string, unknown>, ctx: ToolContext): Promise<{ point: Point; label: string } | null> {
   if (typeof a.lat === "number" && typeof a.lng === "number") return { point: { lat: a.lat, lng: a.lng }, label: `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` };
   if (ctx.here) return { point: { lat: ctx.here.lat, lng: ctx.here.lng }, label: "donde está el usuario (GPS del teléfono)" };
-  return { point: ANELO, label: "centro de Añelo" };
+  if (!ctx.missionId) return null;
+  const { data } = await ctx.db.from("campaign_targets").select("assets(latitude, longitude)").eq("campaign_id", ctx.missionId).not("asset_id", "is", null);
+  const pts = (data ?? []).map((t) => t.assets).filter((x): x is { latitude: number; longitude: number } => x?.latitude != null && x?.longitude != null);
+  if (!pts.length) return null;
+  return { point: { lat: pts.reduce((s, p) => s + p.latitude, 0) / pts.length, lng: pts.reduce((s, p) => s + p.longitude, 0) / pts.length }, label: "la zona de la misión (centro de sus activos ubicados)" };
 }
+const NO_CENTER = "No sé dónde buscar: pedile a la persona que comparta su ubicación o que nombre un lugar (y ubicalo con locate).";
 
 // Herramientas de conocimiento del asistente: la memoria completa (no solo la pantalla actual), con la
 // procedencia de cada dato. Todas son de lectura; open_page solo navega.
@@ -104,12 +113,12 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "locate",
-    description: "Ubica un lugar por nombre o dirección (\"Añelo\", \"Ruta 7 y 17, Añelo\", \"parque industrial de Añelo\") y devuelve coordenadas.",
+    description: "Ubica un lugar por nombre o dirección (\"Av. Libertador 1500, Vicente López\", \"parque industrial de Pilar\", \"estación de San Isidro\") y devuelve coordenadas.",
     input_schema: strict({ query: { type: "string" } }, ["query"]),
   },
   {
     name: "places_nearby",
-    description: "Lugares reales alrededor de un punto (por defecto, donde está el usuario o el centro de Añelo): por categoría (ferreteria, corralon, electricidad, sanitarios, seguridad_industrial, alojamiento, gastronomia, gimnasio, lavadero, combustible, supermercado, taller, industria) o por texto. Devuelve nombre, distancia, dirección, horarios y la FUENTE (Google Places u OpenStreetMap) con sus límites: cero resultados no significa cero oferta. Complementá con la búsqueda web.",
+    description: "Lugares reales alrededor de un punto (por defecto, donde está el usuario o la zona de la misión): por categoría (ferreteria, corralon, electricidad, sanitarios, seguridad_industrial, alojamiento, gastronomia, gimnasio, lavadero, combustible, supermercado, taller, industria) o por texto. Devuelve nombre, distancia, dirección, horarios y la FUENTE (Google Places u OpenStreetMap) con sus límites: cero resultados no significa cero oferta. Complementá con la búsqueda web.",
     input_schema: strict({
       category: { type: "string", enum: [...PLACE_CATEGORY_KEYS] },
       query: { type: "string", description: "Texto libre si no hay categoría" },
@@ -119,7 +128,7 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "memory_nearby",
-    description: "Lo que RELEVO ya tiene alrededor de un punto: activos, empresas (establecimientos) y capturas con coordenadas, con distancias. Por defecto, donde está el usuario o el centro de Añelo.",
+    description: "Lo que RELEVO ya tiene alrededor de un punto: activos, empresas (establecimientos) y capturas con coordenadas, con distancias. Por defecto, donde está el usuario o la zona de la misión.",
     input_schema: strict({ lat: { type: "number" }, lng: { type: "number" }, radius_m: { type: "integer", minimum: 100, maximum: 50000 } }),
   },
   {
@@ -129,7 +138,7 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "morning_brief",
-    description: "El Morning Brief de RELEVO (parte diario de inteligencia externa: Vaca Muerta News, medios regionales, oficiales y corporativos, cruzado con la memoria). Sin 'date' trae el último generado; incluye señales (hecho/declaración/inferencia, fuente, vertical, empresa), acciones sugeridas, preguntas para campo, historias vivas y watchlist. Usalo para '¿qué hay hoy?', '¿qué dijo el brief?', '¿qué pasó con X en las noticias?' o para cruzar noticias con una hipótesis. Lo externo es contexto: no prueba demanda.",
+    description: "El Morning Brief de RELEVO (parte diario de inteligencia externa de la misión del Brief: medios, fuentes oficiales y corporativas, cruzado con la memoria). Sin 'date' trae el último generado; incluye señales (hecho/declaración/inferencia, fuente, vertical, empresa), acciones sugeridas, preguntas para campo, historias vivas y watchlist. Usalo para '¿qué hay hoy?', '¿qué dijo el brief?', '¿qué pasó con X en las noticias?' o para cruzar noticias con una hipótesis. Lo externo es contexto: no prueba demanda.",
     input_schema: strict({ date: { type: "string", description: "YYYY-MM-DD (opcional)" } }),
   },
   {
@@ -139,17 +148,17 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "mission_brief",
-    description: "Todo lo que el Brain sabe de una misión en una llamada (por defecto la misión activa, p. ej. Añelo): fechas y momento (preparación / en curso), documentos del plan, hipótesis con qué creemos, nivel de evidencia, gaps y quién puede ayudar, objetivos y prioridades, contactos con borrador de primer contacto listo, follow-ups hasta el fin de la misión, agenda, guiones AOG, activos del Radar con último precio, historias vivas, señales recientes y cobertura de ubicaciones. Usala para 'preparame el viaje', '¿qué estamos intentando comprobar?', '¿con quién hablo?', '¿qué hago esta semana para la misión?'. Es materia prima: sintetizá lo importante ahora, no la repitas.",
-    input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" }, detail: { type: "boolean", description: "true para el detalle completo (hipótesis, guiones AOG, activos, follow-ups, señales). Por defecto trae solo lo que RELEVO ya preparó." } }),
+    description: "Todo lo que el Brain sabe de una misión en una llamada (por defecto la misión activa): fechas y momento (preparación / en curso), documentos del plan, hipótesis con qué creemos, nivel de evidencia, gaps y quién puede ayudar, objetivos y prioridades, contactos con borrador de primer contacto listo, follow-ups hasta el fin de la misión, agenda, guiones de eventos, activos del Radar con último precio, historias vivas, señales recientes y cobertura de ubicaciones. Usala para 'preparame el viaje', '¿qué estamos intentando comprobar?', '¿con quién hablo?', '¿qué hago esta semana para la misión?'. Es materia prima: sintetizá lo importante ahora, no la repitas.",
+    input_schema: strict({ ref: { type: "string", description: "campaign:uuid (opcional: por defecto la misión activa)" }, detail: { type: "boolean", description: "true para el detalle completo (hipótesis, guiones de eventos, activos, follow-ups, señales). Por defecto trae solo lo que RELEVO ya preparó." } }),
   },
   {
     name: "aog_plan",
-    description: "Plan de AOG Patagonia que RELEVO ya preparó: a quién buscar, por qué, qué sabemos, qué queremos descubrir, con quién hablar, qué preguntar y qué cambiaría con la respuesta; y qué no vale el tiempo. Usala para '¿a quién busco en AOG?' y para 'estoy frente a X, ¿entro?' (si X no está en el plan, buscala con find).",
+    description: "Plan del evento de la misión (una feria o congreso del sector) que RELEVO ya preparó: a quién buscar, por qué, qué sabemos, qué queremos descubrir, con quién hablar, qué preguntar y qué cambiaría con la respuesta; y qué no vale el tiempo. Usala para '¿a quién busco en el evento?' y para 'estoy frente a X, ¿entro?' (si X no está en el plan, buscala con find).",
     input_schema: strict({ company: { type: "string", description: "Nombre de la empresa si preguntan por una en particular (opcional)" } }),
   },
   {
     name: "research_questions",
-    description: "Preguntas del diseño de investigación: guiones de conversación AOG (aog=true), preguntas de entrevista, de Voice, reglas y controles, con las hipótesis que validan. Filtros: finding_ref (preguntas de una hipótesis), aog, kind (entrevista, regla, voice, control), query (texto). Usala para preparar una conversación o una visita.",
+    description: "Preguntas del diseño de investigación: guiones de conversación para el evento de la misión (aog=true), preguntas de entrevista, de Voice, reglas y controles, con las hipótesis que validan. Filtros: finding_ref (preguntas de una hipótesis), aog, kind (entrevista, regla, voice, control), query (texto). Usala para preparar una conversación o una visita.",
     input_schema: strict({
       finding_ref: { type: "string" },
       aog: { type: "boolean" },
@@ -190,12 +199,12 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "watch_for",
-    description: "La persona pide que le avisen si aparece algo (\"avisame cuando haya locales chicos en Añelo\", \"si aparece una contratista nueva, avisame\"). Queda como pedido de aviso de la misión: la vigilancia lo mira durante el día y avisa (mail + inicio) solo si aparece algo que lo cumple. criterion: qué tiene que aparecer, concreto y en sus palabras; queries: 1 a 3 búsquedas de noticias o avisos que ayuden a encontrarlo. No lo conviertas en una tarea. Confirmá en una línea.",
+    description: "La persona pide que le avisen si aparece algo (\"avisame cuando haya locales chicos en la zona\", \"si aparece una contratista nueva, avisame\"). Queda como pedido de aviso de la misión: la vigilancia lo mira durante el día y avisa (mail + inicio) solo si aparece algo que lo cumple. criterion: qué tiene que aparecer, concreto y en sus palabras; queries: 1 a 3 búsquedas de noticias o avisos que ayuden a encontrarlo. No lo conviertas en una tarea. Confirmá en una línea.",
     input_schema: strict({ criterion: { type: "string" }, queries: { type: "array", items: { type: "string" } } }, ["criterion"]),
   },
   {
     name: "switch_mission",
-    description: "Cambia la misión de trabajo cuando la persona lo pide (\"entrá a Vaca Muerta\", \"quiero trabajar en Locales Zona Norte\"). mission_ref = 'campaign:…' de las misiones del contexto. Después respondé en una línea en qué misión están y qué movería ahí.",
+    description: "Cambia la misión de trabajo cuando la persona lo pide (\"entrá a la misión de locales\", \"quiero trabajar en Locales Zona Norte\"). mission_ref = 'campaign:…' de las misiones del contexto. Después respondé en una línea en qué misión están y qué movería ahí.",
     input_schema: strict({ mission_ref: { type: "string" } }, ["mission_ref"]),
   },
   {
@@ -462,6 +471,18 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       ]);
       const b = briefs?.[0];
       if (!b) return { content: JSON.stringify({ note: "Todavía no hay un Morning Brief generado.", stories: stories ?? [] }) };
+      if (isMissionBriefContent(b.content)) {
+        // El Brief de la misión: lo que cambió, por qué importa, qué haría y la fuente original de cada cosa.
+        const mb = b.content.brief;
+        return {
+          content: track(ctx, {
+            brief_date: b.brief_date, generated_at: b.generated_at, mission: { ref: `campaign:${b.content.mission_id}`, name: b.content.mission_name },
+            opening: mb.opening, quiet: mb.quiet, watching: mb.watching || null,
+            items: mb.items.map((x) => ({ title: x.title, why_us: x.why_us, moves: x.moves, basis: x.basis, action: x.action || null, opportunity: x.opportunity || null, source: x.source_url ? { name: x.source_name, url: x.source_url } : { name: x.source_name || null, url: null, note: "sin link verificable" }, memory: x.connects.map((r) => ({ ref: r })) })),
+            discarded: mb.discarded.length,
+          }),
+        };
+      }
       const c = b.content as { headline_points?: unknown; signals?: { id: string; headline: string; summary: string; basis: string; change: string; source_url: string; publisher: string; vertical: string; companies: string[]; company_ids: string[]; finding_ids: string[]; reading: string; story_title: string | null }[]; actions?: unknown; field_questions?: unknown; watchlist?: unknown; connections?: unknown; quiet_day_note?: string };
       return {
         content: track(ctx, {
@@ -598,7 +619,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
             // La historia y el estado de la misión (para poner al día a quien se suma o vuelve).
             state: await missionStateLean(db, brief.mission.ref.split(":")[1]),
             contacts_to_move: { ...brief.contacts_to_move, items: brief.contacts_to_move.items.slice(0, 8) },
-            more: "Para el detalle (hipótesis, guiones AOG, activos, follow-ups, señales) llamá mission_brief con detail=true, solo si lo piden.",
+            more: "Para el detalle (hipótesis, guiones de eventos, activos, follow-ups, señales) llamá mission_brief con detail=true, solo si lo piden.",
           }),
         };
       }
@@ -607,7 +628,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "aog_plan": {
       const { data: c } = ctx.missionId ? await db.from("campaigns").select("synthesis").eq("id", ctx.missionId).maybeSingle() : { data: null };
       const plan = (c?.synthesis as { aog?: { opening: string; targets: { company_ref: string; contact_ref: string; name: string; hypothesis_refs: string[] }[]; not_worth: string[]; computed_at: string } } | null)?.aog;
-      if (!plan) return { content: "Todavía no hay un plan de AOG preparado: respondé con lo que sepas (research_questions con aog=true y mission_brief) y decí que se está preparando." };
+      if (!plan) return { content: "Esta misión no tiene un plan de evento preparado: respondé con lo que sepas (research_questions con aog=true y mission_brief) y decí que se está preparando." };
       const q = typeof a.company === "string" ? fold(a.company) : null;
       const targets = q ? plan.targets.filter((t) => fold(t.name).includes(q) || q.includes(fold(t.name))) : plan.targets;
       for (const t of plan.targets) for (const r of [t.company_ref, t.contact_ref, ...t.hypothesis_refs]) if (r) ctx.seenRefs.add(r);
@@ -785,7 +806,8 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       return { content: g ? JSON.stringify({ ...g, source: "OpenStreetMap / Nominatim" }) : "No encontré ese lugar en el mapa." };
     }
     case "places_nearby": {
-      const center = centerOf(a, ctx);
+      const center = await centerOf(a, ctx);
+      if (!center) return { content: NO_CENTER, isError: true };
       const category = typeof a.category === "string" && a.category in PLACE_CATEGORIES ? (a.category as PlaceCategory) : null;
       const radius = typeof a.radius_m === "number" ? a.radius_m : 5000;
       const r = await placesNearby(center.point, radius, category, typeof a.query === "string" ? a.query : undefined);
@@ -799,13 +821,15 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       };
     }
     case "memory_nearby": {
-      const center = centerOf(a, ctx);
+      const center = await centerOf(a, ctx);
+      if (!center) return { content: NO_CENTER, isError: true };
       const radius = typeof a.radius_m === "number" ? a.radius_m : 5000;
       const pts = await memoryNearby(db, ctx.slug, center.point, radius);
       return { content: track(ctx, { center: center.label, radius_m: radius, count: pts.length, items: pts.slice(0, 60).map((p) => ({ ref: p.ref, kind: p.kind, name: p.name, distance: formatDistance(p.distance_m), detail: p.detail })) }) };
     }
     case "show_map": {
-      const center = centerOf(a, ctx);
+      const center = await centerOf(a, ctx);
+      if (!center) return { content: NO_CENTER, isError: true };
       const params = new URLSearchParams({ lat: String(center.point.lat), lng: String(center.point.lng), r: String(typeof a.radius_m === "number" ? a.radius_m : 5000) });
       if (typeof a.category === "string" && a.category in PLACE_CATEGORIES) params.set("cat", a.category);
       const href = `${base}/mapa?${params}`;

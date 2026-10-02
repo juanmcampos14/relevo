@@ -21,26 +21,26 @@ const TargetSchema = z.object({
   targets: z.array(
     z.object({
       target_id: z.string(),
-      purpose: z.enum(PURPOSE_KEYS).describe("Qué representa el actor para la misión. comprar_asociar: dueño u operador de un negocio, activo, alojamiento o servicio. vender_crear: quien compra, paga, asigna o decide (operadoras, contratistas, compradores corporativos). inteligencia: brokers, asesores, cámaras, medios, gente que explica cómo funciona Añelo."),
+      purpose: z.enum(PURPOSE_KEYS).describe("Qué representa el actor para la misión. comprar_asociar: dueño u operador de un negocio, activo, alojamiento o servicio. vender_crear: quien compra, paga, asigna o decide (operadoras, contratistas, compradores corporativos). inteligencia: brokers, asesores, cámaras, medios, gente que explica cómo funciona la zona."),
       why: z.string().describe("Por qué importa para la misión, en una oración humana."),
       hypothesis_refs: z.array(z.string()).describe("'finding:…' de la lista que este actor ayuda a validar."),
       contact_ref: z.string().describe("'contact:…' de la persona a quien conviene escribirle (de su lista), o \"\" si no hay."),
       we_know: z.string().describe("Qué sabemos hoy, breve. Si no sabemos nada, decilo."),
       we_need: z.string().describe("Qué necesitamos saber de este actor."),
       objective: z.string().describe("Objetivo del contacto, concreto (p. ej. identificar necesidad + comprador)."),
-      this_week: z.boolean().describe("true si conviene moverlo esta semana para preparar la misión (cierra un gap importante, tiene follow-up cercano, borrador listo o es una puerta para AOG)."),
+      this_week: z.boolean().describe("true si conviene moverlo esta semana para preparar la misión (cierra un gap importante, tiene follow-up cercano, borrador listo o es una puerta para un evento de la misión)."),
       today: z.boolean().describe("true solo si requiere atención hoy (follow-up que vence hoy o vencido, o un compromiso con fecha)."),
       attention: z.string().describe("Si today o this_week: por qué, en pocas palabras. Si no, \"\"."),
     }),
   ),
 });
 
-const SYSTEM = `Preparás la misión de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta. Para cada objetivo (empresa) decidís para qué nos sirve en esta misión y qué deberíamos lograr con el contacto.
+const SYSTEM = `Preparás la misión de un equipo que investiga oportunidades de negocio (la zona y el objetivo salen de la misión). Para cada objetivo (empresa) decidís para qué nos sirve en esta misión y qué deberíamos lograr con el contacto.
 Reglas:
 - Investigamos para cerrar gaps: un contacto vale por las hipótesis que ayuda a validar y por el gap que cierra.
 - Usá solo ids de las listas. No inventes personas, cargos ni datos.
 - Si el objetivo trae "propósito definido", respetalo.
-- this_week: como mucho uno de cada cuatro objetivos; priorizá puertas para AOG, follow-ups cercanos, borradores listos y hipótesis con más en juego. today: solo con un vencimiento o compromiso de hoy o vencido.
+- this_week: como mucho uno de cada cuatro objetivos; priorizá puertas para eventos del sector, follow-ups cercanos, borradores listos y hipótesis con más en juego. today: solo con un vencimiento o compromiso de hoy o vencido.
 - Español rioplatense, breve, sin jerga interna (nada de "finding", "gap", "baseline").`;
 
 export async function briefTargets(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; only?: string[] }) {

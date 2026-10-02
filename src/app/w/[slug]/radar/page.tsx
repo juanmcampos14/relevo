@@ -35,7 +35,7 @@ export default async function RadarPage({ params }: PageProps<"/w/[slug]/radar">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link href={`${base}/e/asset/${a.id}`} className="font-medium hover:underline">{a.title}</Link>
                       {a.radar_ref && <span className="font-mono text-xs text-muted-foreground">{a.radar_ref}</span>}
-                      {a.price_status === "inconsistente" && <Pill className="border-amber-500/50 text-amber-700 dark:text-amber-300">PRECIO INCONSISTENTE</Pill>}
+                      {a.price_status === "inconsistente" && <Pill className="border-amber-500/50 text-amber-700 dark:text-amber-300">PRECIO INCONSISTENTE — verificar</Pill>}
                       {a.material_change?.startsWith("REVISAR") && <Pill className="border-destructive/50 text-destructive">revisar datos</Pill>}
                     </div>
                     <p className="text-xs text-muted-foreground">{[a.category, a.locality, a.operation, a.capacity_text, a.occupancy_declared && `ocupación: ${a.occupancy_declared}`, a.broker_text && `broker: ${a.broker_text}`].filter(Boolean).join(" · ")}</p>

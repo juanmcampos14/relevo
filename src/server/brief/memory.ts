@@ -52,7 +52,7 @@ export async function loadBriefMemory(db: SupabaseClient<Database>, workspaceId:
 /** Memoria en texto para el modelo (ids exactos: el modelo solo puede citar lo que está acá). */
 export function memoryDigest(m: BriefMemory): string {
   const L: string[] = [];
-  L.push(`MISIÓN: ${m.missionObjective ?? "Añelo / Vaca Muerta — descubrir, validar y desarrollar oportunidades de inversión y negocio a partir de necesidades reales, evidencia de campo e inteligencia de mercado."}`);
+  L.push(`MISIÓN: ${m.missionObjective ?? "Descubrir, validar y desarrollar oportunidades de inversión y negocio a partir de necesidades reales, evidencia de campo e inteligencia de mercado."}`);
   L.push("", "PROYECTOS Y MISIÓN (campaign · id · nombre):", ...m.campaigns.map((c) => `campaign · ${c.id} · ${c.name} (${c.kind})`));
   L.push("", "HISTORIAS QUE VENIMOS SIGUIENDO (id · estado · desde → última vez · título · estado actual):");
   L.push(...(m.stories.length ? m.stories.map((s) => `${s.id} · ${s.status}${s.watch_reason ? ` (${s.watch_reason})` : ""} · ${s.first_seen_on} → ${s.last_seen_on} · ${s.title} · ${s.summary ?? ""}`) : ["(ninguna todavía)"]));

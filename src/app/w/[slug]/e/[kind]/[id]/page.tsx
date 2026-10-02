@@ -35,6 +35,7 @@ import { findingSelect, profileNames, toFindingRow } from "@/server/findings";
 import { FindingCard } from "@/components/oportunidades/finding-card";
 import { FindingForm } from "@/components/oportunidades/finding-form";
 import { createFinding } from "../../../oportunidades/actions";
+import { evidenceAuthor } from "@/domain/evidence-author";
 
 type Row = Record<string, unknown> & { id: string; is_demo: boolean; verification_status: string; source_id: string | null };
 
@@ -290,7 +291,7 @@ export default async function EntityPage({ params }: PageProps<"/w/[slug]/e/[kin
                           {e.capture_id && <Link href={`${base}/capturas/${e.capture_id}`} className="text-primary hover:underline">· captura original</Link>}
                           {e.visit_id && <Link href={`${base}/agenda/visita/${e.visit_id}`} className="text-primary hover:underline">· visita</Link>}
                           {!e.sources && !e.capture_id && !e.visit_id && <span>· sin fuente</span>}
-                          <span>· {formatDate(e.observed_at ?? e.created_at)}{e.created_by ? ` · cargó ${nameOf(e.created_by)}` : ""}</span>
+                          <span>· {formatDate(e.observed_at ?? e.created_at)}{` · aportó ${evidenceAuthor(e.created_by ? nameOf(e.created_by) : null, e.origin_kind)}`}</span>
                           {e.revalidate_after && <span>· revalidar {formatDate(e.revalidate_after)}</span>}
                         </div>
                         {e.next_verification_step && <p className="text-xs">Para verificar: {e.next_verification_step}</p>}

@@ -43,10 +43,10 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
   // Interrumpir solo cuando importa: lo que la vigilancia marcó como material (o algo nuevo de relevancia alta)
   // en esta misión, de las últimas 36 horas.
   const { data: alerts } = hello.mission
-    ? await supabase.from("brief_signals").select("id, headline, why_it_matters, alerted_at").contains("campaign_ids", [hello.mission.id]).eq("relevance", "alta").in("change", ["nuevo", "contradicho"]).gte("created_at", hoursAgo(36)).order("created_at", { ascending: false }).limit(5)
+    ? await supabase.from("brief_signals").select("id, headline, why_it_matters, alerted_at, source_url, publisher").contains("campaign_ids", [hello.mission.id]).eq("relevance", "alta").in("change", ["nuevo", "contradicho"]).gte("created_at", hoursAgo(36)).order("created_at", { ascending: false }).limit(5)
     : { data: [] };
   const alert = (alerts ?? []).find((a) => a.alerted_at) ?? (alerts ?? [])[0];
-  const interrupt: Interrupt = alert ? { id: alert.id, title: `${hello.name ? `${hello.name}, apareció` : "Apareció"} algo en ${hello.mission?.short ?? "la misión"} que miraría.`, detail: alert.why_it_matters ? `${alert.headline} ${alert.why_it_matters}` : alert.headline } : null;
+  const interrupt: Interrupt = alert ? { id: alert.id, title: `${hello.name ? `${hello.name}, apareció` : "Apareció"} algo en ${hello.mission?.short ?? "la misión"} que miraría.`, detail: alert.why_it_matters ? `${alert.headline} ${alert.why_it_matters}` : alert.headline, source: { name: alert.publisher, url: alert.source_url } } : null;
 
   // Quien entra a una misión que ya empezó: RELEVO lo pone en situación. Si volvés después de un rato: qué
   // aportaron los demás. Después queda marcada la visita.

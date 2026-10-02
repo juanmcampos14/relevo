@@ -18,7 +18,12 @@ function inline(text: string, labels: Map<string, RefLabel>, key: string): React
     const l = labels.get(m[1]);
     const short = SHORT[m[1].split(":")[0]] ?? "registro";
     out.push(
-      l?.href ? (
+      l?.href && /^https?:\/\//.test(l.href) ? (
+        // Una fuente externa abre la nota original en otra pestaña, sin pasar por RELEVO.
+        <a key={`${key}-c${n}`} href={l.href} target="_blank" rel="noopener noreferrer" title={l.label} className="mx-0.5 rounded bg-primary/10 px-1 align-baseline text-[0.75em] text-primary hover:underline">
+          {short}
+        </a>
+      ) : l?.href ? (
         <Link key={`${key}-c${n}`} href={l.href} title={l.label} className="mx-0.5 rounded bg-primary/10 px-1 align-baseline text-[0.75em] text-primary hover:underline">
           {short}
         </Link>
@@ -33,13 +38,41 @@ function inline(text: string, labels: Map<string, RefLabel>, key: string): React
   return out;
 }
 
+// Enlaces externos: [texto](https://…) o una URL suelta. Un clic abre la fuente original.
+const LINK = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()\]]+[^\s<>()\].,;:!?"'])/g;
+const linkClass = "text-primary underline underline-offset-2 hover:no-underline break-words";
+
 function bold(text: string, key: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let n = 0;
+  for (const m of text.matchAll(LINK)) {
+    out.push(...strong(text.slice(last, m.index), `${key}-s${n}`));
+    const href = m[2] ?? m[3];
+    const label = m[1] ?? hostLabel(href);
+    out.push(<a key={`${key}-l${n}`} href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>{label}</a>);
+    last = (m.index ?? 0) + m[0].length;
+    n++;
+  }
+  out.push(...strong(text.slice(last), `${key}-s-end`));
+  return out;
+}
+
+function hostLabel(href: string) {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return href;
+  }
+}
+
+function strong(text: string, key: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong> : <Fragment key={`${key}-${i}`}>{part}</Fragment>,
   );
 }
 
-/** Texto del asistente: párrafos, listas simples, negritas y citas [[tipo:uuid]] como enlaces. */
+/** Texto del asistente: párrafos, listas simples, negritas, enlaces externos y citas [[tipo:uuid]] como enlaces. */
 export function RichText({ text, labels }: { text: string; labels: Map<string, RefLabel> }) {
   const blocks = text.split(/\n{2,}/);
   return (

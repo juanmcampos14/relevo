@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { TOPICS, mentions } from "@/domain/news";
 import * as google from "./google-news";
 import * as bing from "./bing-news";
+import { originalUrl } from "./original-url";
 
 export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
 
@@ -36,6 +37,8 @@ export async function refreshNews(
       fetched = await google.fetchGoogleNews(topic.query, 7);
     }
     const items = fetched.filter((i) => mentions(i, topic.mustMention));
+    // Google Noticias da redirecciones: se guardan las URL de los medios (de a una, para no saturar).
+    if (provider === google.PROVIDER) for (const i of items) i.url = await originalUrl(i.url);
     let created = 0;
     if (items.length) {
       const { data, error } = await db

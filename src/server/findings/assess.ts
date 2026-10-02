@@ -65,7 +65,7 @@ export const AssessmentSchema = z.object({
     who_can_help: z.array(
       z.object({
         ref: z.string().describe("Referencia 'contact:…' o 'company:…' de la lista. Preferí una persona si la hay."),
-        purpose: z.enum(PURPOSE_KEYS).describe("Qué representa ese actor para la MISIÓN, no qué le vamos a preguntar acá. comprar_asociar: dueño u operador de un negocio, activo, alojamiento o servicio (podríamos comprarlo o asociarnos). vender_crear: quien compra, paga, asigna o decide del lado de la demanda (operadoras, contratistas, compradores corporativos, Compras/RRHH/Facilities). inteligencia: brokers, asesores, cámaras, medios, trabajadores o gente local que explica cómo funciona Añelo."),
+        purpose: z.enum(PURPOSE_KEYS).describe("Qué representa ese actor para la MISIÓN, no qué le vamos a preguntar acá. comprar_asociar: dueño u operador de un negocio, activo, alojamiento o servicio (podríamos comprarlo o asociarnos). vender_crear: quien compra, paga, asigna o decide del lado de la demanda (operadoras, contratistas, compradores corporativos, Compras/RRHH/Facilities). inteligencia: brokers, asesores, cámaras, medios, trabajadores o gente local que explica cómo funciona la zona."),
         why: z.string().describe("Por qué esta persona o empresa: qué puede validar."),
         ask: z.string().describe("Qué preguntarle, concreto."),
       }),
@@ -73,7 +73,7 @@ export const AssessmentSchema = z.object({
   }),
 });
 
-const SYSTEM = `Evaluás el estado de una hipótesis (finding) de un equipo que investiga oportunidades de negocio en Añelo / Vaca Muerta, a partir de la evidencia vinculada. Tu trabajo es decir qué sabemos, qué creemos, qué lo contradice y qué falta saber, y proponer la validación más útil. Una persona decide.
+const SYSTEM = `Evaluás el estado de una hipótesis (finding) de un equipo que investiga oportunidades de negocio (la zona y el objetivo salen de la misión), a partir de la evidencia vinculada. Tu trabajo es decir qué sabemos, qué creemos, qué lo contradice y qué falta saber, y proponer la validación más útil. Una persona decide.
 
 Estados por dimensión:
 - sabido: respaldado por evidencia listada. Que alguien haya DECLARADO algo es un hecho que sabemos, aunque su contenido no esté verificado: formulalo como declaración ("Un encargado de una empresa declaró que mandan 8 camionetas por semana a Neuquén"), nunca como verdad general.

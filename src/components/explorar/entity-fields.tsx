@@ -41,7 +41,7 @@ function PlaceFields({ d }: { d: EntityDefaults }) {
       <legend className="text-sm font-medium">Ubicación</legend>
       <TextField name="address_text" label="Dirección" defaultValue={(d.address_text as string) ?? ""} placeholder="Calle y número, o ruta y km" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextField name="locality" label="Localidad" defaultValue={(d.locality as string) ?? "Añelo"} />
+        <TextField name="locality" label="Localidad" defaultValue={(d.locality as string) ?? ""} />
         <TextField name="province" label="Provincia" defaultValue={(d.province as string) ?? "Neuquén"} />
       </div>
       <CheckboxField
@@ -80,7 +80,7 @@ export function EntityFields({
             <TextField name="trade_name" label="Nombre comercial" defaultValue={str("trade_name")} />
             <TextField name="legal_name" label="Razón social" defaultValue={str("legal_name")} />
             <SelectField name="kind" label="Rol" options={opts(companyKind)} defaultValue={str("kind") || "otro"} />
-            <TextField name="locality" label="Localidad" defaultValue={str("locality") || "Añelo"} />
+            <TextField name="locality" label="Localidad" defaultValue={str("locality")} />
           </div>
           <TextField name="website" label="Sitio web" type="url" placeholder="https://" defaultValue={str("website")} />
         </>

@@ -9,6 +9,7 @@ import { dealflowStage, findingKind, opportunityStatus, reviewStatus, targetStat
 import { companyName } from "@/server/entities";
 import { DRAFT_ACTIONS, HELP_KINDS, ProposeActionInput } from "./drafts";
 import { KNOWLEDGE_TOOLS, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool } from "./tools-knowledge";
+import { evidenceAuthor } from "@/domain/evidence-author";
 
 type Db = SupabaseClient<Database>;
 
@@ -80,7 +81,7 @@ export const TOOL_DEFINITIONS: Anthropic.Beta.BetaTool[] = [
   {
     name: "list_news",
     description:
-      "Noticias recientes que nombran 'Vaca Muerta' o 'Añelo' (radar del workspace), con medio, fecha y enlace. Son fuentes públicas sin verificar: una noticia no prueba demanda ni un acuerdo.",
+      "Noticias recientes del radar del workspace (los temas que sigue), con medio, fecha y enlace. Son fuentes públicas sin verificar: una noticia no prueba demanda ni un acuerdo.",
     input_schema: strict({
       contains: { type: "string", description: "Filtrar por texto en el título (opcional)" },
       limit: { type: "integer", minimum: 1, maximum: 40 },
@@ -362,7 +363,7 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
     const who = await authors(ctx, (claims ?? []).map((c) => c.created_by));
     return {
       // Quién lo aportó (una persona del equipo o RELEVO) y de dónde sale: no pesa igual.
-      evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, added_by: c.created_by ? who.get(c.created_by) ?? "alguien del equipo" : c.origin_kind === "crm_import" ? "importado del CRM" : "RELEVO", revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
+      evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, added_by: evidenceAuthor(c.created_by ? who.get(c.created_by) ?? "alguien del equipo" : null, c.origin_kind), revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
       findings: (findings ?? []).map((f) => ({ ref: ref("finding", f.id), kind: f.kind, statement: f.statement, verification: f.verification_status, review: f.review_status })),
       campaigns: (targets ?? []).map((t) => ({
         campaign: t.campaigns ? { ref: ref("campaign", t.campaigns.id), name: t.campaigns.name } : null,

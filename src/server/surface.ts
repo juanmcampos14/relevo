@@ -144,7 +144,7 @@ export async function depthView(db: Db, findingId: string): Promise<DepthView | 
 // que hay cerca de donde está (memoria del Brain).
 // ---------------------------------------------------------------------------
 
-export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null; scope?: string; map?: string | null };
+export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null; scope?: string; map?: string | null; source?: { name: string | null; url: string | null } | null };
 
 const ago = (iso: string) => {
   const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
@@ -161,7 +161,7 @@ export async function whileAway(db: Db, missionShort: string | null, missionId: 
   const since = new Date(Date.now() - 5 * 86_400_000).toISOString();
   const { data } = await db
     .from("brief_signals")
-    .select("id, headline, why_it_matters, reading, suggested_action, relevance, change, created_at, geography, finding_ids, company_ids, asset_ids")
+    .select("id, headline, why_it_matters, reading, suggested_action, relevance, change, created_at, geography, finding_ids, company_ids, asset_ids, source_url, publisher")
     .contains("campaign_ids", [missionId])
     .in("relevance", ["alta", "media"])
     .neq("change", "descartado")
@@ -191,6 +191,7 @@ export async function whileAway(db: Db, missionShort: string | null, missionId: 
     line: (s.reading ?? s.why_it_matters)?.split(/(?<=\.)\s/)[0] ?? null,
     links: [...s.company_ids.map((id) => cName.get(id)), ...s.asset_ids.map((id) => aName.get(id)), ...s.finding_ids.map((id) => fName.get(id))].filter((x): x is string => !!x).slice(0, 3),
     then: s.suggested_action ?? null,
+    source: { name: s.publisher, url: s.source_url },
     ask: `Contame de esto y qué cambia para nosotros: ${s.headline}`,
   }));
 }
@@ -242,13 +243,13 @@ export async function missionState(db: Db, missionId: string): Promise<MissionSt
 // Lo que RELEVO aprendió solo y lo que necesita preguntar (una pregunta, no una bandeja).
 // ---------------------------------------------------------------------------
 
-export type Question = { id: string; question: string; detail: string | null; kind: string };
+export type Question = { id: string; question: string; detail: string | null; kind: string; source_url: string | null };
 export type Learned = { id: string; summary: string; at: string; undone: boolean };
 
 export async function missionQuestions(db: Db, missionId: string | null): Promise<Question[]> {
   if (!missionId) return [];
-  const { data } = await db.from("brief_candidates").select("id, question, detail, kind").eq("campaign_id", missionId).eq("status", "candidato").not("question", "is", null).order("created_at", { ascending: false }).limit(2);
-  return (data ?? []).map((q) => ({ id: q.id, question: q.question!, detail: q.detail, kind: q.kind }));
+  const { data } = await db.from("brief_candidates").select("id, question, detail, kind, source_url").eq("campaign_id", missionId).eq("status", "candidato").not("question", "is", null).order("created_at", { ascending: false }).limit(2);
+  return (data ?? []).map((q) => ({ id: q.id, question: q.question!, detail: q.detail, kind: q.kind, source_url: q.source_url }));
 }
 
 export async function learnedAlone(db: Db, missionId: string | null): Promise<Learned[]> {
@@ -262,8 +263,12 @@ export type MissionPerson = { id: string; name: string; role: string | null; lin
 /**
  * Las personas que la misión conoce (el número de "Lo que ya conozco" sale de acá, y se puede preguntar quiénes
  * son): vinculadas a una empresa o un activo que la misión sigue (vigente o anterior: cambiar de trabajo no saca
- * a nadie de la memoria), dueñas de un activo de la misión, o nombradas en su evidencia o en sus tareas.
+ * a nadie de la memoria), dueñas de un activo de la misión, o nombradas en su evidencia o en sus tareas. Los canales de
+ * entrada ("Administración", "Equipo comercial") no son personas: no cuentan.
  */
+/** Persona ≠ canal de entrada: "Administración" o "Equipo comercial" son puertas a una empresa, no personas. */
+const isPerson = (c: { contact_kind?: string | null }) => c.contact_kind !== "canal_institucional";
+
 export async function missionPeople(db: Db, missionId: string): Promise<MissionPerson[]> {
   const [{ data: targets }, { data: fc }] = await Promise.all([
     db.from("campaign_targets").select("company_id, asset_id").eq("campaign_id", missionId).neq("status", "descartado"),
@@ -278,16 +283,16 @@ export async function missionPeople(db: Db, missionId: string): Promise<MissionP
     out.set(id, p);
   };
   for (let i = 0; i < companies.length; i += 150) {
-    const { data } = await db.from("contact_links").select("valid_until, contacts(id, full_name, role_title), companies(trade_name, legal_name)").in("company_id", companies.slice(i, i + 150));
-    for (const l of data ?? []) if (l.contacts) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "trabaja o trabajó en una empresa de la misión", { with: l.companies?.trade_name ?? l.companies?.legal_name ?? "", current: !l.valid_until, until: l.valid_until });
+    const { data } = await db.from("contact_links").select("valid_until, contacts(id, full_name, role_title, contact_kind), companies(trade_name, legal_name)").in("company_id", companies.slice(i, i + 150));
+    for (const l of data ?? []) if (l.contacts && isPerson(l.contacts)) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "trabaja o trabajó en una empresa de la misión", { with: l.companies?.trade_name ?? l.companies?.legal_name ?? "", current: !l.valid_until, until: l.valid_until });
   }
   if (assets.length) {
     const [{ data: parties }, { data: links }] = await Promise.all([
-      db.from("asset_parties").select("role, contacts(id, full_name, role_title), assets(title)").in("asset_id", assets).not("contact_id", "is", null),
-      db.from("contact_links").select("valid_until, contacts(id, full_name, role_title), assets(title)").in("asset_id", assets),
+      db.from("asset_parties").select("role, contacts(id, full_name, role_title, contact_kind), assets(title)").in("asset_id", assets).not("contact_id", "is", null),
+      db.from("contact_links").select("valid_until, contacts(id, full_name, role_title, contact_kind), assets(title)").in("asset_id", assets),
     ]);
-    for (const p of parties ?? []) if (p.contacts) add(p.contacts.id, p.contacts.full_name, p.contacts.role_title, `${p.role} de un activo de la misión`, { with: p.assets?.title ?? "", current: true, until: null });
-    for (const l of links ?? []) if (l.contacts) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "vinculada a un activo de la misión", { with: l.assets?.title ?? "", current: !l.valid_until, until: l.valid_until });
+    for (const p of parties ?? []) if (p.contacts && isPerson(p.contacts)) add(p.contacts.id, p.contacts.full_name, p.contacts.role_title, `${p.role} de un activo de la misión`, { with: p.assets?.title ?? "", current: true, until: null });
+    for (const l of links ?? []) if (l.contacts && isPerson(l.contacts)) add(l.contacts.id, l.contacts.full_name, l.contacts.role_title, "vinculada a un activo de la misión", { with: l.assets?.title ?? "", current: !l.valid_until, until: l.valid_until });
   }
   const [{ data: ev }, { data: tasks }] = await Promise.all([
     db.from("evidence").select("contact_id, stated_by_contact_id").eq("campaign_id", missionId),
@@ -295,8 +300,8 @@ export async function missionPeople(db: Db, missionId: string): Promise<MissionP
   ]);
   const extra = [...new Set([...(ev ?? []).flatMap((e) => [e.contact_id, e.stated_by_contact_id]), ...(tasks ?? []).map((t) => t.contact_id)].filter((x): x is string => !!x && !out.has(x)))];
   if (extra.length) {
-    const { data } = await db.from("contacts").select("id, full_name, role_title").in("id", extra);
-    for (const c of data ?? []) add(c.id, c.full_name, c.role_title, "aparece en lo que sabemos o hacemos en la misión");
+    const { data } = await db.from("contacts").select("id, full_name, role_title, contact_kind").in("id", extra);
+    for (const c of data ?? []) if (isPerson(c)) add(c.id, c.full_name, c.role_title, "aparece en lo que sabemos o hacemos en la misión");
   }
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

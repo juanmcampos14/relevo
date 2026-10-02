@@ -30,7 +30,7 @@ const fakeClient = {
           asset: null,
           people: [{ key: "p1", name: "Pedro", role: null, institutional: false, existing_id: null, resolves: null, owns_asset: false }],
           evidence: [{ key: "e1", statement: "Tienen cuarenta camionetas", quote: "tienen cuarenta camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "none" as const }],
-          finding_candidates: [],
+          context: [], finding_candidates: [],
           unknowns: [],
           next_actions: [],
         };

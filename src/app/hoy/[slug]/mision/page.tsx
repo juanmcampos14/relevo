@@ -28,7 +28,7 @@ export default async function Mision({ params, searchParams }: PageProps<"/hoy/[
     [counts.people, "personas", "¿A qué personas conocemos y a quiénes nos conviene conocer antes de viajar?"],
     [counts.assets, "activos", "¿Qué activos estamos siguiendo y qué sabemos de cada uno?"],
     [counts.hypotheses, "hipótesis", "¿Qué hipótesis tenemos y cuáles necesitan sí o sí terreno?"],
-    [counts.evidence, "datos y evidencias", "¿Qué evidencia tenemos y qué sostiene?"],
+    [counts.evidence, "datos del mundo", "¿Qué evidencia tenemos y qué sostiene?"],
     [counts.signals, "señales del Brief", "¿Qué señales encontraste esta semana y qué cambian?"],
   ];
 
@@ -45,6 +45,25 @@ export default async function Mision({ params, searchParams }: PageProps<"/hoy/[
           <p className="mt-2 text-[17px] leading-relaxed font-medium">{state.stage}</p>
           <p className="mt-3 text-[16px] leading-relaxed text-[#4A463F]">{state.thesis}</p>
         </div>
+      )}
+
+      {state?.searching && state.searching.length > 0 && (
+        <>
+          <SectionLabel>Lo que buscamos</SectionLabel>
+          <ul className={`${card} space-y-2 text-[16px] leading-relaxed`}>{state.searching.map((x) => <li key={x}>{x}</li>)}</ul>
+        </>
+      )}
+
+      {state?.since_start && (
+        <>
+          <SectionLabel>Desde que empezamos</SectionLabel>
+          <div className={`${card} space-y-3 text-[16px] leading-relaxed`}>
+            <p><span className="text-[#9C968A]">Creíamos:</span> {state.since_start.believed}</p>
+            <p><span className="text-[#9C968A]">Encontramos:</span> {state.since_start.found || "Todavía nada del mundo: por ahora solo lo que definimos nosotros."}</p>
+            {state.since_start.learned && <p><span className="text-[#9C968A]">Cambió:</span> {state.since_start.learned}</p>}
+            <p className="font-medium"><span className="font-normal text-[#9C968A]">Haría:</span> {state.since_start.next}</p>
+          </div>
+        </>
       )}
 
       <SectionLabel>Lo que ya conozco</SectionLabel>

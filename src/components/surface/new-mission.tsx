@@ -38,7 +38,7 @@ export function NewMission({ slug }: { slug: string }) {
     else setError(res.error ?? "No te pude escuchar bien.");
   }, [slug]));
   const create = () => draft && start(async () => {
-    const r = await createNewMission(slug, { name: draft.name, objective: draft.objective, context: draft.context, zone: draft.zone, queries: draft.queries });
+    const r = await createNewMission(slug, { name: draft.name, objective: draft.objective, context: draft.context, zone: draft.zone, queries: draft.queries, declared: draft.declared });
     if (r.ok) router.push(`/hoy/${slug}`);
     else setError(r.message);
   });

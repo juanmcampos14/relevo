@@ -88,7 +88,7 @@ describe("una captura posterior enriquece la empresa importada", () => {
       asset: null,
       people: [],
       evidence: [{ key: "e1", statement: "Entregan 400 viandas por día", quote: "400 viandas por día", evidence_type: "capacidad", origin: "declarado_por_persona", stated_by: null, declared_by: null, about: "company" }],
-      finding_candidates: [],
+      context: [], finding_candidates: [],
       unknowns: [],
       next_actions: [],
     };

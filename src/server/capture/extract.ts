@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v7";
+export const EXTRACT_PROMPT_VERSION = "captura-v8";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -54,7 +54,7 @@ export const ExtractionSchema = z.object({
   evidence: z.array(
     z.object({
       key: z.string().describe("Clave local: e1, e2…"),
-      statement: z.string().describe("Un dato atómico y verificable, en una oración. Sin interpretaciones."),
+      statement: z.string().describe("Un dato atómico y verificable SOBRE EL MUNDO (algo que pasa, existe, cuesta o dijo alguien de afuera), en una oración. Sin interpretaciones. Lo que el equipo quiere o define no es un dato: va en context."),
       quote: z.string().nullable().describe("Fragmento TEXTUAL de la nota que lo sostiene (copiado tal cual)."),
       evidence_type: z.enum(EVIDENCE_TYPES),
       origin: z
@@ -65,6 +65,7 @@ export const ExtractionSchema = z.object({
       about: z.enum(["company", "asset", "none"]).describe("Sobre qué es el dato: la organización principal (identificada o no), el activo, o ninguno de los dos."),
     }),
   ),
+  context: z.array(z.string()).describe("Lo que el EQUIPO busca, decide o define para su misión (parámetros, restricciones, concepto, presupuesto, preferencias: \"busco locales de 40 a 60 m²\", \"tope de alquiler $2 M\", \"no necesito salida de humos\"). Es contexto declarado, NO evidencia del mundo: nunca lo pongas en evidence. Una oración por punto; vacío si no hay."),
   finding_candidates: z.array(
     z.object({
       statement: z.string().describe("Hipótesis o aprendizaje posible, formulado con cautela (\"Posible…\")."),

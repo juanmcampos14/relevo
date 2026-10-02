@@ -20,7 +20,7 @@ let ws: string, userId: string, db: SupabaseClient<Database>;
 let next: Extraction;
 const fakeClient = { beta: { messages: { parse: async () => ({ stop_reason: "end_turn", parsed_output: next, usage: { input_tokens: 1, output_tokens: 1 } }) } } } as unknown as Anthropic;
 
-const base: Omit<Extraction, "summary"> = { company: null, asset: null, people: [], evidence: [], finding_candidates: [], unknowns: [], next_actions: [] };
+const base: Omit<Extraction, "summary"> = { company: null, asset: null, people: [], evidence: [], context: [], finding_candidates: [], unknowns: [], next_actions: [] };
 async function capture(body: string, extraction: Extraction) {
   const { data } = await db.rpc("create_capture", { p: { workspace_id: ws, client_id: randomUUID(), body, captured_at: new Date().toISOString(), ai_consent: true, media: [] } });
   next = extraction;
@@ -59,7 +59,7 @@ describe("día 1: una contratista y un encargado sin nombre", () => {
         { key: "e1", statement: "Trabajan unas 35 personas en la zona", quote: "Son 35 personas en la zona", evidence_type: "capacidad", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "company" },
         { key: "e2", statement: "Sin vianda contratada reintegran hasta $18.000 por comida", quote: "reintegran hasta 18.000 por comida", evidence_type: "precio", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "company" },
       ],
-      finding_candidates: [{ statement: "Puede existir demanda B2B de comida cercana para contratistas sin vianda", existing_finding_id: null, relation: "nueva", refined_statement: null, is_idea: false, kind: "necesidad", rationale: "Un caso con techo de gasto.", supports: ["e1", "e2"], contradicts: [] }],
+      context: [], finding_candidates: [{ statement: "Puede existir demanda B2B de comida cercana para contratistas sin vianda", existing_finding_id: null, relation: "nueva", refined_statement: null, is_idea: false, kind: "necesidad", rationale: "Un caso con techo de gasto.", supports: ["e1", "e2"], contradicts: [] }],
       unknowns: ["Nombre de la empresa", "Frecuencia mensual", "Quién decide"],
       next_actions: [
         { title: "Identificar empresa y decisor", why: "Sin eso no se dimensiona", contact: null, due: null },
@@ -128,7 +128,7 @@ describe("refinar una hipótesis en vez de acumular contrapuestas", () => {
       summary: "Un trabajador con vianda de su empresa no tiene el problema.",
       people: [{ key: "p1", name: null, role: "Trabajador de una petrolera", institutional: false, existing_id: null, resolves: null, owns_asset: false }],
       evidence: [{ key: "e1", statement: "Su empresa le da vianda y no tiene problema para comer", quote: "su empresa le da vianda", evidence_type: "declaracion", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "none" }],
-      finding_candidates: [{
+      context: [], finding_candidates: [{
         statement: "La necesidad depende del esquema de alimentación", existing_finding_id: findingId, relation: "segmenta",
         refined_statement: "La necesidad de comida cercana parece depender del esquema de alimentación de cada empresa", is_idea: false,
         kind: "necesidad", rationale: "Con vianda no hay problema; sin vianda, sí.", supports: [], contradicts: ["e1"],

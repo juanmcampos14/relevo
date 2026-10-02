@@ -159,7 +159,7 @@ export async function runTurn(
         // Lo que la web dice y sirve como evidencia se guarda solo (interno y reversible): la persona no administra
         // la inteligencia. Queda auditado como ejecutado.
         if (action === "record_web_evidence") {
-          const exec = await executeDraft(db, { workspaceId: opts.workspaceId, userId: opts.userId }, data.id, input);
+          const exec = await executeDraft(db, { workspaceId: opts.workspaceId, userId: opts.userId, campaignId }, data.id, input);
           await db.from("ai_action_drafts").update({ status: exec.error ? "error" : "ejecutada", decided_by: opts.userId, decided_at: new Date().toISOString(), result_ref: exec.resultRef, error: exec.error, after_state: (exec.after ?? null) as never }).eq("id", data.id);
           return data.id;
         }

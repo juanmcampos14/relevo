@@ -11,6 +11,7 @@ import { runTurn } from "@/server/ai/turn";
 import { ProposeActionInput, executeDraft } from "@/server/ai/drafts";
 import { assessFinding } from "@/server/findings/assess";
 import { activeMission, applyCorrection } from "@/server/mission/focus";
+import { workingMission } from "@/server/mission/current";
 import { undoRelationship, type RelationshipEffects } from "@/server/ai/relationships";
 import { undoSetAside, type SetAsideEffects } from "@/server/ai/set-aside";
 import { undoContactEvent, type EventEffects } from "@/server/ai/contact-events";
@@ -49,7 +50,7 @@ export async function decideDraft(slug: string, draftId: string, verdict: "aprob
   }
 
   const p = ProposeActionInput.safeParse({ ...(draft.payload as object), action: draft.action, rationale: draft.rationale ?? "-", evidence_refs: draft.evidence_refs });
-  const exec = p.success ? await executeDraft(supabase, { workspaceId: ctx.workspace.id, userId: ctx.user.id }, draftId, p.data) : { resultRef: null, error: "Borrador inválido", before: null, after: null };
+  const exec = p.success ? await executeDraft(supabase, { workspaceId: ctx.workspace.id, userId: ctx.user.id, campaignId: await workingMission(supabase) }, draftId, p.data) : { resultRef: null, error: "Borrador inválido", before: null, after: null };
   const { resultRef, error } = exec;
   // Cambió la evidencia de una hipótesis: se vuelve a evaluar sin hacer esperar.
   if (!error && p.success && p.data.action === "link_evidence" && p.data.finding_ref) {

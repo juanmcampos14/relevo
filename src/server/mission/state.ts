@@ -13,7 +13,7 @@ import { deepCall } from "./deep";
 // background (con la síntesis del día) y la Surface lo muestra en segundos.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-estado-v1";
+const PROMPT_VERSION = "mision-estado-v2";
 
 export const StateSchema = z.object({
   purpose: z.string().describe("Qué estamos intentando conseguir, en una oración (p. ej. 'Descubrir y validar oportunidades de negocio e inversión alrededor del crecimiento de Vaca Muerta')."),
@@ -33,6 +33,13 @@ export const StateSchema = z.object({
   next_days: z.array(z.object({ when: z.string().describe("Fecha o rango legible ('12–15 oct')."), what: z.string().describe("Qué pasa, en pocas palabras.") })).describe("Las próximas etapas de la misión según el plan."),
   changed: z.array(z.string()).describe("Hasta 3 cosas que cambiaron esta semana y por qué importan. Vacío si nada importante."),
   questions: z.array(z.string()).describe("4 preguntas que la persona podría hacerle a RELEVO sobre la misión, en su voz (p. ej. '¿Qué sabemos de housing?')."),
+  searching: z.array(z.string()).describe("Lo que buscamos, según lo que definió el equipo (contexto declarado: tamaño, zona, presupuesto, concepto, restricciones), en pocas líneas. Es contexto, no evidencia. Vacío si no hay."),
+  since_start: z.object({
+    believed: z.string().describe("Qué creíamos/buscábamos al empezar la misión (de la foto del comienzo), en una oración."),
+    found: z.string().describe("Qué encontramos desde entonces (evidencia y señales reales, no lo que dijo el equipo); '' si todavía nada."),
+    learned: z.string().describe("Qué cambió: qué se confirma, qué se contradice y qué seguimos sin saber; '' si todavía nada."),
+    next: z.string().describe("Qué haría ahora, en una oración."),
+  }),
 });
 export type MissionState = z.infer<typeof StateSchema> & { computed_at: string };
 
@@ -41,7 +48,9 @@ Reglas:
 - Hipótesis no es oportunidad: una hipótesis es lo que creemos; solo hay oportunidad cuando la evidencia justifica mover algo. Decí con honestidad cuán firme es cada cosa; "por ahora es una idea nuestra" es un estado válido.
 - Agrupá por frentes de negocio (los del plan), no por tablas. Nada de códigos (H-VA-…, V09), ids, "finding", "gap", "baseline", "workspace", nombres de campos ni de herramientas.
 - Separá lo publicado de lo declarado y de lo verificado sin jerga ("lo dijo un encargado", "lo publicó un portal").
-- Solo nombres y referencias que estén en el material.`;
+- Solo nombres y referencias que estén en el material.
+- Lo que el equipo definió (contexto declarado: lo que busca, su presupuesto, su concepto) NO es evidencia: va en searching. "Lo que sabemos" y "found" son solo hechos del mundo.
+- since_start compara la foto del comienzo con lo que apareció después: decí con honestidad si todavía no apareció nada.`;
 
 export async function describeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; userId?: string | null }) {
   const brief = await missionBrief(db, opts.campaignId, new Date(), { withSynthesis: false });
@@ -51,10 +60,14 @@ export async function describeMission(db: Db, opts: { workspaceId: string; campa
     db.from("findings").select("statement, review_note, case_status, review_status").eq("campaign_id", opts.campaignId).or("case_status.neq.activo,review_status.eq.rechazado").limit(20),
     db.from("findings").select("id, statement, verticals(name)").eq("campaign_id", opts.campaignId).eq("case_status", "activo").neq("review_status", "rechazado").limit(80),
   ]);
+  const { data: camp } = await db.from("campaigns").select("watch").eq("id", opts.campaignId).single();
+  const watch = (camp?.watch ?? null) as { declared?: unknown[]; initial?: unknown } | null;
   const material = JSON.stringify({
     plan: (docs ?? []).map((d) => ({ title: d.title, kind: d.kind, body: (d.body ?? "").slice(0, 9000) })),
     frente_de_cada_hipotesis: (findings ?? []).map((f) => ({ ref: `finding:${f.id}`, statement: f.statement, vertical: f.verticals?.name ?? null })),
     descartado: dropped ?? [],
+    contexto_declarado_por_el_equipo: ((watch?.declared ?? []) as { text: string }[]).map((d) => d.text),
+    foto_del_comienzo: watch?.initial ?? null,
     brain: brief,
   });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));

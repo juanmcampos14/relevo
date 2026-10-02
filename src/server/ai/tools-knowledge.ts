@@ -200,13 +200,14 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "create_mission",
-    description: "Crea una misión nueva cuando la persona quiere investigar algo distinto (\"quiero investigar locales en San Isidro\"). Antes proponé en una línea nombre, objetivo y zona y preguntá solo si falta algo indispensable; creala cuando la persona dice que sí. Entra directo a trabajar en ella y RELEVO prepara un primer panorama por detrás.",
+    description: "Crea una misión nueva cuando la persona quiere investigar algo distinto (\"quiero investigar locales en San Isidro\"). Proponé en una línea nombre y objetivo y creala cuando diga que sí; no hagas una entrevista: lo que definió (tamaño, zona, presupuesto, concepto) va en declared y lo que falte se aprende después. Entra directo a trabajar en ella y RELEVO prepara un primer panorama por detrás.",
     input_schema: strict({
       name: { type: "string", description: "2 a 4 palabras" },
       objective: { type: "string", description: "Una oración, con verbo" },
       context: { type: "string", description: "zona · rubros · tipo de oportunidades" },
       zone: { type: "string" },
       queries: { type: "array", items: { type: "string" }, description: "3 a 6 búsquedas de noticias para vigilarla" },
+      declared: { type: "array", items: { type: "string" }, description: "Lo que la persona definió (tamaño, zona, presupuesto, concepto, restricciones): contexto, no evidencia" },
     }, ["name", "objective", "context"]),
   },
   {
@@ -586,7 +587,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         for (const r of JSON.stringify(brief.prepared).matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)) ctx.seenRefs.add(r[1]);
         return {
           content: track(ctx, {
-            mission: { ref: brief.mission.ref, name: brief.mission.name, dates: brief.mission.dates, today: brief.mission.today, days_to_start: brief.mission.days_to_start, moment: brief.mission.moment },
+            mission: { ref: brief.mission.ref, name: brief.mission.name, objective: brief.mission.objective, dates: brief.mission.dates, today: brief.mission.today, days_to_start: brief.mission.days_to_start, moment: brief.mission.moment, declared_context: brief.mission.declared_context, at_start: brief.mission.at_start, watching_for: brief.mission.watching_for },
             prepared: brief.prepared,
             contacts_to_move: { ...brief.contacts_to_move, items: brief.contacts_to_move.items.slice(0, 8) },
             more: "Para el detalle (hipótesis, guiones AOG, activos, follow-ups, señales) llamá mission_brief con detail=true, solo si lo piden.",
@@ -715,7 +716,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const context = Str.min(2).max(400).safeParse(a.context);
       if (!name.success || !objective.success || !context.success) return { content: "Falta nombre, objetivo o contexto.", isError: true };
       const { createMission } = await import("@/server/mission/create");
-      const r = await createMission(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, slug: ctx.slug, settings: ctx.settings, draft: { name: name.data, objective: objective.data, context: context.data, zone: typeof a.zone === "string" ? a.zone : "", queries: Array.isArray(a.queries) ? a.queries.filter((q): q is string => typeof q === "string") : [] } });
+      const r = await createMission(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, slug: ctx.slug, settings: ctx.settings, draft: { name: name.data, objective: objective.data, context: context.data, zone: typeof a.zone === "string" ? a.zone : "", queries: Array.isArray(a.queries) ? a.queries.filter((q): q is string => typeof q === "string") : [], declared: Array.isArray(a.declared) ? a.declared.filter((q): q is string => typeof q === "string") : [] } });
       if (!r.ok) return { content: `No pude crearla: ${r.message}`, isError: true };
       ctx.seenRefs.add(`campaign:${r.id}`);
       ctx.onMissionChange?.(r.id);

@@ -6,7 +6,7 @@ import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tool
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
 export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-opus-5-5";
 const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "medium" | "high";
-export const PROMPT_VERSION = "relevo-calle-v4";
+export const PROMPT_VERSION = "relevo-calle-v5";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens. Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -70,6 +70,10 @@ Mensajes listos: cada uno entre [[mensaje para: contact:uuid]] y [[/mensaje]] (o
 Acciones: palabras de persona, no de sistema ("Buscar a la persona", "Preparar el de Vista", "Ver locales cerca"). Nunca "Registrar", "Cargar", "Guardar como evidencia", "Vincular", "hipótesis", "hallazgo", "ficha". Lo que es evidencia o memoria lo guardás vos abajo, sin preguntar ni contarlo (propose_action con record_web_evidence se guarda solo).
 
 Correcciones de la persona ("Nicolás ya no trabaja en Pecom", "ese precio ya cambió", "ese local ya se alquiló"): son evidencia nueva y se aplican en la memoria, nunca quedan solo en la conversación. Quién trabaja dónde → update_relationship (no borra historia: deja la relación como anterior). Lo demás → record_field_note con la corrección explícita. Después seguí el trabajo: qué falta ahora, intentá resolverlo y proponé el próximo paso (nunca "gracias por avisarme").
+
+Contexto, hipótesis y evidencia son cosas distintas: lo que la persona busca o define (tamaño, zona, presupuesto, concepto) es contexto declarado de la misión, no evidencia; lo que creemos es hipótesis; evidencia es solo lo que encontramos del mundo. Si preguntan "¿qué cambió respecto de lo que creíamos?": contexto inicial (at_start), lo que encontramos, qué se confirma / contradice / no sabemos, y qué harías. Si todavía no apareció evidencia, decilo.
+
+Preguntas: solo cuando la respuesta cambia lo que podés hacer. Si con lo que hay ya se puede empezar a investigar, empezá; nada de entrevistas: lo que falte se aprende en el camino.
 
 Misión de trabajo: todo lo que se guarda (notas, tareas, investigaciones, avisos) queda en la misión de trabajo del contexto. Si lo que la persona cuenta o pide es de otra cosa (otra zona u otro objetivo: un local en Vicente López estando en Vaca Muerta / Añelo), no lo guardes en esta misión: si hay otra misión que encaja, switch_mission y seguí ahí; si no, proponé crearla en una línea ("¿Abro la misión 'Locales Zona Norte' para esto?") y creala con create_mission cuando diga que sí. Recién ahí guardá e investigá.
 

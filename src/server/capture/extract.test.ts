@@ -19,7 +19,7 @@ describe("esquema hacia la API", () => {
       asset: { title: "Local", kind: "local", operation: "alquiler", address_text: "", locality: " ", surface_m2: 60, here: true },
       people: [{ key: "p1", name: "", role: "encargado", institutional: true, existing_id: "", resolves: "", owns_asset: false }],
       evidence: [{ key: "e1", statement: "60 m²", quote: "60 metros", evidence_type: "dato", origin: "declarado_por_documento", stated_by: "", declared_by: "cartel", about: "asset" }],
-      finding_candidates: [{ statement: "Posible…", existing_finding_id: "", relation: "nueva", refined_statement: "", is_idea: true, kind: "necesidad", rationale: "", supports: ["e1"], contradicts: [] }],
+      context: [], finding_candidates: [{ statement: "Posible…", existing_finding_id: "", relation: "nueva", refined_statement: "", is_idea: true, kind: "necesidad", rationale: "", supports: ["e1"], contradicts: [] }],
       unknowns: ["Quién decide"],
       next_actions: [{ title: "Llamar", why: "", contact: "", due: "" }],
     });

@@ -165,7 +165,7 @@ export async function previewDraft(db: Db, p: ProposeAction): Promise<Preview> {
 /** Ejecuta un borrador aprobado con el cliente de quien aprueba (RLS). Devuelve el estado antes/después. */
 export async function executeDraft(
   db: Db,
-  ctx: { workspaceId: string; userId: string },
+  ctx: { workspaceId: string; userId: string; campaignId?: string | null },
   draftId: string,
   p: ProposeAction,
 ): Promise<{ resultRef: string | null; error: string | null; before: unknown; after: unknown }> {
@@ -182,6 +182,7 @@ export async function executeDraft(
             description: p.rationale,
             due_on: p.due_on ?? null,
             assignee_id: ctx.userId,
+            campaign_id: ctx.campaignId ?? null,
             opportunity_id: idOf(p.opportunity_ref),
             finding_id: idOf(p.finding_ref),
             contact_id: idOf(p.contact_ref),

@@ -28,7 +28,7 @@ const extraction: Extraction = {
     { key: "e2", statement: "Superficie de 35 m²", quote: "35 m²", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset" },
     { key: "e3", statement: "Medidas de 5 x 7 m", quote: "5 x 7", evidence_type: "dato", origin: "declarado_por_documento", stated_by: null, declared_by: "cartel de alquiler en la vidriera", about: "asset" },
   ],
-  finding_candidates: [],
+  context: [], finding_candidates: [],
   unknowns: [],
   next_actions: [],
 };

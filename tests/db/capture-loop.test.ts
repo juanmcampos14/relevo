@@ -63,7 +63,7 @@ beforeAll(async () => {
       { key: "e2", statement: "Mandan 8 camionetas por semana a Neuquén por mantenimientos que no resuelven en Añelo", quote: "mandan 8 por semana a Neuquén", evidence_type: "dato", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "company" as const },
       { key: "e3", statement: "El encargado parecía apurado", quote: null, evidence_type: "observacion", origin: "observado", declared_by: null, stated_by: null, about: "company" as const },
     ],
-    finding_candidates: [
+    context: [], finding_candidates: [
       { statement: "Posible falta de capacidad de mantenimiento de flotas en Añelo", existing_finding_id: null, relation: "nueva", refined_statement: null, is_idea: false, kind: "necesidad", rationale: "Una empresa deriva 8 unidades por semana; falta un segundo caso.", supports: ["e1", "e2"], contradicts: [] },
       // Contraevidencia contra una hipótesis existente: se suma ahí (no crea otra).
       { statement: "Los talleres de Añelo alcanzan", existing_finding_id: existingFinding, relation: "contradice", refined_statement: null, is_idea: false, kind: "observacion", rationale: "Deriva unidades a Neuquén.", supports: [], contradicts: ["e2"] },
@@ -163,7 +163,7 @@ describe("captura → propuestas → revisión → objetos", () => {
 
   it("vincular con una empresa existente no crea otra", async () => {
     const { data: other } = await db.rpc("create_capture", { p: { workspace_id: ws, client_id: randomUUID(), body: "Volví a Empresa X, siguen mandando camionetas a Neuquén.", captured_at: new Date().toISOString(), ai_consent: true, media: [] } });
-    extraction = { ...extraction, company: { name: "Empresa X", identified: true, existing_id: null, resolves: null, locality: "Añelo", activity: null }, people: [], evidence: [], finding_candidates: [], next_actions: [] };
+    extraction = { ...extraction, company: { name: "Empresa X", identified: true, existing_id: null, resolves: null, locality: "Añelo", activity: null }, people: [], evidence: [], context: [], finding_candidates: [], next_actions: [] };
     await processCapture(db, { workspaceId: ws, settings, userId, captureId: other as string, client: fakeClient });
     const { data: ps } = await db.from("proposals").select("id, matches").eq("capture_id", other as string);
     const match = (ps![0].matches as { id: string }[])[0];

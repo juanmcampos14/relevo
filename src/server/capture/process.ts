@@ -8,6 +8,7 @@ import { buildProposals, locateInAudio } from "@/domain/capture-proposals";
 import { formatDuration } from "@/domain/capture";
 import { MIN_WORDS, NEAR_DUPLICATE, contentSimilarity, normalizeContent } from "@/domain/capture-dedupe";
 import { EXTRACT_MODEL, EXTRACT_PROMPT_VERSION, extractCapture } from "./extract";
+import { addDeclared } from "@/server/mission/context";
 import { configuredTranscriber, type Transcriber, type Utterance } from "./transcribe";
 
 type Db = SupabaseClient<Database>;
@@ -201,6 +202,10 @@ export async function processCapture(
       .single();
     if (!result.ok) return fail(result.error, run?.id ?? null);
 
+    // Lo que el equipo busca o define es contexto de la misión, no evidencia: queda en la misión, al instante.
+    if (capture.campaign_id && result.extraction.context?.length) {
+      await addDeclared(db, capture.campaign_id, result.extraction.context, { by: author.data?.display_name ?? null, capture_id: capture.id }).catch(() => null);
+    }
     const drafts = buildProposals(result.extraction, { body: fullText, companies: companyList, contacts: contactList, findings: findingList, unresolved: unresolvedList });
     // Evidencia dicha en un audio: se guarda en qué momento del audio está, para escucharla.
     for (const d of drafts) {

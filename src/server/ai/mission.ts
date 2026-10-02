@@ -18,8 +18,8 @@ const day = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function missionBrief(db: Db, campaignId: string | null, today = new Date(), opts: { withSynthesis?: boolean } = { withSynthesis: true }) {
   const { data: missions } = campaignId
-    ? await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at").eq("id", campaignId).limit(1)
-    : await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at").eq("kind", "mision").eq("status", "activa").order("starts_on", { ascending: true, nullsFirst: false }).limit(1);
+    ? await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at, watch").eq("id", campaignId).limit(1)
+    : await db.from("campaigns").select("id, name, kind, objective, zone, status, starts_on, ends_on, synthesis, synthesized_at, watch").eq("kind", "mision").eq("status", "activa").order("starts_on", { ascending: true, nullsFirst: false }).limit(1);
   const mission = missions?.[0];
   if (!mission) return null;
   const t = day(today);
@@ -126,6 +126,10 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
       days_to_start: daysToStart,
       moment: daysToStart === null ? "sin fechas" : daysToStart > 0 ? "preparación" : mission.ends_on && t > mission.ends_on ? "cerrada / síntesis" : "en curso",
       plan_documents: (docs ?? []).map((x) => ({ ref: ref("document", x.id), title: x.title, kind: x.kind, summary: clip(x.summary, 400) })),
+      // Lo que el equipo busca o definió (contexto, NO evidencia) y la foto del comienzo (para decir qué cambió).
+      declared_context: (((mission.watch ?? {}) as { declared?: { text: string }[] }).declared ?? []).map((d) => d.text),
+      at_start: ((mission.watch ?? {}) as { initial?: unknown }).initial ?? null,
+      watching_for: (((mission.watch ?? {}) as { criteria?: { text: string }[] }).criteria ?? []).map((c) => c.text),
     },
     hypotheses: {
       total: hypotheses.length,

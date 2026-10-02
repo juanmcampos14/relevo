@@ -174,3 +174,8 @@ export const correctionsForBrain = (focus: Focus, now: Date) => {
   const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   return focus.log.filter((l) => l.at >= since && l.by).slice(0, 20).map((l) => `${l.at.slice(0, 10)}: «${l.item}» — ${l.what}${l.note ? ` (${l.note})` : ""}`);
 };
+
+/** Firma de los mensajes preparados en background: se completa con el nombre de quien los manda. */
+export const SIGNATURE = "[[firma]]";
+export const signMessages = (text: string, fullName: string | null) =>
+  fullName ? text.replaceAll(SIGNATURE, fullName) : text.replace(/^\s*\[\[firma\]\]\s*$/gm, "").replace(/Soy \[\[firma\]\],?\s*/g, "").replaceAll(SIGNATURE, "");

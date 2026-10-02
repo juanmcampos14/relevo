@@ -70,3 +70,11 @@ describe("foco de RELEVO", () => {
     expect(moveIsFresh({ ...it0, updated_at: new Date(now.getTime() + 1000).toISOString() }, now)).toBe(false);
   });
 });
+
+describe("firma de los mensajes preparados", () => {
+  it("firma con el nombre de quien lo manda; sin nombre, la marca no queda en el mensaje", async () => {
+    const { signMessages } = await import("./focus");
+    expect(signMessages("Hola, soy [[firma]], de Daicou.", "Estanislao Vilamajo")).toBe("Hola, soy Estanislao Vilamajo, de Daicou.");
+    expect(signMessages("Hola. Soy [[firma]], estamos relevando.\n[[firma]]", null)).toBe("Hola. estamos relevando.\n");
+  });
+});

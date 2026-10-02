@@ -74,9 +74,7 @@ export async function liveFocus(db: Db, campaignId: string, now = new Date()): P
   return { focus, now: visible(focus, now) };
 }
 
-/** Firma de los mensajes preparados en background: se completa con el nombre de quien los manda. */
-export const SIGNATURE = "[[firma]]";
-export const signMessages = (text: string, fullName: string | null) => text.replaceAll(SIGNATURE, fullName ?? "");
+export { SIGNATURE, signMessages } from "@/domain/focus";
 
 /** Se dio un paso con alguien (mensaje enviado, reunión confirmada): se resuelve lo del home que era eso. */
 export async function stepTaken(db: Db, missionId: string, e: Pick<ContactEvent, "contact_ref" | "company_ref">, note: string): Promise<{ resolved: FocusItem[]; next: FocusItem | null }> {

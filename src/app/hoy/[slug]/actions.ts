@@ -34,7 +34,8 @@ export async function advance(slug: string, input: { focusId: string; conversati
     return askRelevo(slug, { conversationId: input.conversationId, scope: "", screen: "Conversar (calle)", text: question, here: input.here, place: input.place });
   }
   // Ya preparado: queda en la conversación (para seguir hablando de eso) y se muestra sin esperar.
-  const text = signMessages(item.move.text, fullNameOf(ctx.workspace.settings, ctx.user.id) ?? ctx.user.email ?? null);
+  const { data: me } = await supabase.from("profiles").select("display_name").eq("user_id", ctx.user.id).maybeSingle();
+  const text = signMessages(item.move.text, fullNameOf(ctx.workspace.settings, ctx.user.id) ?? me?.display_name?.trim() ?? null);
   let convId = input.conversationId;
   if (!convId) {
     const { data, error } = await supabase.from("ai_conversations").insert({ workspace_id: ctx.workspace.id, user_id: ctx.user.id, title: question.slice(0, 80), scope: { type: "workspace" } }).select("id").single();

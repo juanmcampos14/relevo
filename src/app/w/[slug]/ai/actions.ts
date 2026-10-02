@@ -10,6 +10,7 @@ import { after } from "next/server";
 import { runTurn } from "@/server/ai/turn";
 import { ProposeActionInput, executeDraft } from "@/server/ai/drafts";
 import { assessFinding } from "@/server/findings/assess";
+import { activeMission, applyCorrection } from "@/server/mission/focus";
 import { undoContactEvent, type EventEffects } from "@/server/ai/contact-events";
 
 export async function sendMessage(slug: string, conversationId: string | null, _: ActionState, fd: FormData): Promise<ActionState> {
@@ -68,6 +69,11 @@ export async function undoDraft(slug: string, draftId: string): Promise<void> {
   const { data: draft } = await supabase.from("ai_action_drafts").select("id, action, after_state").eq("id", draftId).eq("status", "ejecutada").eq("action", "contact_event").maybeSingle();
   if (!draft?.after_state) return;
   await undoContactEvent(supabase, draft.after_state as unknown as EventEffects);
+  const back = (draft.after_state as { focus_resolved?: string[] }).focus_resolved ?? [];
+  if (back.length) {
+    const mission = await activeMission(supabase);
+    if (mission) await applyCorrection(supabase, mission, { kind: "reactivar", ids: back }, ctx.user.id);
+  }
   await supabase.from("ai_action_drafts").update({ status: "deshecha", decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", draftId);
   revalidatePath(`/w/${slug}`, "layout");
 }

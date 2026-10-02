@@ -131,11 +131,17 @@ export type ToolContext = {
   navigate?: (href: string) => void;
   /** Dónde está el usuario ahora (GPS del teléfono), si lo compartió. */
   here?: { lat: number; lng: number; accuracy?: number } | null;
+  /** Nombre legible de ese lugar ("Palermo, Buenos Aires"), si se conoce. */
+  place?: string | null;
   workspaceId?: string;
   userId?: string;
   settings?: unknown;
   /** Proyecto o misión en el que se está trabajando (para que una nota de campo alimente ese proyecto). */
   campaignId?: string | null;
+  /** La misión activa (su foco es el home), aunque la persona esté lejos de su zona. */
+  missionId?: string | null;
+  /** Cambiaron las prioridades del home (para refrescarlo). */
+  onFocusChange?: () => void;
   /** Una nota de campo quedó guardada como captura (el panel muestra lo que entendió RELEVO). */
   onCapture?: (captureId: string) => void;
   /** Referencias devueltas por las herramientas en esta conversación: únicas citables. */

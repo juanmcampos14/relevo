@@ -16,6 +16,8 @@ import { structureLater } from "@/server/capture/background";
 import { missionBrief } from "./mission";
 import { fold } from "@/domain/crm-import/map";
 import { ContactEventInput, applyContactEvent } from "./contact-events";
+import { randomUUID } from "node:crypto";
+import { applyCorrection, liveFocus, stepTaken } from "@/server/mission/focus";
 
 /** Centro de una consulta territorial: el punto pedido, donde está el usuario o Añelo. */
 function centerOf(a: Record<string, unknown>, ctx: ToolContext): { point: Point; label: string } {
@@ -172,6 +174,23 @@ export const KNOWLEDGE_TOOLS: Anthropic.Beta.BetaTool[] = [
       note: { type: "string" },
       follow_up_on: { type: "string", description: "YYYY-MM-DD" },
     }, ["event"]),
+  },
+  {
+    name: "research_in_background",
+    description: "Investiga POR DETRÁS una idea o pregunta abierta de la calle (\"esta zona me parece buena para una cafetería\", \"¿hay algo acá para un depósito?\") sin hacer esperar a la persona: mirás territorio, web y memoria, y la lectura queda en su inicio con el próximo paso listo. Usala cuando la respuesta necesita investigar en serio (varias búsquedas); después respondé en una línea qué vas a mirar (\"Sí, hay una señal interesante. Voy a mirar oferta cercana, movimiento y locales disponibles; te lo dejo en el inicio.\"). question: lo que hay que investigar, completo y con el lugar. title: cómo se verá en el inicio (p. ej. \"Cafetería gourmet en Libertador y Tagle\").",
+    input_schema: strict({ question: { type: "string" }, title: { type: "string" } }, ["question", "title"]),
+  },
+  {
+    name: "adjust_focus",
+    description: "Corrige las prioridades del home cuando la persona lo pide (\"esto primero\", \"FERRELEC mañana\", \"sacame esto\", \"esto ya no importa\", \"ya lo hice\", \"sumá ver locales en Libertador\"). action: primero | posponer (until YYYY-MM-DD) | sacar | hecha | agregar (title y, si se puede, refs de empresas o personas). focus_id sale de las prioridades del contexto. note: por qué, en sus palabras (le sirve al Brain). Se aplica en el momento; confirmá en una línea.",
+    input_schema: strict({
+      action: { type: "string", enum: ["primero", "posponer", "sacar", "hecha", "agregar"] },
+      focus_id: { type: "string" },
+      until: { type: "string", description: "YYYY-MM-DD (posponer)" },
+      title: { type: "string", description: "Qué hay que hacer (agregar), con verbo" },
+      refs: { type: "array", items: { type: "string" } },
+      note: { type: "string" },
+    }, ["action"]),
   },
   {
     name: "open_page",
@@ -588,11 +607,45 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (!ctx.workspaceId || !ctx.userId || !ctx.saveApplied) return { content: "No disponible en este contexto.", isError: true };
       try {
         const { summary, effects } = await applyContactEvent(db, { workspaceId: ctx.workspaceId, userId: ctx.userId, campaignId: ctx.campaignId ?? null }, input.data);
-        await ctx.saveApplied({ action: "contact_event", payload: input.data, summary, after: effects });
-        return { content: JSON.stringify({ applied: true, summary, calendar: effects.calendar_url ? "La tarjeta de la conversación ya muestra el botón 'Agregar a Calendar': no pegues el link." : null, undo: "La persona puede deshacerlo desde la tarjeta de la conversación." }) };
+        // El home cambia en el momento: lo que era esto se resuelve y aparece lo siguiente (si se deshace, vuelve).
+        const step = ctx.missionId ? await stepTaken(db, ctx.missionId, input.data, summary).catch(() => null) : null;
+        await ctx.saveApplied({ action: "contact_event", payload: input.data, summary, after: { ...effects, focus_resolved: step?.resolved.map((x) => x.id) ?? [] } });
+        return { content: JSON.stringify({ applied: true, summary, home: step?.resolved.length ? { resolved: step.resolved.map((x) => x.title), next: step.next?.title ?? null } : null, calendar: effects.calendar_url ? "La tarjeta de la conversación ya muestra el botón 'Agregar a Calendar': no pegues el link." : null, undo: "La persona puede deshacerlo desde la tarjeta de la conversación." }) };
       } catch (e) {
         return { content: `No pude registrarlo: ${(e as Error).message}`, isError: true };
       }
+    }
+    case "research_in_background": {
+      const question = Str.min(5).max(2000).safeParse(a.question);
+      const title = Str.min(3).max(120).safeParse(a.title);
+      if (!question.success || !title.success) return { content: "Falta qué investigar (question) y cómo llamarlo (title).", isError: true };
+      if (!ctx.workspaceId || !ctx.userId) return { content: "No disponible en este contexto.", isError: true };
+      // Import diferido: la investigación usa el mismo motor que esta conversación.
+      const { researchLater } = await import("@/server/mission/research");
+      await researchLater(db, { workspaceId: ctx.workspaceId, slug: ctx.slug, userId: ctx.userId, settings: ctx.settings, question: question.data, title: title.data, here: ctx.here ?? null, place: ctx.place ?? null });
+      return { content: JSON.stringify({ started: true, note: "Respondé en una o dos oraciones qué vas a mirar y que lo dejás en el inicio. No inventes resultados." }) };
+    }
+    case "adjust_focus": {
+      if (!ctx.missionId) return { content: "No hay una misión activa con prioridades.", isError: true };
+      const action = String(a.action);
+      const id = typeof a.focus_id === "string" ? a.focus_id : "";
+      const note = typeof a.note === "string" ? a.note.slice(0, 300) : null;
+      const { focus } = await liveFocus(db, ctx.missionId);
+      if (action !== "agregar" && !focus.items.some((x) => x.id === id)) return { content: `No encontré esa prioridad. Las de ahora: ${JSON.stringify(focus.items.filter((x) => x.status === "activa" || x.status === "pospuesta").map((x) => ({ focus_id: x.id, title: x.title })))}`, isError: true };
+      if (action === "posponer" && !(typeof a.until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.until))) return { content: "Para posponer necesito el día (until YYYY-MM-DD).", isError: true };
+      if (action === "agregar" && !(typeof a.title === "string" && a.title.trim())) return { content: "Para agregar necesito qué hay que hacer (title).", isError: true };
+      const refs = Array.isArray(a.refs) ? a.refs.filter((r): r is string => typeof r === "string" && ctx.seenRefs.has(r)) : [];
+      const c =
+        action === "primero" ? { kind: "primero" as const, id }
+        : action === "posponer" ? { kind: "posponer" as const, id, until: String(a.until), note }
+        : action === "sacar" ? { kind: "sacar" as const, id, note }
+        : action === "hecha" ? { kind: "hecha" as const, id, note }
+        : { kind: "agregar" as const, id: randomUUID(), title: String(a.title).trim().slice(0, 200), why: note, refs, first: true };
+      const next = await applyCorrection(db, ctx.missionId, c, ctx.userId ?? null);
+      if (!next) return { content: "No pude cambiar las prioridades.", isError: true };
+      ctx.onFocusChange?.();
+      const { now } = await liveFocus(db, ctx.missionId);
+      return { content: JSON.stringify({ applied: true, home_now: now.map((x) => x.title) }) };
     }
     case "locate": {
       const q = Str.min(2).safeParse(a.query);

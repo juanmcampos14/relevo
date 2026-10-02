@@ -4,7 +4,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { AI_MODEL, PROMPT_VERSION, runAgent } from "./agent";
-import { previewDraft } from "./drafts";
+import { executeDraft, previewDraft } from "./drafts";
+import { liveFocus } from "@/server/mission/focus";
+import { prepareMoves } from "@/server/mission/moves";
 import { after } from "next/server";
 import { synthesizeMission } from "@/server/mission/synthesis";
 import { ANELO_POINT, distanceM } from "@/domain/geo-match";
@@ -29,7 +31,7 @@ const scopeLabel: Record<string, string> = {
 const scopeTool: Record<string, string> = { finding: "get_hypothesis", capture: "get_capture", contact: "get_person", campaign: "project_status" };
 
 export type TurnResult =
-  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null; captureIds: string[]; webSources: { url: string; title: string }[] }
+  | { ok: true; conversationId: string; text: string; citations: string[]; draftIds: string[]; navigate: string | null; captureIds: string[]; webSources: { url: string; title: string }[]; homeChanged: boolean }
   | { ok: false; conversationId: string | null; message: string };
 
 export async function runTurn(
@@ -79,9 +81,15 @@ export async function runTurn(
   const teamLine = Object.values(team).filter((t) => t.short).map((t) => (t.full ? `${t.short} (${t.full})` : t.short)).join(", ");
   const now = new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
   const [scopeType] = opts.scope.split(":");
+  const mission = scopeType === "campaign"
+    ? opts.scope.split(":")[1]
+    : (await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle()).data?.id ?? null;
+  // Lo que hoy está en el home: la persona lo nombra ("esto primero", "FERRELEC mañana") y RELEVO lo corrige.
+  const home = mission ? await liveFocus(db, mission).catch(() => null) : null;
   const context = [
     `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.${teamLine ? ` Equipo: ${teamLine}; en documentos y en el CRM pueden figurar con cualquiera de los dos nombres.` : ""}${firstName ? ` Hablás con ${firstName}: llamalo así.` : ""}`,
     opts.screen ? `Pantalla actual: ${opts.screen}.` : null,
+    home?.now.length ? `Prioridades en el home ahora (focus_id · qué): ${home.now.map((x) => `${x.id} · ${x.title}${x.refs.length ? ` (${x.refs.join(", ")})` : ""}`).join(" | ")}.` : null,
     opts.here ? `El usuario compartió su ubicación: ${opts.here.lat.toFixed(5)}, ${opts.here.lng.toFixed(5)} (±${Math.round(opts.here.accuracy ?? 0)} m)${opts.place ? `, en ${opts.place}` : ""}. "Acá" o "donde estoy" es ese punto.` : null,
     opts.attachedCaptureId ? `Mandó ${opts.images?.length === 1 ? "una foto" : "fotos"} que ya quedaron guardadas con su ubicación [[capture:${opts.attachedCaptureId}]]: miralas y respondé; no las vuelvas a registrar.` : null,
     opts.scope && scopeLabel[scopeType]
@@ -90,14 +98,12 @@ export async function runTurn(
   ].filter(Boolean).join(" ");
 
   const draftIds: string[] = [];
+  let homeChanged = false;
   const captureIds: string[] = [];
   let navigate: string | null = null;
   // Una nota de campo alimenta el proyecto que se está mirando; si no, la misión.
   // Dónde está la persona no es la misión: lejos de la zona de la misión (p. ej. caminando por Buenos Aires),
   // lo que captura queda en su lugar y no se carga a la misión, que sigue trabajando detrás.
-  const mission = scopeType === "campaign"
-    ? opts.scope.split(":")[1]
-    : (await db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle()).data?.id ?? null;
   const awayFromMission = !!opts.here && scopeType !== "campaign" && distanceM(ANELO_POINT, opts.here) > 150_000;
   const campaignId = awayFromMission ? null : mission;
   const started = Date.now();
@@ -113,10 +119,13 @@ export async function runTurn(
       seenRefs,
       navigate: (href) => { navigate = href; },
       here: opts.here ?? null,
+      place: opts.place ?? null,
       workspaceId: opts.workspaceId,
       userId: opts.userId,
       settings: opts.settings,
       campaignId,
+      missionId: mission,
+      onFocusChange: () => { homeChanged = true; },
       onCapture: (id) => captureIds.push(id),
       saveApplied: async ({ action, payload, summary, after }) => {
         // Las acciones aplicadas solas quedan auditadas como borrador ejecutado (deshacible).
@@ -139,6 +148,13 @@ export async function runTurn(
           .select("id")
           .single();
         if (error) throw error;
+        // Lo que la web dice y sirve como evidencia se guarda solo (interno y reversible): la persona no administra
+        // la inteligencia. Queda auditado como ejecutado.
+        if (action === "record_web_evidence") {
+          const exec = await executeDraft(db, { workspaceId: opts.workspaceId, userId: opts.userId }, data.id, input);
+          await db.from("ai_action_drafts").update({ status: exec.error ? "error" : "ejecutada", decided_by: opts.userId, decided_at: new Date().toISOString(), result_ref: exec.resultRef, error: exec.error, after_state: (exec.after ?? null) as never }).eq("id", data.id);
+          return data.id;
+        }
         draftIds.push(data.id);
         return data.id;
       },
@@ -180,6 +196,21 @@ export async function runTurn(
       }
     }
   }
+  // Cambió lo que se ve en el home: lo nuevo que aparece llega con su Avanzar preparado.
+  if (draftIds.length) {
+    const { data: applied } = await db.from("ai_action_drafts").select("id").in("id", draftIds).eq("action", "contact_event").eq("status", "ejecutada").limit(1);
+    if (applied?.length) homeChanged = true;
+  }
+  if (homeChanged && mission) laterPrepare(db, { workspaceId: opts.workspaceId, campaignId: mission, slug: opts.slug, settings: opts.settings, userId: opts.userId });
   if (result.status === "error") return { ok: false, conversationId: convId, message: result.error ?? "No se pudo completar la consulta." };
-  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources };
+  return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources, homeChanged };
+}
+
+/** Prepara en background el Avanzar de lo que quedó visible (dentro de un request: after; en scripts: no). */
+export function laterPrepare(db: Db, opts: Parameters<typeof prepareMoves>[1]) {
+  try {
+    after(async () => { await prepareMoves(db, opts).catch(() => null); });
+  } catch {
+    /* fuera de un request (scripts): se prepara en el próximo cron */
+  }
 }

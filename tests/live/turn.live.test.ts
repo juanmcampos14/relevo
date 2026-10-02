@@ -11,8 +11,11 @@ describe.skipIf(!process.env.TURN || !process.env.USER_ID || !process.env.TEXT |
   it("conversa", { timeout: 600_000 }, async () => {
     const db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false } });
     const { data: w } = await db.from("workspaces").select("id, slug, name, settings").eq("slug", process.env.WS ?? "daicou").single();
+    // HERE="lat,lng" y PLACE="Palermo, Buenos Aires" simulan la calle.
+    const [lat, lng] = (process.env.HERE ?? "").split(",").map(Number);
+    const here = Number.isFinite(lat) && Number.isFinite(lng) && process.env.HERE ? { lat, lng, accuracy: 20 } : null;
     const started = Date.now();
-    const res = await runTurn(db, { slug: w!.slug, workspaceId: w!.id, workspaceName: w!.name, userId: process.env.USER_ID!, settings: w!.settings, conversationId: process.env.CONVERSATION ?? null, text: process.env.TEXT!, scope: "" });
+    const res = await runTurn(db, { slug: w!.slug, workspaceId: w!.id, workspaceName: w!.name, userId: process.env.USER_ID!, settings: w!.settings, conversationId: process.env.CONVERSATION ?? null, text: process.env.TEXT!, scope: "", here, place: process.env.PLACE ?? null });
     const seconds = (Date.now() - started) / 1000;
     expect(res.ok).toBe(true);
     if (!res.ok) return;

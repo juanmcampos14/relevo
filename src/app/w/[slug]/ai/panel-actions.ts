@@ -6,7 +6,7 @@ import { getWorkspaceContext } from "@/server/context";
 import { labelRefs, type RefLabel } from "@/server/ai/labels";
 import { runTurn } from "@/server/ai/turn";
 import { configuredTranscriber } from "@/server/capture/transcribe";
-import type { Preview } from "@/server/ai/drafts";
+import { draftsView, type PanelDraft } from "@/server/ai/panel-view";
 import { decideDraft, undoDraft } from "./actions";
 import { structureLater } from "@/server/capture/background";
 import { CAPTURE_BUCKET } from "@/domain/capture";
@@ -16,7 +16,7 @@ import { captureExceptions, type ReviewProposal } from "@/domain/capture-review"
 
 // Panel persistente de RELEVO: mismo motor que la página de RELEVO AI, con el contexto de la pantalla.
 
-export type PanelDraft = { id: string; action: string; status: string; rationale: string | null; preview: Preview | null; error: string | null; resultHref: string | null; applied: boolean; calendarUrl: string | null };
+export type { PanelDraft } from "@/server/ai/panel-view";
 export type PanelCapture = {
   id: string;
   href: string;
@@ -27,26 +27,8 @@ export type PanelCapture = {
   exceptions: number;
 };
 export type PanelReply =
-  | { ok: true; conversationId: string; text: string; labels: Record<string, RefLabel>; drafts: PanelDraft[]; navigate: string | null; captures: PanelCapture[]; webSources: { url: string; title: string }[] }
+  | { ok: true; conversationId: string; text: string; labels: Record<string, RefLabel>; drafts: PanelDraft[]; navigate: string | null; captures: PanelCapture[]; webSources: { url: string; title: string }[]; homeChanged?: boolean }
   | { ok: false; conversationId: string | null; message: string };
-
-async function draftsView(slug: string, ids: string[]): Promise<PanelDraft[]> {
-  if (!ids.length) return [];
-  const supabase = await createClient();
-  const { data } = await supabase.from("ai_action_drafts").select("id, action, status, rationale, preview, error, result_ref, after_state").in("id", ids).order("created_at");
-  const labels = await labelRefs(supabase, slug, (data ?? []).map((d) => d.result_ref).filter((x): x is string => !!x));
-  return (data ?? []).map((d) => ({
-    id: d.id,
-    action: d.action,
-    status: d.status,
-    rationale: d.rationale,
-    preview: (d.preview as Preview | null) && Object.keys(d.preview as object).length ? (d.preview as Preview) : null,
-    error: d.error,
-    resultHref: d.result_ref ? labels.get(d.result_ref)?.href ?? null : null,
-    applied: d.action === "contact_event",
-    calendarUrl: (d.after_state as { calendar_url?: string | null } | null)?.calendar_url ?? null,
-  }));
-}
 
 const KIND: Record<string, string> = { company: "Organización", asset: "Activo", person: "Persona", evidence: "Dato", finding: "Hipótesis", next_action: "Próxima acción" };
 
@@ -123,7 +105,7 @@ export async function askRelevo(slug: string, input: { conversationId: string | 
   if (!res.ok) return res;
   const labels = await labelRefs(supabase, slug, res.citations);
   const captures = (await Promise.all(res.captureIds.map((id) => captureCard(slug, id)))).filter((c): c is PanelCapture => !!c);
-  return { ok: true, conversationId: res.conversationId, text: res.text, labels: Object.fromEntries(labels), drafts: await draftsView(slug, res.draftIds), navigate: res.navigate, captures, webSources: res.webSources };
+  return { ok: true, conversationId: res.conversationId, text: res.text, labels: Object.fromEntries(labels), drafts: await draftsView(slug, res.draftIds), navigate: res.navigate, captures, webSources: res.webSources, homeChanged: res.homeChanged };
 }
 
 /** Nombre legible del lugar donde está la persona ("Palermo, Buenos Aires"): contexto, no un módulo. */

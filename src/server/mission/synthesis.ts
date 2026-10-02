@@ -6,12 +6,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { missionBrief } from "@/server/ai/mission";
 import { deepCall } from "./deep";
+import { randomUUID } from "node:crypto";
+import { EMPTY_FOCUS, correctionsForBrain, mergeSynthesis, type Focus } from "@/domain/focus";
 
 // "RELEVO ya trabajó": la síntesis diaria de la misión se calcula en background (después del Brief) y la
 // conversación responde desde ella en segundos. Lenguaje humano, sin jerga interna; referencias reales.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-sintesis-v1";
+const PROMPT_VERSION = "mision-sintesis-v2";
 
 const Item = z.object({
   title: z.string().describe("Qué haría, con verbo, en lenguaje humano (p. ej. 'Mover las presentaciones con YPF, Vista y Tecpetrol')."),
@@ -33,7 +35,9 @@ Reglas:
 - Investigamos para cerrar gaps: priorizá lo que abre puertas (presentaciones, AOG), los compromisos que vencen y validar hipótesis desde el lado comprador cuando corresponda.
 - Lo importante primero; dejá afuera casi todo. Nada de inventarios ni conteos internos.
 - Lenguaje humano. Prohibido: "finding", "gap", "baseline", "evidencia nula", "geolocalizado", "workspace", "memoria", ids o códigos (H-VA-…, AN-…).
-- Usá solo referencias que aparezcan en el material.`;
+- Usá solo referencias que aparezcan en el material. Cada cosa lleva las referencias de las empresas o personas con las que hay que moverse.
+- Las correcciones de la persona mandan: lo que sacó o dio por hecho no vuelve; lo que puso primero va primero; lo que pospuso no es de hoy.
+- Si hoy hay una sola cosa realmente importante, proponé una sola.`;
 
 export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null }) {
   const brief = await missionBrief(db, opts.campaignId, opts.today, { withSynthesis: false });
@@ -44,7 +48,13 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
     .map((t) => ({ company: t.companies, b: t.briefing as B }))
     .filter((t) => t.company && (t.b.this_week || t.b.today))
     .map((t) => ({ company: `company:${t.company!.id}`, name: t.company!.trade_name ?? t.company!.legal_name, contact: t.b.contact ?? null, today: !!t.b.today, why: t.b.why, objective: t.b.objective, attention: t.b.attention }));
-  const material = JSON.stringify({ ...brief, shortlist });
+  const { data: prev } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
+  const prevSynthesis = (prev?.synthesis ?? {}) as { aog?: unknown; focus?: Focus };
+  const focus = prevSynthesis.focus?.items ? prevSynthesis.focus : EMPTY_FOCUS;
+  const now = opts.today ?? new Date();
+  const corrections = correctionsForBrain(focus, now);
+  const current = focus.items.filter((x) => x.status === "activa" || x.status === "pospuesta").map((x) => ({ title: x.title, status: x.status, until: x.until ?? null, puesta_por_la_persona: x.source === "persona" || !!x.pinned }));
+  const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
   const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId });
   if (!r.ok) return r;
@@ -57,10 +67,12 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
     computed_at: new Date().toISOString(),
     counts: { contacts_this_week: shortlist.length, attention_today: shortlist.filter((s) => s.today).length },
   };
-  // El plan de AOG se prepara aparte y se conserva al renovar la síntesis del día.
-  const { data: prev } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
-  const aog = (prev?.synthesis as { aog?: unknown } | null)?.aog;
-  const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(aog ? { aog } : {}) } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
+  // El plan de AOG se prepara aparte y se conserva al renovar la síntesis del día. El foco se actualiza con lo
+  // nuevo sin pisar lo que la persona decidió (se relee por si cambió mientras se pensaba).
+  const { data: latest } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
+  const keep = (latest?.synthesis ?? {}) as { aog?: unknown; focus?: Focus };
+  const merged = mergeSynthesis(keep.focus?.items ? keep.focus : EMPTY_FOCUS, { today: synthesis.today, week: synthesis.this_week }, new Date(), randomUUID);
+  const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(keep.aog ? { aog: keep.aog } : {}), focus: merged } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
   return { ok: true as const, synthesis, costUsd: r.costUsd };
 }

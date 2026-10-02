@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUp, Camera, Check, Copy, MapPin, Mic, Square, X } from "lucide-react";
@@ -10,14 +10,19 @@ import { compressPhoto, useRecorder } from "@/lib/capture/media";
 import { createClient } from "@/lib/supabase/client";
 import { CAPTURE_BUCKET, syncOne, type CaptureApi } from "@/domain/capture";
 import type { RefLabel } from "@/server/ai/labels";
-import { askRelevo, decideFromPanel, placeName, transcribeQuestion, undoFromPanel, type PanelDraft } from "@/app/w/[slug]/ai/panel-actions";
+import { askRelevo, decideFromPanel, placeName, transcribeQuestion, undoFromPanel, type PanelDraft, type PanelReply } from "@/app/w/[slug]/ai/panel-actions";
+import { advance, correctFocus, markSent } from "@/app/hoy/[slug]/actions";
+import { parseReply, speakable, type ReadyMessage } from "./reply";
+import { FocusList, type FocusChange, type FocusView } from "./focus-list";
 
-// Conversar (Surface): la calle es la oficina, el teléfono el sensor, la voz la interfaz. RELEVO ya trabajó;
-// la conversación es protagonista y la Surface no explica el sistema: mueve la oportunidad.
+// RELEVO (Surface): un solo producto. Conversar, Explorar y Oportunidades son tres formas de hablar con el
+// mismo Brain, con la misma entrada (escribir, hablar, mostrar). La calle es la oficina, el teléfono el
+// sensor, la voz la interfaz. La Surface no explica el sistema: mueve la oportunidad.
 
-export type TodayItem = { title: string; why: string };
 export type Interrupt = { id: string; title: string; detail: string | null } | null;
-type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[] };
+export type SurfaceTab = "conversar" | "explorar" | "oportunidades";
+type Sent = { line: string; draft: PanelDraft | null } | "enviando" | { error: string };
+type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: boolean };
 type Here = { lat: number; lng: number; accuracy: number };
 
 const CONV_KEY = "relevo-hoy-conversation";
@@ -32,20 +37,9 @@ const store = {
 const THINKING = [
   { after: 0, text: "Pensando" },
   { after: 4000, text: "Cruzando con lo que ya sabemos" },
-  { after: 12000, text: "Armando la respuesta" },
+  { after: 12000, text: "Buscando lo que falta" },
+  { after: 24000, text: "Armando el próximo paso" },
 ];
-
-/** Acciones sugeridas y mensaje listo que deja RELEVO al final: se muestran como botón y como tarjeta para copiar. */
-export function parseReply(text: string): { body: string; actions: string[]; messages: string[] } {
-  const actions = [...text.matchAll(/\[\[acci[oó]n:\s*([^\]]+)\]\]/gi)].map((m) => m[1].trim()).slice(0, 2);
-  const messages = [...text.matchAll(/\[\[mensaje\]\]([\s\S]*?)\[\[\/mensaje\]\]/gi)].map((m) => m[1].trim()).filter(Boolean);
-  const body = text.replace(/\[\[acci[oó]n:[^\]]+\]\]/gi, "").replace(/\[\[mensaje\]\][\s\S]*?\[\[\/mensaje\]\]/gi, "").trim();
-  return { body, actions, messages };
-}
-
-/** Texto para decir en voz alta: sin citas, marcas ni formato. */
-const speakable = (text: string) =>
-  parseReply(text).body.replace(/\[\[[a-z]+:[0-9a-f-]{36}\]\]/g, "").replace(/\[referencia no verificada\]/g, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim();
 
 function useVoice() {
   const voice = useRef<SpeechSynthesisVoice | null>(null);
@@ -70,7 +64,7 @@ function useVoice() {
         const u = new SpeechSynthesisUtterance(text);
         u.lang = voice.current?.lang ?? "es-AR";
         if (voice.current) u.voice = voice.current;
-        u.rate = 1.03;
+        u.rate = 1.05;
         speechSynthesis.speak(u);
       } catch { /* sin voz */ }
     },
@@ -93,16 +87,29 @@ function captureApi(): CaptureApi {
 
 /** ¿Está cerca de la zona de la misión (Añelo)? Lejos, lo que captura queda en su lugar y no en la misión. */
 const nearMission = (h: Here | null) => !!h && Math.hypot(h.lat + 38.3542, h.lng + 68.7877) < 1.4;
+const shadow = "shadow-[0_1px_2px_rgba(28,27,25,0.04),0_8px_28px_rgba(28,27,25,0.06)]";
 
 export function Conversation(props: {
   slug: string; workspaceId: string; missionId: string | null; canEdit: boolean;
-  greeting: string; intro: string; items: TodayItem[]; missionLabel: string | null; interrupt: Interrupt;
+  tab: SurfaceTab;
+  /** Lo que se está mirando (una oportunidad, por ejemplo): las preguntas son sobre eso. */
+  scope?: string;
+  screen?: string;
+  greeting?: string | null; intro?: string | null;
+  focus?: FocusView[]; focusVersion?: string;
+  missionLabel?: string | null; interrupt?: Interrupt;
+  /** Pregunta que llega desde otra pantalla ("Contame" en Explorar): se hace sola al entrar. */
+  initialAsk?: string | null;
+  placeholder?: string;
+  children?: ReactNode;
 }) {
-  const { slug, workspaceId, missionId, canEdit, greeting, intro, items, missionLabel } = props;
+  const { slug, workspaceId, missionId, canEdit, tab, greeting, intro, missionLabel } = props;
+  const scope = props.scope ?? "";
+  const screen = props.screen ?? "Conversar (calle)";
   const router = useRouter();
   const voice = useVoice();
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(() => (typeof window === "undefined" ? null : store.get(CONV_KEY)));
+  const [conversationId, setConversationId] = useState<string | null>(() => (typeof window === "undefined" || scope ? null : store.get(CONV_KEY)));
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<{ data: ArrayBuffer; mimeType: string; url: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +121,9 @@ export function Conversation(props: {
   const [place, setPlace] = useState<string | null>(null);
   const [interrupt, setInterrupt] = useState<Interrupt>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [sent, setSent] = useState<Record<string, Sent>>({});
   const spoke = useRef(false);
+  const asked = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -140,13 +149,24 @@ export function Conversation(props: {
   }, []);
   useEffect(() => { locate(false); }, [locate]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, pending]);
+  useEffect(() => { if (messages.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, pending]);
   useEffect(() => {
     if (!pending) return;
     const started = Date.now();
     const t = setInterval(() => setThinking([...THINKING].reverse().find((s) => Date.now() - started >= s.after)!.text), 500);
     return () => clearInterval(t);
   }, [pending]);
+
+  /** Muestra la respuesta, la dice si se habló, y si cambió el presente (algo se hizo) refresca el home. */
+  const receive = useCallback((res: PanelReply) => {
+    if (res.conversationId && !scope) store.set(CONV_KEY, res.conversationId);
+    if (res.conversationId) setConversationId(res.conversationId);
+    if (!res.ok) { setError(res.message); return; }
+    setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts.filter((d) => !(d.action === "record_web_evidence" && d.status === "ejecutada")) }]);
+    if (spoke.current) voice.say(speakable(res.text));
+    if (res.homeChanged) router.refresh();
+    if (res.navigate) router.push(res.navigate);
+  }, [router, scope, voice]);
 
   const ask = useCallback((q: string, opts: { viaVoice?: boolean } = {}) => {
     const question = q.trim() || (photo ? "¿Qué ves acá? ¿Hay algo?" : "");
@@ -171,14 +191,42 @@ export function Conversation(props: {
         if (!res.ok) { setError(res.message); return; }
         captureId = res.id;
       }
-      const res = await askRelevo(slug, { conversationId, scope: "", screen: "Conversar (calle)", text: question, here, place, captureId });
-      if (res.conversationId) { setConversationId(res.conversationId); store.set(CONV_KEY, res.conversationId); }
-      if (!res.ok) { setError(res.message); return; }
-      setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts }]);
-      if (spoke.current) voice.say(speakable(res.text));
-      if (res.navigate) router.push(res.navigate);
+      receive(await askRelevo(slug, { conversationId, scope, screen, text: question, here, place, captureId }));
     });
-  }, [conversationId, here, missionId, pending, photo, place, router, slug, voice, workspaceId]);
+  }, [conversationId, here, missionId, pending, photo, place, receive, scope, screen, slug, workspaceId]);
+
+  // Una pregunta que llega desde otra pantalla se hace sola, una vez.
+  useEffect(() => {
+    if (!props.initialAsk || asked.current) return;
+    asked.current = true;
+    const q = props.initialAsk;
+    queueMicrotask(() => ask(q));
+    router.replace(window.location.pathname, { scroll: false });
+  }, [ask, props.initialAsk, router]);
+
+  /** Avanzar una prioridad: si RELEVO ya la preparó, aparece al instante. */
+  const advanceItem = (it: FocusView) => {
+    if (pending) return;
+    spoke.current = false;
+    setError(null);
+    setThinking(THINKING[0].text);
+    setMessages((m) => [...m, { role: "user", text: `Avanzar: ${it.title}` }]);
+    start(async () => receive(await advance(slug, { focusId: it.id, conversationId, here, place })));
+  };
+
+  const changeFocus = (c: FocusChange) => {
+    startBusy(async () => { await correctFocus(slug, c); router.refresh(); });
+  };
+
+  const confirmSent = (key: string, msg: ReadyMessage) => {
+    if (!msg.to) return;
+    setSent((s) => ({ ...s, [key]: "enviando" }));
+    startBusy(async () => {
+      const r = await markSent(slug, { ref: msg.to!, conversationId });
+      setSent((s) => ({ ...s, [key]: r.ok ? { line: r.line, draft: r.draft } : { error: r.message } }));
+      if (r.ok) { if (spoke.current) voice.say(r.line); router.refresh(); }
+    });
+  };
 
   // Voz: tocás, hablás, tocás de nuevo y se envía; la respuesta vuelve hablada.
   const recorder = useRecorder(useCallback(async (audio: { data: ArrayBuffer; mimeType: string }) => {
@@ -199,28 +247,34 @@ export function Conversation(props: {
   };
 
   const replaceDraft = (d: PanelDraft | null): void => { if (d) setMessages((ms) => ms.map((m) => (m.drafts ? { ...m, drafts: m.drafts.map((x) => (x.id === d.id ? d : x)) } : m))); };
-  const reset = () => { voice.stop(); setMessages([]); setConversationId(null); store.set(CONV_KEY, null); setError(null); };
+  const reset = () => { voice.stop(); setMessages([]); setConversationId(null); if (!scope) store.set(CONV_KEY, null); setError(null); setSent({}); };
   const dismiss = () => { if (interrupt) store.setLocal(DISMISSED_KEY, interrupt.id); setInterrupt(null); };
 
   const listening = recorder.state === "recording";
   const started = messages.length > 0;
-  const shadow = "shadow-[0_1px_2px_rgba(28,27,25,0.04),0_8px_28px_rgba(28,27,25,0.06)]";
+  const tabs: { key: SurfaceTab; label: string; href: string }[] = [
+    { key: "conversar", label: "Conversar", href: `/hoy/${slug}` },
+    { key: "explorar", label: "Explorar", href: `/hoy/${slug}/explorar` },
+    { key: "oportunidades", label: "Oportunidades", href: `/hoy/${slug}/oportunidades` },
+  ];
 
   return (
     <div className="relative min-h-dvh bg-[#FAF8F3] text-[#1C1B19] antialiased selection:bg-[#E9DFCB]">
-      <header className="sticky top-0 z-10 bg-[#FAF8F3]/85 backdrop-blur-md">
+      <header className="sticky top-0 z-30 bg-[#FAF8F3]/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-5">
           <div className="flex min-w-0 items-center gap-3">
-            <button type="button" onClick={reset} className="text-[15px] font-semibold tracking-[0.18em]" aria-label="RELEVO · empezar de nuevo">RELEVO</button>
+            {tab === "conversar" && !scope
+              ? <button type="button" onClick={reset} className="text-[15px] font-semibold tracking-[0.18em]" aria-label="RELEVO · empezar de nuevo">RELEVO</button>
+              : <Link href={`/hoy/${slug}`} className="text-[15px] font-semibold tracking-[0.18em]">RELEVO</Link>}
             <button type="button" onClick={() => locate(true)} className="flex min-w-0 items-center gap-1 rounded-full px-2 py-1 text-[13px] text-[#6F6A60] hover:bg-[#F1EDE4]" aria-label="Actualizar dónde estoy">
               <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{place ?? (here ? "Ubicado" : "Usar mi ubicación")}</span>
             </button>
           </div>
           <nav className="hidden items-center gap-5 text-[14px] text-[#6F6A60] sm:flex">
-            <span className="text-[#1C1B19]">Conversar</span>
-            <Link href={`/w/${slug}/explorar`} className="hover:text-[#1C1B19]">Explorar</Link>
-            <Link href={`/w/${slug}/oportunidades`} className="hover:text-[#1C1B19]">Oportunidades</Link>
+            {tabs.map((t) => t.key === tab && !scope
+              ? <span key={t.key} className="text-[#1C1B19]">{t.label}</span>
+              : <Link key={t.key} href={t.href} className="hover:text-[#1C1B19]">{t.label}</Link>)}
           </nav>
         </div>
       </header>
@@ -237,32 +291,19 @@ export function Conversation(props: {
           </section>
         )}
 
-        {/* RELEVO ya trabajó */}
-        <section className={cn("pt-10 transition-opacity duration-500 sm:pt-14", started && "opacity-60")}>
-          <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.02em] sm:text-[40px]">{greeting}</h1>
-          <p className="mt-3 max-w-[38rem] text-[18px] leading-relaxed text-[#4A463F]">{intro}</p>
-          {items.length > 0 && (
-            <ol className="mt-6 space-y-1 sm:mt-8">
-              {items.map((it, i) => (
-                <li key={it.title} className={cn("flex items-start gap-4 rounded-2xl px-2 py-4 transition-colors hover:bg-white sm:px-4", i > 0 && "hidden sm:flex")}>
-                  <span className="mt-0.5 hidden text-[15px] font-medium text-[#B0A894] tabular-nums sm:inline">{i + 1}</span>
-                  <div className="min-w-0 flex-1 sm:flex sm:items-start sm:gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[17px] leading-snug font-medium">{it.title}</p>
-                      <p className="mt-1 text-[15px] leading-relaxed text-[#6F6A60]">{it.why}</p>
-                    </div>
-                    <button type="button" disabled={pending} onClick={() => ask(`Avanzar: ${it.title}`)} className="mt-3 shrink-0 rounded-full bg-[#1C1B19] px-4 py-2 text-[14px] font-medium text-white transition-opacity disabled:opacity-40 sm:mt-0">
-                      Avanzar
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-          {missionLabel && <p className="mt-4 px-2 text-[13px] text-[#9C968A] sm:px-4">Misión {missionLabel}</p>}
-        </section>
+        {(greeting || intro || props.focus) && (
+          <section className={cn("pt-10 transition-opacity duration-500 sm:pt-14", started && "opacity-60")}>
+            {greeting && <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.02em] sm:text-[40px]">{greeting}</h1>}
+            {intro && <p className="mt-3 max-w-[38rem] text-[18px] leading-relaxed text-[#4A463F]">{intro}</p>}
+            {props.focus && (
+              <FocusList key={props.focusVersion} initial={props.focus} disabled={pending} canEdit={canEdit} onAdvance={advanceItem} onChange={changeFocus} />
+            )}
+            {missionLabel && <p className="mt-4 px-2 text-[13px] text-[#9C968A] sm:px-4">Misión {missionLabel}</p>}
+          </section>
+        )}
 
-        {/* Conversación */}
+        {props.children && <div className={cn("transition-opacity duration-500", started && "opacity-60")}>{props.children}</div>}
+
         {started && (
           <section className="mt-10 space-y-9" aria-live="polite">
             {messages.map((m, i) => {
@@ -275,32 +316,55 @@ export function Conversation(props: {
                   </div>
                 );
               const r = parseReply(m.text);
+              const last = i === messages.length - 1;
               return (
                 <div key={i} className="space-y-4">
-                  <div className="text-[17px] leading-[1.65] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold [&_ul]:space-y-2">
-                    <RichText text={r.body} labels={new Map(Object.entries(m.labels ?? {}))} />
-                  </div>
+                  {r.body && (
+                    <div className="text-[17px] leading-[1.65] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold [&_ul]:space-y-2">
+                      <RichText text={r.body} labels={new Map(Object.entries(m.labels ?? {}))} />
+                    </div>
+                  )}
                   {r.messages.map((msg, k) => {
                     const key = `${i}-${k}`;
+                    const s = sent[key];
                     return (
                       <div key={key} className={cn("rounded-3xl bg-white px-6 py-5", shadow)}>
-                        <p className="text-[16px] leading-relaxed whitespace-pre-wrap">{msg}</p>
-                        <button type="button" onClick={() => { navigator.clipboard?.writeText(msg); setCopied(key); setTimeout(() => setCopied(null), 1800); }} className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">
-                          {copied === key ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
-                          {copied === key ? "Copiado" : "Copiar mensaje"}
-                        </button>
+                        <p className="text-[16px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button type="button" onClick={() => { navigator.clipboard?.writeText(msg.text); setCopied(key); setTimeout(() => setCopied(null), 1800); }} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">
+                            {copied === key ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+                            {copied === key ? "Copiado" : "Copiar"}
+                          </button>
+                          {msg.to && canEdit && !s && (
+                            <span className="ml-auto flex items-center gap-2 text-[14px] text-[#6F6A60]">
+                              ¿Lo mandaste?
+                              <button type="button" disabled={busy} onClick={() => confirmSent(key, msg)} className="rounded-full bg-[#1C1B19] px-4 py-2 font-medium text-white disabled:opacity-40">Sí</button>
+                            </span>
+                          )}
+                          {s === "enviando" && <span className="ml-auto text-[14px] text-[#8A8478]">Anotando…</span>}
+                        </div>
+                        {s && s !== "enviando" && ("error" in s
+                          ? <p className="mt-2 text-[14px] text-[#A3402A]">{s.error}</p>
+                          : (
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#F1EDE4] pt-3">
+                              <p className={cn("flex-1 text-[15px]", s.draft?.status === "deshecha" && "text-[#A8A295] line-through")}>{s.line}</p>
+                              {s.draft && s.draft.status === "ejecutada" && (
+                                <button type="button" disabled={busy} onClick={() => startBusy(async () => { const d = await undoFromPanel(slug, s.draft!.id); setSent((x) => ({ ...x, [key]: { line: s.line, draft: d } })); router.refresh(); })} className="rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA] disabled:opacity-40">Deshacer</button>
+                              )}
+                            </div>
+                          ))}
                       </div>
                     );
                   })}
                   {m.drafts?.map((d) => (
                     <ActionObject key={d.id} d={d} canEdit={canEdit} busy={busy}
-                      onUndo={() => startBusy(async () => replaceDraft(await undoFromPanel(slug, d.id)))}
+                      onUndo={() => startBusy(async () => { replaceDraft(await undoFromPanel(slug, d.id)); router.refresh(); })}
                       onDecide={(v) => startBusy(async () => replaceDraft(await decideFromPanel(slug, d.id, v)))} />
                   ))}
-                  {r.actions.length > 0 && i === messages.length - 1 && (
+                  {r.actions.length > 0 && last && (
                     <div className="flex flex-wrap gap-2">
                       {r.actions.map((a, k) => (
-                        <button key={a} type="button" disabled={pending} onClick={() => ask(`Avanzar: ${a}`)} className={cn("rounded-full px-4 py-2 text-[14px] font-medium transition-opacity disabled:opacity-40", k === 0 ? "bg-[#1C1B19] text-white" : "text-[#6F6A60] hover:bg-[#F4F1EA]")}>
+                        <button key={a} type="button" disabled={pending} onClick={() => ask(a)} className={cn("rounded-full px-4 py-2 text-[14px] font-medium transition-opacity disabled:opacity-40", k === 0 ? "bg-[#1C1B19] text-white" : "text-[#6F6A60] hover:bg-[#F4F1EA]")}>
                           {a}
                         </button>
                       ))}
@@ -318,14 +382,14 @@ export function Conversation(props: {
                 <span>{thinking}…</span>
               </div>
             )}
-            {error && <p className="text-[15px] text-[#A3402A]">{error}</p>}
           </section>
         )}
+        {error && <p className="mt-6 text-[15px] text-[#A3402A]">{error}</p>}
         <div ref={endRef} />
       </main>
 
       {/* Entrada universal: escribir, hablar, mostrar */}
-      <div className="fixed inset-x-0 bottom-0 bg-gradient-to-t from-[#FAF8F3] via-[#FAF8F3] to-transparent pt-8 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#FAF8F3] via-[#FAF8F3] to-transparent pt-8 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <form className="mx-auto max-w-3xl px-4 sm:px-5" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
           {photo && (
             <div className="mb-2 flex items-center gap-2">
@@ -344,9 +408,9 @@ export function Conversation(props: {
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(text); } }}
                 rows={1}
-                placeholder={listening ? "Te escucho…" : transcribing ? "Entendiendo lo que dijiste…" : "Preguntame o mostrame algo…"}
+                placeholder={listening ? "Te escucho…" : transcribing ? "Entendiendo lo que dijiste…" : props.placeholder ?? "Preguntame o mostrame algo…"}
                 aria-label="Preguntale o mostrale algo a RELEVO"
-                className="mb-1.5 max-h-40 min-h-7 flex-1 resize-none bg-transparent text-[16px] leading-7 sm:text-[17px] outline-none placeholder:text-[#A8A295] [field-sizing:content]"
+                className="mb-1.5 max-h-40 min-h-7 flex-1 resize-none bg-transparent text-[16px] leading-7 outline-none placeholder:text-[#A8A295] [field-sizing:content] sm:text-[17px]"
               />
               <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = ""; }} />
               <button type="button" onClick={() => fileRef.current?.click()} disabled={pending} aria-label="Sacar o adjuntar una foto" className="flex size-10 shrink-0 items-center justify-center rounded-full text-[#4A463F] hover:bg-[#F4F1EA] disabled:opacity-40">
@@ -370,9 +434,9 @@ export function Conversation(props: {
             </button>
           </div>
           <nav className="mt-3 flex justify-center gap-6 text-[13px] text-[#8A8478] sm:hidden">
-            <span className="text-[#1C1B19]">Conversar</span>
-            <Link href={`/w/${slug}/explorar`}>Explorar</Link>
-            <Link href={`/w/${slug}/oportunidades`}>Oportunidades</Link>
+            {tabs.map((t) => t.key === tab && !scope
+              ? <span key={t.key} className="text-[#1C1B19]">{t.label}</span>
+              : <Link key={t.key} href={t.href} className="py-1">{t.label}</Link>)}
           </nav>
         </form>
       </div>
@@ -385,7 +449,7 @@ function ActionObject({ d, canEdit, busy, onUndo, onDecide }: { d: PanelDraft; c
   const summary = d.preview?.summary ?? d.rationale ?? "";
   const undone = d.status === "deshecha" || d.status === "rechazada";
   return (
-    <div className="rounded-3xl bg-white px-6 py-5 shadow-[0_1px_2px_rgba(28,27,25,0.04),0_8px_28px_rgba(28,27,25,0.05)]">
+    <div className={cn("rounded-3xl bg-white px-6 py-5", shadow)}>
       <p className={cn("text-[16px] leading-relaxed", undone && "text-[#A8A295] line-through")}>{summary}</p>
       {d.applied ? (
         d.status === "ejecutada" ? (

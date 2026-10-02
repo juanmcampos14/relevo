@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { GAPS, type Gap } from "@/domain/readiness";
 import { PURPOSES, type Discovery } from "@/domain/discovery";
 import { companyName } from "@/server/entities";
+import { correctionsForBrain, visible, type Focus } from "@/domain/focus";
 
 // Mission brief: en una sola llamada, lo que el Brain sabe de una misión (fechas, hipótesis y sus gaps,
 // a quién contactar, follow-ups, agenda, AOG, activos, señales). Es materia prima: el modelo sintetiza
@@ -93,8 +94,14 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const doneTasks = new Set((closed ?? []).map((x) => ref("task", x.id)));
   type Item = { title: string; why: string; refs: string[]; done?: boolean };
   const mark = (xs: Item[] = []) => xs.map((x) => { const tasks = x.refs.filter((r) => r.startsWith("task:")); return tasks.length && tasks.every((r) => doneTasks.has(r)) ? { ...x, done: true } : x; });
-  const prepared = mission.synthesis as { today?: Item[]; this_week?: Item[] } | null;
-  const live = prepared ? { ...prepared, today: mark(prepared.today), this_week: mark(prepared.this_week) } : null;
+  const prepared = mission.synthesis as { today?: Item[]; this_week?: Item[]; focus?: Focus } | null;
+  // Lo que hoy se ve en el home (el foco vivo, con las correcciones de la persona) manda sobre la síntesis.
+  const focusNow = prepared?.focus?.items ? visible(prepared.focus, today) : null;
+  const { focus: _f, aog: _a, ...rest } = (prepared ?? {}) as { focus?: unknown; aog?: unknown } & Record<string, unknown>;
+  void _f; void _a;
+  const live = prepared
+    ? { ...rest, today: mark(prepared.today), this_week: mark(prepared.this_week), ...(focusNow ? { now_on_home: focusNow.map((x) => ({ focus_id: x.id, title: x.title, why: x.why, refs: x.refs, done_with: x.done_refs ?? [] })), recent_corrections: correctionsForBrain(prepared.focus!, today).slice(0, 6) } : {}) }
+    : null;
   const sincePrepared = {
     actions: (applied ?? []).map((x) => ({ what: x.rationale, at: x.decided_at })),
     tasks_closed: (closed ?? []).map((x) => ({ ref: ref("task", x.id), title: clip(x.title, 140) })),

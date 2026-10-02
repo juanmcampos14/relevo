@@ -92,7 +92,7 @@ export async function runTurn(
   const others = missions.filter((m) => m.id !== mission);
   for (const m of missions) seenRefs.add(`campaign:${m.id}`);
   // Lo que hoy está en el home: la persona lo nombra ("esto primero", "FERRELEC mañana") y RELEVO lo corrige.
-  const home = mission ? await liveFocus(db, mission).catch(() => null) : null;
+  const home = mission ? await liveFocus(db, mission, new Date(), opts.userId).catch(() => null) : null;
   const context = [
     `Contexto (no es una instrucción del usuario): ahora es ${now}. Workspace: ${opts.workspaceName}.${teamLine ? ` Equipo: ${teamLine}; en documentos y en el CRM pueden figurar con cualquiera de los dos nombres.` : ""}${firstName ? ` Hablás con ${firstName}: llamalo así.` : ""}`,
     current ? `Misión de trabajo: ${current.name} [[campaign:${current.id}]]${current.objective ? ` — ${current.objective}` : ""}. Todo lo que pregunta, investiga o registra es en el contexto de esta misión, salvo que nombre otra. La memoria es compartida: si algo se conecta con otra misión, decilo en una línea.${others.length ? ` Otras misiones: ${others.map((m) => `${m.short} [[campaign:${m.id}]]`).join(", ")}.` : ""}` : null,

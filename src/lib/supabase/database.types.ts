@@ -219,16 +219,22 @@ isOneToOne: false
                   ]
                 },"assets": {
                   Row: {
-                    "address_status": string,"address_text": string | null,"broker_text": string | null,"capacity_text": string | null,"category": string | null,"country": string | null,"created_at": string,"created_by": string | null,"economics_note": string | null,"establishment_id": string | null,"evidence_layer": string | null,"first_detected_on": string | null,"id": string,"is_demo": boolean,"kind": string,"land_m2": number | null,"last_checked_on": string | null,"latitude": number | null,"listing_status": string,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"locked_fields": (string)[],"longitude": number | null,"material_change": string | null,"notes": string | null,"occupancy_declared": string | null,"operation": string,"operator_text": string | null,"owner_text": string | null,"price_amount": number | null,"price_currency": string | null,"price_observed_on": string | null,"price_source_id": string | null,"price_status": string | null,"province": string | null,"radar_ref": string | null,"sale_reason": string | null,"source_id": string | null,"surface_m2": number | null,"title": string,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "address_status": string,"address_text": string | null,"broker_text": string | null,"capacity_text": string | null,"category": string | null,"country": string | null,"created_at": string,"created_by": string | null,"economics_note": string | null,"establishment_id": string | null,"evidence_layer": string | null,"first_detected_on": string | null,"id": string,"is_demo": boolean,"kind": string,"land_m2": number | null,"last_checked_on": string | null,"latitude": number | null,"listing_status": string,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"locked_fields": (string)[],"longitude": number | null,"material_change": string | null,"notes": string | null,"occupancy_declared": string | null,"operation": string,"operator_text": string | null,"origin_campaign_id": string | null,"owner_text": string | null,"price_amount": number | null,"price_currency": string | null,"price_observed_on": string | null,"price_source_id": string | null,"price_status": string | null,"province": string | null,"radar_ref": string | null,"sale_reason": string | null,"source_id": string | null,"surface_m2": number | null,"title": string,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "address_status"?: string,"address_text"?: string | null,"broker_text"?: string | null,"capacity_text"?: string | null,"category"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"economics_note"?: string | null,"establishment_id"?: string | null,"evidence_layer"?: string | null,"first_detected_on"?: string | null,"id"?: string,"is_demo"?: boolean,"kind": string,"land_m2"?: number | null,"last_checked_on"?: string | null,"latitude"?: number | null,"listing_status"?: string,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"material_change"?: string | null,"notes"?: string | null,"occupancy_declared"?: string | null,"operation"?: string,"operator_text"?: string | null,"owner_text"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"price_status"?: string | null,"province"?: string | null,"radar_ref"?: string | null,"sale_reason"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title": string,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "address_status"?: string,"address_text"?: string | null,"broker_text"?: string | null,"capacity_text"?: string | null,"category"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"economics_note"?: string | null,"establishment_id"?: string | null,"evidence_layer"?: string | null,"first_detected_on"?: string | null,"id"?: string,"is_demo"?: boolean,"kind": string,"land_m2"?: number | null,"last_checked_on"?: string | null,"latitude"?: number | null,"listing_status"?: string,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"material_change"?: string | null,"notes"?: string | null,"occupancy_declared"?: string | null,"operation"?: string,"operator_text"?: string | null,"origin_campaign_id"?: string | null,"owner_text"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"price_status"?: string | null,"province"?: string | null,"radar_ref"?: string | null,"sale_reason"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title": string,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "address_status"?: string,"address_text"?: string | null,"broker_text"?: string | null,"capacity_text"?: string | null,"category"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"economics_note"?: string | null,"establishment_id"?: string | null,"evidence_layer"?: string | null,"first_detected_on"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"land_m2"?: number | null,"last_checked_on"?: string | null,"latitude"?: number | null,"listing_status"?: string,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"material_change"?: string | null,"notes"?: string | null,"occupancy_declared"?: string | null,"operation"?: string,"operator_text"?: string | null,"owner_text"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"price_status"?: string | null,"province"?: string | null,"radar_ref"?: string | null,"sale_reason"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title"?: string,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "address_status"?: string,"address_text"?: string | null,"broker_text"?: string | null,"capacity_text"?: string | null,"category"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"economics_note"?: string | null,"establishment_id"?: string | null,"evidence_layer"?: string | null,"first_detected_on"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"land_m2"?: number | null,"last_checked_on"?: string | null,"latitude"?: number | null,"listing_status"?: string,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"material_change"?: string | null,"notes"?: string | null,"occupancy_declared"?: string | null,"operation"?: string,"operator_text"?: string | null,"origin_campaign_id"?: string | null,"owner_text"?: string | null,"price_amount"?: number | null,"price_currency"?: string | null,"price_observed_on"?: string | null,"price_source_id"?: string | null,"price_status"?: string | null,"province"?: string | null,"radar_ref"?: string | null,"sale_reason"?: string | null,"source_id"?: string | null,"surface_m2"?: number | null,"title"?: string,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "assets_origin_fk"
+      columns: ["workspace_id","origin_campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "assets_workspace_id_establishment_id_fkey"
       columns: ["workspace_id","establishment_id"]
 isOneToOne: false
@@ -473,6 +479,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"campaign_members": {
+                  Row: {
+                    "campaign_id": string,"invited_by": string | null,"joined_at": string,"last_seen_at": string | null,"role": string,"user_id": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "campaign_id": string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role": string,"user_id": string,"workspace_id": string
+                  }
+                  Update: {
+                    "campaign_id"?: string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role"?: string,"user_id"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "campaign_members_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
                 },"campaign_targets": {
                   Row: {
                     "asset_id": string | null,"briefed_at": string | null,"briefing": Json | null,"campaign_id": string,"company_id": string | null,"created_at": string,"created_by": string | null,"discard_reason": string | null,"establishment_id": string | null,"id": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"priority": number,"purpose": string | null,"status": string,"updated_at": string,"workspace_id": string
@@ -673,16 +698,22 @@ isOneToOne: false
                   ]
                 },"companies": {
                   Row: {
-                    "activity": string | null,"created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"public_phone": string | null,"sector": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
+                    "activity": string | null,"created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"origin_campaign_id": string | null,"public_phone": string | null,"sector": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "companies_origin_fk"
+      columns: ["workspace_id","origin_campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "companies_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
@@ -741,16 +772,22 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"outreach_draft": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"origin_campaign_id": string | null,"outreach_draft": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "contacts_origin_fk"
+      columns: ["workspace_id","origin_campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "contacts_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
@@ -822,16 +859,22 @@ isOneToOne: false
                   ]
                 },"establishments": {
                   Row: {
-                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"origin_campaign_id": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name": string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name": string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name"?: string,"notes"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name"?: string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "establishments_origin_fk"
+      columns: ["workspace_id","origin_campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "establishments_workspace_id_company_id_fkey"
       columns: ["workspace_id","company_id"]
 isOneToOne: false
@@ -1319,6 +1362,25 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "workspaces"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"mission_invitations": {
+                  Row: {
+                    "accepted_at": string | null,"accepted_by": string | null,"campaign_id": string,"created_at": string,"email": string,"expires_at": string,"id": string,"invited_by": string | null,"role": string,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "accepted_at"?: string | null,"accepted_by"?: string | null,"campaign_id": string,"created_at"?: string,"email": string,"expires_at"?: string,"id"?: string,"invited_by"?: string | null,"role": string,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "accepted_at"?: string | null,"accepted_by"?: string | null,"campaign_id"?: string,"created_at"?: string,"email"?: string,"expires_at"?: string,"id"?: string,"invited_by"?: string | null,"role"?: string,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "mission_invitations_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
     }
                   ]
                 },"news_articles": {
@@ -1992,11 +2054,32 @@ isOneToOne: false
             "accept_pending_invitations":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
+"campaign_role":
+{ Args: { "c": string }; Returns: string
+                           },
+"campaign_unclaimed":
+{ Args: { "c": string }; Returns: boolean
+                           },
 "can_approve":
 { Args: { "ws": string }; Returns: boolean
                            },
 "can_edit":
 { Args: { "ws": string }; Returns: boolean
+                           },
+"can_see_any_campaign":
+{ Args: { "ids": (string)[] }; Returns: boolean
+                           },
+"can_see_campaign":
+{ Args: { "c": string }; Returns: boolean
+                           },
+"can_work_campaign":
+{ Args: { "c": string }; Returns: boolean
+                           },
+"capture_visible":
+{ Args: { "c": string }; Returns: boolean
+                           },
+"capture_workable":
+{ Args: { "c": string }; Returns: boolean
                            },
 "claim_news_refresh":
 { Args: { "p_stale": string,"p_topic": string,"p_ws": string }; Returns: boolean
@@ -2007,11 +2090,23 @@ isOneToOne: false
 "decide_opportunity":
 { Args: { "p_decision": string,"p_note": string,"p_verdict": string }; Returns: undefined
                            },
+"entity_visible":
+{ Args: { "col": string,"id": string,"origin": string }; Returns: boolean
+                           },
+"finding_visible":
+{ Args: { "f": string }; Returns: boolean
+                           },
+"finding_workable":
+{ Args: { "f": string }; Returns: boolean
+                           },
 "finish_news_refresh":
 { Args: { "p_ok": boolean,"p_topic": string,"p_ws": string }; Returns: undefined
                            },
 "has_role":
 { Args: { "roles": (string)[],"ws": string }; Returns: boolean
+                           },
+"is_campaign_owner":
+{ Args: { "c": string }; Returns: boolean
                            },
 "is_dealflow_stage":
 { Args: { "v": string }; Returns: boolean
@@ -2030,6 +2125,9 @@ isOneToOne: false
                            },
 "owns_conversation":
 { Args: { "conv": string }; Returns: boolean
+                           },
+"plan_visible":
+{ Args: { "p": string }; Returns: boolean
                            },
 "refine_finding":
 { Args: { "p_capture_id": string,"p_finding_id": string,"p_proposal_id": string,"p_reason": string,"p_relation": string,"p_statement": string }; Returns: undefined

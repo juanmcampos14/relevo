@@ -73,7 +73,7 @@ export async function ingestDiscovery(db: Db, opts: { workspaceId: string; missi
       }
       if (near && !opts.force) { await ask(db, opts.workspaceId, opts.missionId, d, `¿${name} es la misma que ${near.trade_name ?? near.legal_name}?`, `company:${near.id}`); questions++; continue; }
       const source_id = await sourceFor(db, opts.workspaceId, d);
-      const { data: c } = await db.from("companies").insert({ workspace_id: opts.workspaceId, trade_name: name.slice(0, 200), notes: `${d.detail} — Detectada por la vigilancia de RELEVO (sin verificar).`, verification_status: "unverified", source_id }).select("id").single();
+      const { data: c } = await db.from("companies").insert({ workspace_id: opts.workspaceId, origin_campaign_id: opts.missionId, trade_name: name.slice(0, 200), notes: `${d.detail} — Detectada por la vigilancia de RELEVO (sin verificar).`, verification_status: "unverified", source_id }).select("id").single();
       if (!c) continue;
       const target = await ensureTarget(db, opts.workspaceId, opts.missionId, "company_id", c.id);
       await audit(db, opts.workspaceId, d, `Sumé ${name} a la memoria y a la misión.`, { mission_id: opts.missionId, table: "companies", id: c.id, created: true, target_id: target, link_id: null, source_id });
@@ -89,7 +89,7 @@ export async function ingestDiscovery(db: Db, opts: { workspaceId: string; missi
       const { data: companies } = d.company ? await db.from("companies").select("id, trade_name, legal_name").limit(2000) : { data: [] };
       const company = (companies ?? []).find((c) => [c.trade_name, c.legal_name].some((n) => n && normalizeName(n) === normalizeName(d.company)));
       const source_id = await sourceFor(db, opts.workspaceId, d);
-      const { data: p } = await db.from("contacts").insert({ workspace_id: opts.workspaceId, full_name: name.slice(0, 200), notes: `${d.detail} — Detectada por la vigilancia de RELEVO (sin verificar).`, verification_status: "unverified", source_id }).select("id").single();
+      const { data: p } = await db.from("contacts").insert({ workspace_id: opts.workspaceId, origin_campaign_id: opts.missionId, full_name: name.slice(0, 200), notes: `${d.detail} — Detectada por la vigilancia de RELEVO (sin verificar).`, verification_status: "unverified", source_id }).select("id").single();
       if (!p) continue;
       let link_id: string | null = null;
       if (company) {
@@ -102,7 +102,7 @@ export async function ingestDiscovery(db: Db, opts: { workspaceId: string; missi
       const { data: assets } = await db.from("assets").select("id, title").limit(2000);
       const near = (assets ?? []).find((a) => normalizeName(a.title) === normalizeName(name) || similar(a.title, name));
       if (near && !opts.force) { await ask(db, opts.workspaceId, opts.missionId, d, `¿${name} es el mismo activo que ${near.title}?`, `asset:${near.id}`); questions++; continue; }
-      const { data: a } = await db.from("assets").insert({ workspace_id: opts.workspaceId, kind: "otro", title: name.slice(0, 200), locality: d.company || null, operation: "desconocida", verification_status: "unverified", price_status: "sin_validar", notes: `${d.detail} — Detectado por la vigilancia de RELEVO (sin verificar).` }).select("id").single();
+      const { data: a } = await db.from("assets").insert({ workspace_id: opts.workspaceId, origin_campaign_id: opts.missionId, kind: "otro", title: name.slice(0, 200), locality: d.company || null, operation: "desconocida", verification_status: "unverified", price_status: "sin_validar", notes: `${d.detail} — Detectado por la vigilancia de RELEVO (sin verificar).` }).select("id").single();
       if (!a) continue;
       const target = await ensureTarget(db, opts.workspaceId, opts.missionId, "asset_id", a.id);
       await audit(db, opts.workspaceId, d, `Empecé a seguir ${name}.`, { mission_id: opts.missionId, table: "assets", id: a.id, created: true, target_id: target, link_id: null, source_id: null });

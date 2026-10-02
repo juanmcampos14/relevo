@@ -78,3 +78,20 @@ describe("firma de los mensajes preparados", () => {
     expect(signMessages("Hola. Soy [[firma]], estamos relevando.\n[[firma]]", null)).toBe("Hola. estamos relevando.\n");
   });
 });
+
+describe("Ahora personal dentro de la misión compartida", () => {
+  it("cada uno ve lo suyo y lo de cualquiera, no lo que es de otro", () => {
+    const now = new Date("2026-10-02T12:00:00Z");
+    let k = 0;
+    const f = mergeSynthesis(EMPTY_FOCUS, {
+      today: [
+        { title: "Llamar a Juan Migliore", why: "", refs: [], for_user: "tano" },
+        { title: "Confirmar las casas", why: "", refs: [], for_user: "fran" },
+        { title: "Preparar AOG", why: "", refs: [] },
+      ],
+      week: [],
+    }, now, () => `x${++k}`);
+    expect(visible(f, now, 3, "tano").map((x) => x.title)).toEqual(["Llamar a Juan Migliore", "Preparar AOG"]);
+    expect(visible(f, now, 3, "fran").map((x) => x.title)).toEqual(["Confirmar las casas", "Preparar AOG"]);
+  });
+});

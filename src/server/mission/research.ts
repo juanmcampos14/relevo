@@ -37,7 +37,7 @@ export async function research(db: Db, j: ResearchJob, client?: Pick<Anthropic, 
     history: [],
     userText: j.question,
     context: CONTEXT(j, when),
-    tools: { db, slug: j.slug, seenRefs: new Set(), workspaceId: j.workspaceId, userId: j.userId, settings: j.settings, here: j.here ?? null, missionId: j.missionId ?? null, campaignId: j.missionId ?? null, saveDraft: async () => { throw new Error("En la investigación no se registra nada."); } },
+    tools: { db, slug: j.slug, background: true, seenRefs: new Set(), workspaceId: j.workspaceId, userId: j.userId, settings: j.settings, here: j.here ?? null, missionId: j.missionId ?? null, campaignId: j.missionId ?? null, saveDraft: async () => { throw new Error("En la investigación no se registra nada."); } },
   });
   await db.from("ai_runs").insert({
     workspace_id: j.workspaceId, user_id: j.userId, model: AI_MODEL, prompt_version: "relevo-investigar-v1", status: r.status,

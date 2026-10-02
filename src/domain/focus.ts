@@ -21,6 +21,8 @@ export type FocusItem = {
   note?: string | null;
   /** La persona la ubicó a mano: la síntesis no la reordena. */
   pinned?: boolean;
+  /** De quién del equipo es este movimiento (user id); null = de cualquiera. Ahora es personal. */
+  for_user?: string | null;
   /** Empresas o personas de esta prioridad con las que ya se dio el paso (si son varias). */
   done_refs?: string[];
   /** Avanzar ya preparado en background (para responder al instante). */
@@ -44,10 +46,12 @@ export function sameItem(a: { title: string; refs: string[] }, b: { title: strin
 }
 
 /** Lo que se ve ahora: activas (o pospuestas cuyo día llegó), primero las de hoy, en el orden de la persona. */
-export function visible(focus: Focus, now: Date, max = 3): FocusItem[] {
+export function visible(focus: Focus, now: Date, max = 3, me?: string | null): FocusItem[] {
   const today = day(now.toISOString());
   const live = focus.items
     .filter((x) => x.status === "activa" || (x.status === "pospuesta" && (x.until ?? "9999") <= today))
+    // Ahora es personal dentro de lo compartido: lo mío y lo de cualquiera (no lo que es de otro).
+    .filter((x) => !me || !x.for_user || x.for_user === me)
     .sort((a, b) => a.rank - b.rank);
   const hoy = live.filter((x) => x.tier === "hoy");
   // Si lo de hoy está resuelto, aparece lo siguiente de la semana. Nunca se fuerza a tres.
@@ -58,19 +62,19 @@ export function visible(focus: Focus, now: Date, max = 3): FocusItem[] {
  * Nueva síntesis → foco. Conserva lo que la persona decidió: lo que sacó o hizo no vuelve (por 7 días),
  * lo que fijó mantiene su lugar, lo que agregó sigue. Lo demás se reemplaza por lo que propone RELEVO.
  */
-export function mergeSynthesis(focus: Focus, proposed: { today: { title: string; why: string; refs: string[] }[]; week: { title: string; why: string; refs: string[] }[] }, now: Date, newId: () => string): Focus {
+export function mergeSynthesis(focus: Focus, proposed: { today: { title: string; why: string; refs: string[]; for_user?: string | null }[]; week: { title: string; why: string; refs: string[]; for_user?: string | null }[] }, now: Date, newId: () => string): Focus {
   const at = now.toISOString();
   const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const closed = focus.items.filter((x) => (x.status === "hecha" || x.status === "sacada") && x.updated_at >= weekAgo);
   const kept = focus.items.filter((x) => (x.status === "activa" || x.status === "pospuesta") && (x.pinned || x.source === "persona"));
   const previous = focus.items.filter((x) => x.status === "activa" || x.status === "pospuesta");
   const next: FocusItem[] = [...kept];
-  const add = (p: { title: string; why: string; refs: string[] }, tier: "hoy" | "semana") => {
+  const add = (p: { title: string; why: string; refs: string[]; for_user?: string | null }, tier: "hoy" | "semana") => {
     if (closed.some((c) => sameItem(c, p)) || next.some((n) => sameItem(n, p))) return;
     const prev = previous.find((x) => sameItem(x, p));
     // Si es la misma cosa, se conserva su id, su estado (pospuesta) y el Avanzar ya preparado si el título no cambió.
     next.push({
-      id: prev?.id ?? newId(), title: p.title, why: p.why, refs: p.refs, tier, source: "relevo",
+      id: prev?.id ?? newId(), title: p.title, why: p.why, refs: p.refs, tier, source: "relevo", for_user: p.for_user ?? null,
       status: prev?.status ?? "activa", until: prev?.until ?? null, note: prev?.note ?? null, rank: 0,
       move: prev && norm(prev.title) === norm(p.title) ? prev.move ?? null : null, updated_at: prev && norm(prev.title) === norm(p.title) ? prev.updated_at : at,
     });

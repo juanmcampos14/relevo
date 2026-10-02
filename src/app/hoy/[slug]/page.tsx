@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { liveFocus } from "@/server/mission/focus";
 import { Conversation, type Interrupt } from "@/components/surface/conversation";
-import { knowsLine, missionCounts, missionState, surfaceHello } from "@/server/surface";
+import { knowsLine, markSeen, missionCounts, missionState, sinceLastVisit, surfaceHello, welcomeNotice } from "@/server/surface";
+import { after } from "next/server";
 
 export const metadata: Metadata = { title: { absolute: "RELEVO" } };
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
   // Al abrir RELEVO se elige en qué misión trabajar (si hay más de una y todavía no se eligió).
   if (hello.missions.length > 1 && !hello.chosen) redirect(`/hoy/${slug}/misiones`);
   const [live, counts, state] = await Promise.all([
-    hello.mission ? liveFocus(supabase, hello.mission.id).catch(() => null) : null,
+    hello.mission ? liveFocus(supabase, hello.mission.id, new Date(), ctx.user.id).catch(() => null) : null,
     missionCounts(supabase, hello.mission?.id ?? null),
     hello.mission ? missionState(supabase, hello.mission.id) : null,
   ]);
@@ -45,9 +46,17 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
   const alert = (alerts ?? []).find((a) => a.alerted_at) ?? (alerts ?? [])[0];
   const interrupt: Interrupt = alert ? { id: alert.id, title: `${hello.name ? `${hello.name}, apareció` : "Apareció"} algo en ${hello.mission?.short ?? "la misión"} que miraría.`, detail: alert.why_it_matters ? `${alert.headline} ${alert.why_it_matters}` : alert.headline } : null;
 
+  // Quien entra a una misión que ya empezó: RELEVO lo pone en situación. Si volvés después de un rato: qué
+  // aportaron los demás. Después queda marcada la visita.
+  const notice = hello.mission
+    ? (await welcomeNotice(supabase, ctx, hello)) ?? (await sinceLastVisit(supabase, ctx, hello.mission, hello.membership.lastSeenAt, focus[0]?.title ?? null))
+    : null;
+  if (hello.mission && hello.membership.role) { const id = hello.mission.id; after(() => markSeen(supabase, id, ctx.user.id)); }
+
   return (
     <Conversation
-      slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="ahora"
+      notice={notice}
+      slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="ahora"
       greeting={hello.greeting} about={about} intro={intro} focus={focus} focusVersion={focus.map((x) => x.id).join(",")}
       missionLabel={hello.mission?.label ?? null} interrupt={interrupt}
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null}

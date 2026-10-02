@@ -27,10 +27,10 @@ export default async function Explorar({ params, searchParams }: PageProps<"/hoy
   const base = `/hoy/${slug}/explorar`;
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="explorar" screen="Explorar"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="explorar" screen="Explorar"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} initialScope={typeof sp.scope === "string" ? sp.scope : null} placeholder="¿Qué querés descubrir?">
       <SurfaceTitle title="¿Qué hay para mirar?" intro="Lo que encontré sin que me lo pidieras y por qué importa, y lo que hay cerca tuyo." />
-      {questions.length > 0 && <div className="mt-6 space-y-3">{questions.map((q) => <QuestionCard key={q.id} slug={slug} q={q} canEdit={ctx.canEdit} />)}</div>}
+      {questions.length > 0 && <div className="mt-6 space-y-3">{questions.map((q) => <QuestionCard key={q.id} slug={slug} q={q} canEdit={hello.canEdit} />)}</div>}
       {away.length > 0 && (
         <>
           <SectionLabel>{hello.mission ? `Lo que encontré en ${hello.mission.short}` : "Lo que encontré"}</SectionLabel>
@@ -42,7 +42,7 @@ export default async function Explorar({ params, searchParams }: PageProps<"/hoy
       {learned.length > 0 && (
         <>
           <SectionLabel>Lo que sumé a la memoria</SectionLabel>
-          <LearnedList slug={slug} items={learned} canEdit={ctx.canEdit} />
+          <LearnedList slug={slug} items={learned} canEdit={hello.canEdit} />
         </>
       )}
       <SectionLabel>Cerca tuyo</SectionLabel>

@@ -13,12 +13,13 @@ import { EMPTY_FOCUS, correctionsForBrain, mergeSynthesis, type Focus } from "@/
 // conversación responde desde ella en segundos. Lenguaje humano, sin jerga interna; referencias reales.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-sintesis-v2";
+const PROMPT_VERSION = "mision-sintesis-v3";
 
 const Item = z.object({
   title: z.string().describe("Qué haría, con verbo, en lenguaje humano (p. ej. 'Mover las presentaciones con YPF, Vista y Tecpetrol')."),
   why: z.string().describe("Por qué ahora, en una oración."),
   refs: z.array(z.string()).describe("Referencias 'tipo:uuid' del material que lo sostienen (empresas, personas, tareas, hipótesis)."),
+  for: z.string().describe("Nombre de quién del equipo debería hacerlo (de equipo_de_la_mision), o '' si puede ser cualquiera."),
 });
 export const SynthesisSchema = z.object({
   opening: z.string().describe("Una oración de apertura que diga cuántas cosas haría hoy y para qué (sin saludo, sin nombre, sin cifras internas)."),
@@ -37,7 +38,8 @@ Reglas:
 - Lenguaje humano. Prohibido: "finding", "gap", "baseline", "evidencia nula", "geolocalizado", "workspace", "memoria", ids o códigos (H-VA-…, AN-…).
 - Usá solo referencias que aparezcan en el material. Cada cosa lleva las referencias de las empresas o personas con las que hay que moverse.
 - Las correcciones de la persona mandan: lo que sacó o dio por hecho no vuelve; lo que puso primero va primero; lo que pospuso no es de hoy.
-- Si hoy hay una sola cosa realmente importante, proponé una sola.`;
+- Si hoy hay una sola cosa realmente importante, proponé una sola.
+- Si la misión tiene equipo (equipo_de_la_mision), decí de quién es cada movimiento (for) cuando corresponde a alguien en particular; si puede hacerlo cualquiera, dejalo vacío.`;
 
 export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null }) {
   const brief = await missionBrief(db, opts.campaignId, opts.today, { withSynthesis: false });
@@ -54,11 +56,18 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   const now = opts.today ?? new Date();
   const corrections = correctionsForBrain(focus, now);
   const current = focus.items.filter((x) => x.status === "activa" || x.status === "pospuesta").map((x) => ({ title: x.title, status: x.status, until: x.until ?? null, puesta_por_la_persona: x.source === "persona" || !!x.pinned }));
-  const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections });
+  // Quiénes trabajan en la misión (Ahora es personal: cada movimiento puede ser de alguien).
+  const { data: crew } = await db.from("campaign_members").select("user_id, role").eq("campaign_id", opts.campaignId).in("role", ["owner", "member"]);
+  const { data: ws } = await db.from("workspaces").select("settings").eq("id", opts.workspaceId).single();
+  const team = ((ws?.settings as { team?: Record<string, { short?: string; full?: string }> } | null)?.team) ?? {};
+  const { data: profs } = crew?.length ? await db.from("profiles").select("user_id, display_name").in("user_id", crew.map((c) => c.user_id)) : { data: [] };
+  const members = (crew ?? []).map((c) => ({ user_id: c.user_id, name: team[c.user_id]?.short ?? profs?.find((p) => p.user_id === c.user_id)?.display_name?.split(/\s+/)[0] ?? "Alguien" }));
+  const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections, equipo_de_la_mision: members.length > 1 ? members.map((m) => m.name) : [] });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
   const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId });
   if (!r.ok) return r;
-  const clean = (xs: z.infer<typeof Item>[], n: number) => xs.slice(0, n).map((x) => ({ ...x, refs: x.refs.filter((ref) => allowed.has(ref)) }));
+  const byName = new Map(members.map((m) => [m.name.toLowerCase(), m.user_id]));
+  const clean = (xs: z.infer<typeof Item>[], n: number) => xs.slice(0, n).map((x) => ({ ...x, refs: x.refs.filter((ref) => allowed.has(ref)), for_user: members.length > 1 ? byName.get(x.for.trim().toLowerCase()) ?? null : null }));
   const synthesis: MissionSynthesis = {
     ...r.value,
     today: clean(r.value.today, 3),

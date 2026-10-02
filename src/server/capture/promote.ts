@@ -94,7 +94,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
           message = "Vinculada con la empresa existente: no se creó otra.";
         } else {
           const { error } = await db.from("companies").upsert(
-            { id: prop.id, workspace_id: ws, trade_name: String(p.name ?? "").trim() || "Empresa sin nombre", locality: (p.locality as string | null) ?? null, activity: (p.activity as string | null) ?? null, notes: `Creada desde una captura de campo (${capture.captured_at.slice(0, 10)}).` },
+            { id: prop.id, workspace_id: ws, origin_campaign_id: capture.campaign_id, trade_name: String(p.name ?? "").trim() || "Empresa sin nombre", locality: (p.locality as string | null) ?? null, activity: (p.activity as string | null) ?? null, notes: `Creada desde una captura de campo (${capture.captured_at.slice(0, 10)}).` },
             { onConflict: "id", ignoreDuplicates: true },
           );
           if (error) throw error;
@@ -127,6 +127,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             {
               id: prop.id,
               workspace_id: ws,
+              origin_campaign_id: capture.campaign_id,
               title: String(p.title ?? "Activo").trim() || "Activo",
               kind: String(p.kind || "otro"),
               operation: String(p.operation || "desconocida"),
@@ -187,6 +188,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             {
               id: prop.id,
               workspace_id: ws,
+              origin_campaign_id: capture.campaign_id,
               full_name: String(p.name || p.role || "Contacto sin nombre").trim(),
               contact_kind: institutional ? "canal_institucional" : "persona",
               role_title: (p.role as string | null) ?? null,

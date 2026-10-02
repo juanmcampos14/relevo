@@ -138,6 +138,8 @@ export type ToolContext = {
   settings?: unknown;
   /** Proyecto o misión en el que se está trabajando (para que una nota de campo alimente ese proyecto). */
   campaignId?: string | null;
+  /** Trabajo de fondo con permisos de sistema: las herramientas se limitan a la misión (nada de misiones ajenas). */
+  background?: boolean;
   /** La misión activa (su foco es el home), aunque la persona esté lejos de su zona. */
   missionId?: string | null;
   /** La persona pidió trabajar en otra misión (o creó una nueva). */
@@ -155,6 +157,15 @@ export type ToolContext = {
   /** Nombre de la persona con la que se habla (para dejar constancia de quién validó algo). */
   userName?: string | null;
 };
+
+/** Nombres del equipo por id (cómo se los llama: "Tano", "Fran"). */
+export async function authors(ctx: ToolContext, ids: (string | null)[]): Promise<Map<string, string>> {
+  const want = [...new Set(ids.filter((x): x is string => !!x))];
+  if (!want.length) return new Map();
+  const team = (ctx.settings as { team?: Record<string, { short?: string }> } | null)?.team ?? {};
+  const { data } = await ctx.db.from("profiles").select("user_id, display_name, email").in("user_id", want);
+  return new Map(want.map((id) => [id, team[id]?.short ?? data?.find((p) => p.user_id === id)?.display_name?.split(/\s+/)[0] ?? "alguien del equipo"]));
+}
 
 function track(ctx: ToolContext, value: unknown) {
   const text = JSON.stringify(value);
@@ -342,13 +353,15 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
   const notFound = { content: "No encontrado o sin acceso", isError: true };
   const claimsAndFindings = async (fk: "company_id" | "establishment_id" | "asset_id") => {
     const [{ data: claims }, { data: findings }, { data: targets }, { data: contacts }] = await Promise.all([
-      db.from("evidence").select("id, statement, quote, evidence_type, origin_kind, verification_status, observed_at, revalidate_after, next_verification_step, sources(id, title, url)").eq(fk, id).limit(40),
+      db.from("evidence").select("id, statement, quote, evidence_type, origin_kind, verification_status, observed_at, revalidate_after, next_verification_step, created_by, sources(id, title, url)").eq(fk, id).limit(40),
       db.from("findings").select("id, kind, statement, verification_status, review_status").eq(fk, id).limit(30),
       db.from("campaign_targets").select("id, status, next_action, campaigns(id, name), visits(id, visited_at, notes)").eq(fk, id),
       db.from("contact_links").select("relation, valid_until, ended_note, role_title, contacts(id, full_name, role_title, contact_permission, verification_status)").eq(fk, id),
     ]);
+    const who = await authors(ctx, (claims ?? []).map((c) => c.created_by));
     return {
-      evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
+      // Quién lo aportó (una persona del equipo o RELEVO) y de dónde sale: no pesa igual.
+      evidence: (claims ?? []).map((c) => ({ statement: c.statement, quote: c.quote, type: c.evidence_type, origin: c.origin_kind, verification: c.verification_status, observed_at: c.observed_at, added_by: c.created_by ? who.get(c.created_by) ?? "alguien del equipo" : c.origin_kind === "crm_import" ? "importado del CRM" : "RELEVO", revalidate_after: c.revalidate_after, next_step: c.next_verification_step, source: c.sources ? { ref: ref("source", c.sources.id), title: c.sources.title, url: c.sources.url } : null })),
       findings: (findings ?? []).map((f) => ({ ref: ref("finding", f.id), kind: f.kind, statement: f.statement, verification: f.verification_status, review: f.review_status })),
       campaigns: (targets ?? []).map((t) => ({
         campaign: t.campaigns ? { ref: ref("campaign", t.campaigns.id), name: t.campaigns.name } : null,

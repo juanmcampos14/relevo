@@ -36,7 +36,7 @@ export async function prepareMoves(db: Db, opts: { workspaceId: string; campaign
       userText: `Avanzar: ${it.title}`,
       context: PREPARE_CONTEXT(when),
       tools: {
-        db, slug: opts.slug, seenRefs, workspaceId: opts.workspaceId, userId: opts.userId ?? undefined, settings: opts.settings, campaignId: opts.campaignId,
+        db, slug: opts.slug, seenRefs, background: true, missionId: opts.campaignId, workspaceId: opts.workspaceId, userId: opts.userId ?? undefined, settings: opts.settings, campaignId: opts.campaignId,
         saveDraft: async () => { throw new Error("En la preparación no se registra nada: dejalo como botón."); },
       },
     });

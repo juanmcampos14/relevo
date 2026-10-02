@@ -33,7 +33,7 @@ export default async function Mision({ params, searchParams }: PageProps<"/hoy/[
   ];
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="mision"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="mision"
       scope={hello.mission ? `campaign:${hello.mission.id}` : undefined} screen="Misión"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="¿Qué querés saber?">
       <SurfaceTitle title={hello.mission ? `Misión ${hello.mission.short}` : "Misión"} intro={state?.purpose ?? "Todavía no preparé el estado de la misión."} />

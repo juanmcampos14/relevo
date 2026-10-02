@@ -104,6 +104,8 @@ export function Conversation(props: {
   /** El registro del que trata esa pregunta (p. ej. el activo de una tarjeta de Explorar). */
   initialScope?: string | null;
   placeholder?: string;
+  /** Un aviso de equipo arriba: bienvenida a la misión o "desde tu última visita". */
+  notice?: { title: string; lines: string[]; actions: { label: string; ask?: string; focus?: boolean }[] } | null;
   /** La misión de trabajo (arriba, discreta, con su menú). */
   mission?: { short: string } | null;
   children?: ReactNode;
@@ -131,6 +133,7 @@ export function Conversation(props: {
   const asked = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
 
   // El aviso de la misión aparece una sola vez (hasta que se mira o se deja para después).
   useEffect(() => {
@@ -289,6 +292,17 @@ export function Conversation(props: {
       </header>
 
       <main className="mx-auto max-w-3xl px-5 pb-56">
+        {props.notice && !started && (
+          <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
+            <p className="text-[17px] font-semibold">{props.notice.title}</p>
+            <div className="mt-2 space-y-1.5 text-[15px] leading-relaxed text-[#4A463F]">{props.notice.lines.map((l) => <p key={l}>{l}</p>)}</div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {props.notice.actions.map((a, k) => (
+                <button key={a.label} type="button" onClick={() => (a.ask ? ask(a.ask) : textRef.current?.focus())} className={cn("rounded-full px-4 py-2 text-[14px] font-medium", k === 0 ? "bg-[#1C1B19] text-white" : "bg-[#EFEBE2]")}>{a.label}</button>
+              ))}
+            </div>
+          </section>
+        )}
         {interrupt && (
           <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
             <p className="text-[16px] font-medium">{interrupt.title}</p>
@@ -426,6 +440,7 @@ export function Conversation(props: {
           <div className="flex items-end gap-2">
             <div className={cn("flex min-h-14 flex-1 items-end gap-1 rounded-[28px] bg-white py-2 pr-2 pl-5", shadow)}>
               <textarea
+                ref={textRef}
                 value={listening ? "" : text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(text); } }}
@@ -506,6 +521,7 @@ function MissionMenu({ slug, current }: { slug: string; current: { short: string
       {open && (
         <div role="menu" className="absolute top-full left-0 z-40 mt-1 w-60 overflow-hidden rounded-2xl bg-white py-1 text-[15px] shadow-[0_12px_40px_rgba(28,27,25,0.16)]">
           <Link role="menuitem" href={`/hoy/${slug}/mision`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Ver estado de la misión</Link>
+          <Link role="menuitem" href={`/hoy/${slug}/mision/compartir`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Compartir misión</Link>
           <Link role="menuitem" href={`/hoy/${slug}/misiones`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Cambiar misión</Link>
           <Link role="menuitem" href={`/hoy/${slug}/nueva`} onClick={() => setOpen(false)} className="block px-4 py-3 hover:bg-[#F4F1EA]">Nueva misión</Link>
         </div>

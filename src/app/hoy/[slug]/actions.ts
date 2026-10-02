@@ -16,6 +16,9 @@ import { memoryNearby } from "@/server/geo";
 import { formatDistance } from "@/domain/geo";
 import type { LookItem } from "@/server/surface";
 import { rememberMission } from "@/server/mission/current";
+import { inviteToMission } from "@/server/mission/sharing";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { siteUrl } from "@/server/brief/run";
 import { ingestDiscovery, undoIngest, type IngestEffects } from "@/server/mission/ingest";
 import { MissionDraftSchema, createMission, draftMission, type MissionDraft } from "@/server/mission/create";
 
@@ -220,4 +223,47 @@ export async function undoLearned(slug: string, draftId: string): Promise<{ ok: 
   await supabase.from("ai_action_drafts").update({ status: "deshecha", decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", draftId);
   revalidatePath(`/hoy/${slug}/explorar`);
   return { ok: true };
+}
+
+const InviteInput = z.object({ email: z.string().trim().toLowerCase().email(), role: z.enum(["member", "viewer"]) });
+
+/** Invitar a alguien a la misión de trabajo (solo el owner: lo decide la base). */
+export async function inviteToCurrentMission(slug: string, input: { email: string; role: "member" | "viewer" }): Promise<{ ok: boolean; message: string }> {
+  const ctx = await getWorkspaceContext(slug);
+  const v = InviteInput.safeParse(input);
+  if (!v.success) return { ok: false, message: "Revisá el mail." };
+  const supabase = await createClient();
+  const mission = await activeMission(supabase);
+  if (!mission) return { ok: false, message: "No hay una misión elegida." };
+  const team = (ctx.workspace.settings as { team?: Record<string, { short?: string }> } | null)?.team ?? {};
+  const { data: me } = await supabase.from("profiles").select("display_name").eq("user_id", ctx.user.id).maybeSingle();
+  const r = await inviteToMission(supabase, createAdminClient(), {
+    workspaceId: ctx.workspace.id, campaignId: mission, email: v.data.email, role: v.data.role, inviterId: ctx.user.id,
+    inviterName: team[ctx.user.id]?.short ?? me?.display_name?.split(/\s+/)[0] ?? ctx.user.email, slug, siteUrl: siteUrl(),
+  });
+  revalidatePath(`/hoy/${slug}/mision/compartir`);
+  return r;
+}
+
+/** Sacar a alguien de la misión o cambiar si puede trabajar o solo ver (solo el owner). */
+export async function updateMissionMember(slug: string, userId: string, change: "member" | "viewer" | "sacar"): Promise<{ ok: boolean }> {
+  await getWorkspaceContext(slug);
+  if (!/^[0-9a-f-]{36}$/.test(userId)) return { ok: false };
+  const supabase = await createClient();
+  const mission = await activeMission(supabase);
+  if (!mission) return { ok: false };
+  const q = change === "sacar"
+    ? supabase.from("campaign_members").delete().eq("campaign_id", mission).eq("user_id", userId).neq("role", "owner").select("user_id")
+    : supabase.from("campaign_members").update({ role: change }).eq("campaign_id", mission).eq("user_id", userId).neq("role", "owner").select("user_id");
+  const { data } = await q;
+  revalidatePath(`/hoy/${slug}/mision/compartir`);
+  return { ok: !!data?.length };
+}
+
+export async function revokeMissionInvite(slug: string, id: string): Promise<{ ok: boolean }> {
+  await getWorkspaceContext(slug);
+  const supabase = await createClient();
+  const { data } = await supabase.from("mission_invitations").update({ status: "revoked" }).eq("id", id).eq("status", "pending").select("id");
+  revalidatePath(`/hoy/${slug}/mision/compartir`);
+  return { ok: !!data?.length };
 }

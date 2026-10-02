@@ -39,7 +39,7 @@ export default async function Oportunidad({ params, searchParams }: PageProps<"/
 
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="oportunidades" scope={`finding:${id}`} screen="Una oportunidad"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="oportunidades" scope={`finding:${id}`} screen="Una oportunidad"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="Preguntame sobre esto…">
       <Link href={`/hoy/${slug}/oportunidades`} className="mt-6 inline-block px-1 text-[14px] text-[#8A8478] hover:text-[#1C1B19]">← Oportunidades</Link>
       <SurfaceTitle title={o.title} intro={o.state} />

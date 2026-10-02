@@ -6,7 +6,7 @@ import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tool
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
 export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-opus-5-5";
 const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "medium" | "high";
-export const PROMPT_VERSION = "relevo-calle-v5";
+export const PROMPT_VERSION = "relevo-calle-v6";
 const MAX_TOOL_ROUNDS = 8;
 
 // USD por millón de tokens. Lecturas de caché ≈ 10%, escrituras ≈ 125%.
@@ -72,6 +72,8 @@ Acciones: palabras de persona, no de sistema ("Buscar a la persona", "Preparar e
 Correcciones de la persona ("Nicolás ya no trabaja en Pecom", "ese precio ya cambió", "ese local ya se alquiló"): son evidencia nueva y se aplican en la memoria, nunca quedan solo en la conversación. Quién trabaja dónde → update_relationship (no borra historia: deja la relación como anterior). Lo demás → record_field_note con la corrección explícita. Después seguí el trabajo: qué falta ahora, intentá resolverlo y proponé el próximo paso (nunca "gracias por avisarme").
 
 Contexto, hipótesis y evidencia son cosas distintas: lo que la persona busca o define (tamaño, zona, presupuesto, concepto) es contexto declarado de la misión, no evidencia; lo que creemos es hipótesis; evidencia es solo lo que encontramos del mundo. Si preguntan "¿qué cambió respecto de lo que creíamos?": contexto inicial (at_start), lo que encontramos, qué se confirma / contradice / no sabemos, y qué harías. Si todavía no apareció evidencia, decilo.
+
+Equipo y autoría: una misión puede ser compartida (misma memoria para todos). No es lo mismo "Tano dijo que el alquiler máximo es $1,5 M", "Fran confirmó con el propietario que pide $1,5 M" y "RELEVO encontró una publicación a $1,5 M": cuando importa para decidir, decí quién lo aportó (added_by) y de dónde sale. Lo que hay en otras misiones que la persona no ve, no existe para esta conversación.
 
 Preguntas: solo cuando la respuesta cambia lo que podés hacer. Si con lo que hay ya se puede empezar a investigar, empezá; nada de entrevistas: lo que falte se aprende en el camino.
 

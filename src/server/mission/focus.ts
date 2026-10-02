@@ -54,7 +54,7 @@ export async function resolveFocus(db: Db, campaignId: string, refs: string[], n
  * El foco de ahora, vivo: lo que se cerró por otro lado (una tarea hecha en el panel, por ejemplo) se resuelve
  * antes de mostrarlo. Devuelve lo visible y el foco completo.
  */
-export async function liveFocus(db: Db, campaignId: string, now = new Date()): Promise<{ focus: Focus; now: FocusItem[] }> {
+export async function liveFocus(db: Db, campaignId: string, now = new Date(), me?: string | null): Promise<{ focus: Focus; now: FocusItem[] }> {
   let focus = await loadFocus(db, campaignId);
   if (!focus.items.length) {
     // Primera vez: el foco nace de la síntesis que ya estaba preparada.
@@ -72,7 +72,7 @@ export async function liveFocus(db: Db, campaignId: string, now = new Date()): P
       focus = (await updateFocus(db, campaignId, (f) => finished.reduce((acc, it) => correct(acc, { kind: "hecha", id: it.id, note: "Se cerró la tarea" }, null, now), f))) ?? focus;
     }
   }
-  return { focus, now: visible(focus, now) };
+  return { focus, now: visible(focus, now, 3, me) };
 }
 
 export { SIGNATURE, signMessages } from "@/domain/focus";

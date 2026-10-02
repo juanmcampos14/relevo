@@ -38,7 +38,7 @@ export default async function Oportunidades({ params, searchParams }: PageProps<
   const base = `/hoy/${slug}/oportunidades`;
 
   return (
-    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={ctx.canEdit} tab="oportunidades" screen="Oportunidades"
+    <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="oportunidades" screen="Oportunidades"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="¿Qué querés mover?">
       {strong.length ? (
         <>

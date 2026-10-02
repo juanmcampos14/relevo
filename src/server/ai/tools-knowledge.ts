@@ -269,14 +269,19 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const q = Str.min(2).safeParse(a.query);
       if (!q.success) return { content: "La búsqueda necesita al menos 2 letras", isError: true };
       const term = `%${q.data.replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ")}%`;
+      // Trabajo de fondo (sin usuario, con permisos de sistema): solo lo de esta misión o la memoria común,
+      // nunca lo que nació en otra misión (puede ser privada).
+      const m = ctx.background ? ctx.missionId ?? "00000000-0000-0000-0000-000000000000" : null;
+      const own = <T extends { or: (f: string) => T }>(q: T) => (m ? q.or(`origin_campaign_id.is.null,origin_campaign_id.eq.${m}`) : q);
+      const inMission = <T extends { eq: (c: string, v: string) => T }>(q: T) => (m ? q.eq("campaign_id", m) : q);
       const [c, as, es, ct, f, ev, cap, u] = await Promise.all([
-        db.from("companies").select("id, trade_name, legal_name, activity, locality").or(`trade_name.ilike.${term},legal_name.ilike.${term},activity.ilike.${term}`).limit(10),
-        db.from("assets").select("id, title, kind, operation, locality").or(`title.ilike.${term},address_text.ilike.${term}`).limit(10),
-        db.from("establishments").select("id, name, address_text").or(`name.ilike.${term},address_text.ilike.${term}`).limit(10),
-        db.from("contacts").select("id, full_name, role_title, contact_kind").or(`full_name.ilike.${term},role_title.ilike.${term}`).limit(10),
-        db.from("findings").select("id, statement, maturity, case_status").ilike("statement", term).neq("review_status", "rechazado").limit(10),
-        db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, capture_id, company_id").ilike("statement", term).limit(12),
-        db.from("captures").select("id, captured_at, ai_summary, status").or(`body.ilike.${term},ai_summary.ilike.${term}`).limit(8),
+        own(db.from("companies").select("id, trade_name, legal_name, activity, locality").or(`trade_name.ilike.${term},legal_name.ilike.${term},activity.ilike.${term}`)).limit(10),
+        own(db.from("assets").select("id, title, kind, operation, locality").or(`title.ilike.${term},address_text.ilike.${term}`)).limit(10),
+        own(db.from("establishments").select("id, name, address_text").or(`name.ilike.${term},address_text.ilike.${term}`)).limit(10),
+        own(db.from("contacts").select("id, full_name, role_title, contact_kind").or(`full_name.ilike.${term},role_title.ilike.${term}`)).limit(10),
+        inMission(db.from("findings").select("id, statement, maturity, case_status").ilike("statement", term).neq("review_status", "rechazado")).limit(10),
+        inMission(db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, capture_id, company_id").ilike("statement", term)).limit(12),
+        inMission(db.from("captures").select("id, captured_at, ai_summary, status").or(`body.ilike.${term},ai_summary.ilike.${term}`)).limit(8),
         db.from("unresolved_entities").select("id, kind, label").ilike("label", term).is("resolved_at", null).limit(8),
       ]);
       return {
@@ -299,7 +304,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         .neq("review_status", "rechazado")
         .limit(100);
       // Las de la misión de trabajo (la memoria es compartida: all_missions=true para ver las de todas).
-      if (ctx.missionId && a.all_missions !== true) q = q.eq("campaign_id", ctx.missionId);
+      if (ctx.missionId && (a.all_missions !== true || ctx.background)) q = q.eq("campaign_id", ctx.missionId);
       if (typeof a.maturity === "string" && a.maturity !== "todas") q = q.eq("maturity", a.maturity);
       if (a.include_inactive !== true) q = q.eq("case_status", "activo");
       const { data } = await q;
@@ -579,7 +584,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "mission_brief": {
       const m = typeof a.ref === "string" ? Str.regex(/^campaign:([0-9a-f-]{36})$/).safeParse(a.ref) : null;
       if (m && !m.success) return { content: "Referencia inválida: usá 'campaign:uuid' o nada para la misión activa.", isError: true };
-      const brief = await missionBrief(db, m?.success ? m.data.split(":")[1] : ctx.missionId ?? null);
+      const brief = await missionBrief(db, m?.success && !ctx.background ? m.data.split(":")[1] : ctx.missionId ?? null);
       if (!brief) return { content: "No hay una misión activa.", isError: true };
       // Primera respuesta rápida: solo lo preparado (síntesis del día + contactos para mover). El detalle, si lo piden.
       if (a.detail !== true && brief.prepared && !brief.prepared.stale) {
@@ -630,7 +635,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     case "signals": {
       const days = typeof a.days === "number" ? a.days : 30;
       let q = db.from("brief_signals").select("headline, summary, basis, change, happened_on, publisher, source_url, vertical, origin, company_ids, finding_ids, asset_ids, brief_stories(title)").gte("created_at", since(days)).order("happened_on", { ascending: false, nullsFirst: false }).limit(30);
-      if (ctx.missionId && a.all_missions !== true) q = q.contains("campaign_ids", [ctx.missionId]);
+      if (ctx.missionId && (a.all_missions !== true || ctx.background)) q = q.contains("campaign_ids", [ctx.missionId]);
       if (typeof a.query === "string" && a.query.trim()) {
         const term = `%${a.query.trim().replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ")}%`;
         q = q.or(`headline.ilike.${term},summary.ilike.${term}`);
@@ -767,7 +772,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const next = await applyCorrection(db, ctx.missionId, c, ctx.userId ?? null);
       if (!next) return { content: "No pude cambiar las prioridades.", isError: true };
       ctx.onFocusChange?.();
-      const { now } = await liveFocus(db, ctx.missionId);
+      const { now } = await liveFocus(db, ctx.missionId, new Date(), ctx.userId);
       return { content: JSON.stringify({ applied: true, home_now: now.map((x) => x.title) }) };
     }
     case "locate": {

@@ -3,14 +3,13 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
+import { costOf } from "@/server/ai/pricing";
 
 // Extracción de una captura de campo: la IA PROPONE (docs/04-modelo-canonico.md §2).
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
 export const EXTRACT_PROMPT_VERSION = "captura-v9";
-// USD por millón de tokens (claude-opus-5-5).
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
 const EVIDENCE_TYPES = ["dato", "declaracion", "observacion", "precio", "capacidad", "contacto", "propiedad", "documento", "publicacion", "otro"] as const;
 const FINDING_KINDS = ["necesidad", "riesgo", "senal_de_mercado", "observacion", "pregunta"] as const;
@@ -222,7 +221,7 @@ export async function extractCapture(client: Anthropic, ctx: ExtractionContext):
       cacheWrite: u.cache_creation_input_tokens ?? 0,
       costUsd: 0,
     };
-    usage.costUsd = (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) / 1_000_000;
+    usage.costUsd = costOf(EXTRACT_MODEL, usage);
     if (response.stop_reason === "refusal") return { ok: false, status: "refused", error: "El modelo no procesó esta captura.", durationMs: Date.now() - started };
     if (response.stop_reason === "max_tokens" || !response.parsed_output) {
       return { ok: false, status: "error", error: "La respuesta llegó incompleta.", durationMs: Date.now() - started };

@@ -1,6 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { addUsage, costOf } from "./pricing";
 import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tools";
 
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
@@ -9,14 +10,6 @@ const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "
 export const PROMPT_VERSION = "relevo-calle-v7";
 const MAX_TOOL_ROUNDS = 8;
 
-// USD por millón de tokens. Lecturas de caché ≈ 10%, escrituras ≈ 125%.
-const PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-  "claude-sonnet-5-5": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-  "claude-haiku-4-5-20251001": { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
-};
-const PRICE = PRICES[AI_MODEL] ?? PRICES["claude-opus-5-5"];
 
 /**
  * Prompt de sistema ESTABLE (sin fechas ni ids): forma parte del prefijo cacheado.
@@ -150,7 +143,7 @@ export type AgentResult = {
   citations: string[];
   /** Fuentes web que Claude consultó y citó en esta respuesta (búsqueda o lectura de páginas). */
   webSources: { url: string; title: string }[];
-  usage: { input: number; output: number; cacheRead: number; cacheWrite: number; toolCalls: number; costUsd: number };
+  usage: { input: number; output: number; cacheRead: number; cacheWrite: number; cacheWrite1h: number; webSearches: number; toolCalls: number; costUsd: number };
   error?: string;
 };
 
@@ -186,14 +179,9 @@ export async function runAgent(opts: {
   };
   const messages: Anthropic.Beta.BetaMessageParam[] = [...opts.history, turnStart];
   const transcript: Anthropic.Beta.BetaMessageParam[] = [];
-  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, toolCalls: 0, costUsd: 0 };
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0, webSearches: 0, toolCalls: 0, costUsd: 0 };
 
-  const account = (u: Anthropic.Beta.BetaUsage) => {
-    usage.input += u.input_tokens ?? 0;
-    usage.output += u.output_tokens ?? 0;
-    usage.cacheRead += u.cache_read_input_tokens ?? 0;
-    usage.cacheWrite += u.cache_creation_input_tokens ?? 0;
-  };
+  const account = (u: Anthropic.Beta.BetaUsage) => addUsage(usage, u);
   const finish = (status: AgentResult["status"], text: string, error?: string): AgentResult => {
     // Un tool_use sin su tool_result rompería el próximo turno: se cierra como "no ejecutado".
     const last = transcript[transcript.length - 1];
@@ -206,8 +194,7 @@ export async function runAgent(opts: {
         });
       }
     }
-    usage.costUsd =
-      (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) / 1_000_000;
+    usage.costUsd = costOf(AI_MODEL, usage);
     const s = sanitizeCitations(text, tools.seenRefs);
     const web = new Map<string, string>();
     for (const m of transcript) {
@@ -228,8 +215,10 @@ export async function runAgent(opts: {
         fallbacks: "default",
         thinking: { type: "adaptive" },
         output_config: { effort: AI_EFFORT },
+        // Prefijo fijo (herramientas + sistema) en caché de 1 hora: entre un mensaje y otro de una persona
+        // suelen pasar más de 5 minutos. La cola de la conversación usa la caché automática de 5 minutos.
         cache_control: { type: "ephemeral" },
-        system: SYSTEM_PROMPT,
+        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
         // Memoria de RELEVO (herramientas propias) + la web del lado de Anthropic, con citas.
         tools: [...TOOL_DEFINITIONS, { type: "web_search_20260209", name: "web_search", max_uses: 6 }, { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 }],
         messages,

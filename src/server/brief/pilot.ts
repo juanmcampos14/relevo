@@ -14,6 +14,7 @@ import { deepCall } from "@/server/mission/deep";
 import { claudeResearchEngine, claudeSynthesisEngine, BRIEF_MODEL } from "./engines";
 import { loadBriefMemory, memoryDigest } from "./memory";
 import type { CollectedItem } from "./collect";
+import { addUsage, costOf } from "@/server/ai/pricing";
 
 // Pilotos del Morning Brief, EN SECO: misma ventana, cuatro lógicas, nada se guarda en el Brain ni se envía.
 //   control      → el Brief actual (recolección fija + investigación + síntesis de 5–8 señales).
@@ -25,7 +26,6 @@ import type { CollectedItem } from "./collect";
 
 type Db = SupabaseClient<Database>;
 export type PilotKind = "control" | "mision" | "oportunidad" | "ruido";
-const PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, search: 0.01 };
 const UA = "RELEVO-OS/1.0 (+https://relevo.site; brief piloto)";
 
 // ---------------------------------------------------------------------------------------------
@@ -154,22 +154,21 @@ const RESEARCH_OPP = `${RESEARCH_BASE}
 CONSIGNA DE HOY: no me cuentes las noticias. Buscá qué podría convertirse en negocio: problemas y cuellos de botella, demanda que se repite, servicios que faltan, infraestructura insuficiente, empresas y contratistas que entran o crecen, búsquedas de personal, licitaciones, activos y cambios de precio, movimientos de capital y territoriales en Añelo y Vaca Muerta.`;
 
 async function research(client: Anthropic, system: string, context: string, items: CollectedItem[], maxSearches: number) {
-  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, webSearches: 0, costUsd: 0 };
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0, webSearches: 0, costUsd: 0 };
   const list = items.map((it, i) => `[${i + 1}] ${it.publisher} · ${it.publishedAt ?? "s/f"} · ${it.url}\nTÍTULO: ${it.title}${it.description ? `\nBAJADA: ${it.description}` : ""}${it.body ? `\nTEXTO: ${it.body.slice(0, 2000)}` : ""}`).join("\n\n");
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: [{ type: "text", text: `${context}\n\nNOTAS RECOLECTADAS (${items.length}):\n\n${list || "(ninguna: buscá vos)"}` }] }];
   const texts: string[] = [];
   const sources = new Map<string, string>();
   for (let round = 0; round < 6; round++) {
     const res = await client.beta.messages.create({
-      model: BRIEF_MODEL, max_tokens: 16000, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", thinking: { type: "adaptive" }, output_config: { effort: "medium" }, system,
+      model: BRIEF_MODEL, max_tokens: 16000, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", thinking: { type: "adaptive" }, output_config: { effort: "medium" }, cache_control: { type: "ephemeral" }, system,
       tools: [
         { type: "web_search_20260209", name: "web_search", max_uses: maxSearches, user_location: { type: "approximate", country: "AR", region: "Neuquén", city: "Añelo", timezone: "America/Argentina/Buenos_Aires" } },
         { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
       ],
       messages,
     });
-    usage.input += res.usage.input_tokens ?? 0; usage.output += res.usage.output_tokens ?? 0; usage.cacheRead += res.usage.cache_read_input_tokens ?? 0; usage.cacheWrite += res.usage.cache_creation_input_tokens ?? 0;
-    usage.webSearches += res.usage.server_tool_use?.web_search_requests ?? 0;
+    addUsage(usage, res.usage);
     for (const b of res.content) {
       if (b.type !== "text") continue;
       texts.push(b.text);
@@ -178,7 +177,7 @@ async function research(client: Anthropic, system: string, context: string, item
     if (res.stop_reason !== "pause_turn") break;
     messages.push({ role: "assistant", content: res.content });
   }
-  usage.costUsd = (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) / 1e6 + usage.webSearches * PRICE.search;
+  usage.costUsd = costOf(BRIEF_MODEL, usage);
   return { memo: texts.join("").trim(), sources: [...sources].map(([url, title]) => ({ url, title })), usage };
 }
 

@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { ECONOMIC_KEYS, sanitizeEconomics } from "@/domain/economics";
 import { BUYER_ROLE, DEMAND_SECTOR, EVIDENCE_LEVEL_KEYS, PURPOSE_KEYS, sanitizeDiscovery, type Purpose } from "@/domain/discovery";
+import { costOf } from "@/server/ai/pricing";
 import {
   DIMENSIONS,
   DIMENSION_KEYS,
@@ -23,7 +24,6 @@ import {
 type Db = SupabaseClient<Database>;
 const MODEL = "claude-opus-5-5";
 const PROMPT_VERSION = "finding-estado-v6";
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 const DAILY_LIMIT = 60; // evaluaciones de hipótesis por día (no cuenta la conversación)
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];
 
@@ -178,7 +178,7 @@ export async function assessFinding(db: Db, opts: { workspaceId: string; setting
     error = e instanceof Anthropic.RateLimitError ? "Límite de uso del proveedor de IA: reintentá en unos minutos." : e instanceof Anthropic.APIError ? `Error del proveedor de IA (${e.status}).` : "No se pudo evaluar el finding.";
   }
 
-  const cost = (usage.input * PRICE.input + usage.output * PRICE.output + usage.cacheRead * PRICE.cacheRead + usage.cacheWrite * PRICE.cacheWrite) / 1_000_000;
+  const cost = costOf(MODEL, usage);
   const { data: run } = await db
     .from("ai_runs")
     .insert({ workspace_id: opts.workspaceId, user_id: opts.userId, model: MODEL, prompt_version: PROMPT_VERSION, status, input_tokens: usage.input, output_tokens: usage.output, cache_read_tokens: usage.cacheRead, cache_write_tokens: usage.cacheWrite, cost_usd: Number(cost.toFixed(5)), error, duration_ms: Date.now() - started })

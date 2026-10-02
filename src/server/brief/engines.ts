@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { BRIEF_VERTICALS, SIGNAL_TYPES, WireDraft, fromWire, type BriefDraft } from "@/domain/brief/contract";
 import type { CollectedItem } from "./collect";
+import { addUsage, costOf } from "@/server/ai/pricing";
 
 // RELEVO usa el motor que necesite: estas interfaces son el límite. Hoy la investigación y la síntesis
 // las hace Claude; mañana cualquiera de las dos puede ser otro modelo, un buscador o una API específica,
@@ -28,15 +29,10 @@ export interface SynthesisEngine {
 // Claude
 
 export const BRIEF_MODEL = "claude-opus-5-5";
-const PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, search: 0.01 };
 
 const usageOf = (u: Anthropic.Beta.BetaUsage, acc: EngineUsage) => {
-  acc.input += u.input_tokens ?? 0;
-  acc.output += u.output_tokens ?? 0;
-  acc.cacheRead += u.cache_read_input_tokens ?? 0;
-  acc.cacheWrite += u.cache_creation_input_tokens ?? 0;
-  acc.webSearches += u.server_tool_use?.web_search_requests ?? 0;
-  acc.costUsd = (acc.input * PRICE.input + acc.output * PRICE.output + acc.cacheRead * PRICE.cacheRead + acc.cacheWrite * PRICE.cacheWrite) / 1e6 + acc.webSearches * PRICE.search;
+  addUsage(acc, u);
+  acc.costUsd = costOf(BRIEF_MODEL, acc);
 };
 const emptyUsage = (): EngineUsage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, webSearches: 0, costUsd: 0 });
 
@@ -90,6 +86,8 @@ export function claudeResearchEngine(client: Pick<Anthropic, "beta"> = new Anthr
           fallbacks: "default",
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
+          // Si la investigación se pausa (pause_turn), la continuación relee lo ya hecho desde la caché.
+          cache_control: { type: "ephemeral" },
           system: RESEARCH_SYSTEM,
           tools: [
             { type: "web_search_20260209", name: "web_search", max_uses: 8, user_location: { type: "approximate", country: "AR", region: "Neuquén", city: "Añelo", timezone: "America/Argentina/Buenos_Aires" } },

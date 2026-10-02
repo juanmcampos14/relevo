@@ -17,7 +17,7 @@ export default async function Root() {
         <ul className="space-y-2">
           {workspaces.map((w) => (
             <li key={w.slug}>
-              <Link href={`/w/${w.slug}`} className="block rounded-lg border p-4 hover:bg-muted">{w.name}</Link>
+              <Link href={`/hoy/${w.slug}`} className="block rounded-lg border p-4 hover:bg-muted">{w.name}</Link>
             </li>
           ))}
         </ul>

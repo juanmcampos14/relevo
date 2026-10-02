@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { CalendarClock, ChevronRight } from "lucide-react";
 import { cn } from "cn";
@@ -55,8 +56,10 @@ function NextStep({ text, href, cta }: { text: string; href: string; cta: string
 
 // HOY: el centro operativo. Tano y Fran ven los mismos datos con otra jerarquía;
 // la vista es una preferencia personal, no un permiso.
-export default async function TodayPage({ params }: PageProps<"/w/[slug]">) {
+export default async function TodayPage({ params, searchParams }: PageProps<"/w/[slug]">) {
   const { slug } = await params;
+  // La puerta de entrada es el RELEVO nuevo; el panel anterior queda a mano con ?panel=1.
+  if ((await searchParams).panel !== "1") redirect(`/hoy/${slug}`);
   const ctx = await getWorkspaceContext(slug);
   const supabase = await createClient();
   const today = todayAR();

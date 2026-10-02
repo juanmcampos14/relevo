@@ -6,7 +6,7 @@ export const USERS = { tano: "tano@relevo.local", fran: "fran@relevo.local", vis
 
 export async function login(page: Page, email: string) {
   await page.context().clearCookies();
-  await page.goto("/login?next=/w/daicou");
+  await page.goto(`/login?next=${encodeURIComponent("/w/daicou?panel=1")}`);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill(PASSWORD);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();

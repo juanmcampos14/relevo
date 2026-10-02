@@ -23,6 +23,8 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
   const hello = await surfaceHello(supabase, ctx);
   // Al abrir RELEVO se elige en qué misión trabajar (si hay más de una y todavía no se eligió).
   if (hello.missions.length > 1 && !hello.chosen) redirect(`/hoy/${slug}/misiones`);
+  // Sin ninguna misión todavía (un workspace nuevo): lo primero es crearla.
+  if (!hello.missions.length && ctx.canEdit) redirect(`/hoy/${slug}/nueva`);
   const [live, counts, state] = await Promise.all([
     hello.mission ? liveFocus(supabase, hello.mission.id, new Date(), ctx.user.id).catch(() => null) : null,
     missionCounts(supabase, hello.mission?.id ?? null),

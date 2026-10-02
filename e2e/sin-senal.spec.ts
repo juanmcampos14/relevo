@@ -21,7 +21,7 @@ test("@mobile abrir RELEVO sin señal, capturar y subir al volver la conexión",
   await page.waitForFunction(async () => !!(await (await caches.open("relevo-shell-v1")).match("/offline")), null, { timeout: 30_000 });
 
   netOff();
-  await page.goto("/w/daicou");
+  await page.goto("/w/daicou?panel=1");
   await expect(page.getByText("Sin conexión")).toBeVisible();
 
   await page.getByRole("button", { name: "Capturar" }).click();

@@ -8,7 +8,7 @@ import * as z from "zod/v4";
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
 export const EXTRACT_MODEL = "claude-opus-5-5";
-export const EXTRACT_PROMPT_VERSION = "captura-v8";
+export const EXTRACT_PROMPT_VERSION = "captura-v9";
 // USD por millón de tokens (claude-opus-5-5).
 const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
 
@@ -49,6 +49,7 @@ export const ExtractionSchema = z.object({
       existing_id: z.string().nullable().describe("id de la lista de contactos existentes SOLO si es claramente la misma persona."),
       resolves: z.string().nullable().describe("id de la lista de entidades sin identificar si esta captura revela que es ese actor."),
       owns_asset: z.boolean().describe("true si la nota dice que esta persona es dueña/propietaria del activo de la captura."),
+      url: z.string().nullable().describe("Link a su perfil (LinkedIn, sitio) si la nota lo trae; null si no."),
     }),
   ).describe("Personas de afuera del equipo. Nunca incluyas a alguien del EQUIPO (quien captura y sus compañeros): no son contactos."),
   evidence: z.array(

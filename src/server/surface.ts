@@ -14,7 +14,7 @@ type Db = SupabaseClient<Database>;
 
 export type SurfaceMission = { id: string; short: string; label: string };
 
-export type MissionMembership = { role: "owner" | "member" | "viewer" | null; joinedAt: string | null; lastSeenAt: string | null; invitedBy: string | null };
+export type MissionMembership = { role: "owner" | "member" | "viewer" | null; joinedAt: string | null; lastSeenAt: string | null; invitedBy: string | null; crew: number };
 
 export async function surfaceHello(db: Db, ctx: WorkspaceContext): Promise<{ greeting: string; name: string | null; mission: SurfaceMission | null; missions: MissionOption[]; chosen: boolean; membership: MissionMembership; canEdit: boolean }> {
   const [{ data: me }, missions, chosen] = await Promise.all([
@@ -36,7 +36,8 @@ export async function surfaceHello(db: Db, ctx: WorkspaceContext): Promise<{ gre
   }
   // Mi lugar en esta misión (owner, puede trabajar o solo ver) y cuándo la miré por última vez.
   const { data: me2 } = m ? await db.from("campaign_members").select("role, joined_at, last_seen_at, invited_by").eq("campaign_id", m.id).eq("user_id", ctx.user.id).maybeSingle() : { data: null };
-  const membership: MissionMembership = { role: (me2?.role as MissionMembership["role"]) ?? null, joinedAt: me2?.joined_at ?? null, lastSeenAt: me2?.last_seen_at ?? null, invitedBy: me2?.invited_by ?? null };
+  const { count: crew } = m ? await db.from("campaign_members").select("user_id", { count: "exact", head: true }).eq("campaign_id", m.id).in("role", ["owner", "member"]) : { count: 0 };
+  const membership: MissionMembership = { role: (me2?.role as MissionMembership["role"]) ?? null, joinedAt: me2?.joined_at ?? null, lastSeenAt: me2?.last_seen_at ?? null, invitedBy: me2?.invited_by ?? null, crew: crew ?? 0 };
   return { greeting, name, mission, missions, chosen: !!chosen, membership, canEdit: ctx.canEdit && membership.role !== "viewer" };
 }
 
@@ -143,7 +144,7 @@ export async function depthView(db: Db, findingId: string): Promise<DepthView | 
 // que hay cerca de donde está (memoria del Brain).
 // ---------------------------------------------------------------------------
 
-export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null; scope?: string };
+export type LookItem = { id: string; kicker: string; title: string; line: string | null; ask: string; links?: string[]; then?: string | null; scope?: string; map?: string | null };
 
 const ago = (iso: string) => {
   const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
@@ -321,42 +322,18 @@ export async function welcomeNotice(db: Db, ctx: WorkspaceContext, hello: { name
   if (!m || hello.membership.lastSeenAt || hello.membership.role === "owner" || !hello.membership.role) return null;
   const [state, counts] = await Promise.all([missionState(db, m.id), missionCounts(db, m.id)]);
   const inviter = hello.membership.invitedBy ? (await namesOf(db, ctx, [hello.membership.invitedBy])).get(hello.membership.invitedBy) : null;
-  const lines = [
-    state?.purpose ?? null,
-    knowsLine(counts) || null,
-    state?.fronts.length ? `Los frentes: ${state.fronts.slice(0, 4).map((f) => f.name.toLowerCase()).join(", ")}.` : null,
-    state?.since_start?.learned || state?.changed?.[0] || null,
-  ].filter((x): x is string => !!x);
+  // Narrativa, no inventario: la historia de la misión contada por RELEVO para quien llega tarde.
+  const lines = state?.story
+    ? [state.story]
+    : [state?.purpose ?? null, knowsLine(counts) || null, state?.since_start?.learned || state?.changed?.[0] || null].filter((x): x is string => !!x);
   return {
     title: `${hello.name ? `${hello.name}, ` : ""}${inviter ? `${inviter} te sumó` : "te sumaron"} a ${m.short}.`,
     lines,
     actions: [
-      { label: "Poneme al día", ask: "Poneme al día con la misión: qué buscamos, qué sabemos, qué creemos, qué encontramos, qué cambió, qué seguimos sin saber y qué estamos haciendo ahora. Corto." },
+      { label: "Poneme al día", ask: "Poneme al día" },
       { label: "Primero te cuento lo que sé", focus: true },
     ],
   };
-}
-
-export async function sinceLastVisit(db: Db, ctx: WorkspaceContext, mission: SurfaceMission | null, lastSeenAt: string | null, doNext: string | null): Promise<Notice | null> {
-  if (!mission || !lastSeenAt || Date.now() - new Date(lastSeenAt).getTime() < 3 * 3_600_000) return null;
-  const [{ data: ev }, { data: caps }, { data: assessed }, { count: signals }] = await Promise.all([
-    db.from("evidence").select("created_by").eq("campaign_id", mission.id).gt("created_at", lastSeenAt).neq("created_by", ctx.user.id).not("created_by", "is", null),
-    db.from("captures").select("captured_by").eq("campaign_id", mission.id).gt("captured_at", lastSeenAt).neq("captured_by", ctx.user.id),
-    db.from("finding_assessments").select("finding_id, findings!inner(campaign_id)").eq("findings.campaign_id", mission.id).gt("created_at", lastSeenAt),
-    db.from("brief_signals").select("id", { count: "exact", head: true }).contains("campaign_ids", [mission.id]).in("relevance", ["alta", "media"]).gt("created_at", lastSeenAt),
-  ]);
-  const by = new Map<string, { data: number; captures: number }>();
-  for (const e of ev ?? []) { const k = e.created_by!; by.set(k, { ...(by.get(k) ?? { data: 0, captures: 0 }), data: (by.get(k)?.data ?? 0) + 1 }); }
-  for (const c of caps ?? []) { const k = c.captured_by; if (!k) continue; by.set(k, { ...(by.get(k) ?? { data: 0, captures: 0 }), captures: (by.get(k)?.captures ?? 0) + 1 }); }
-  const names = await namesOf(db, ctx, [...by.keys()]);
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const lines = [...by].map(([id, v]) => `${names.get(id)} sumó ${[v.data ? plural(v.data, "dato", "datos") : null, v.captures ? plural(v.captures, "captura", "capturas") : null].filter(Boolean).join(" y ")}.`);
-  const hyps = new Set((assessed ?? []).map((a) => a.finding_id)).size;
-  if (hyps) lines.push(hyps === 1 ? "Una hipótesis cambió." : `${hyps} hipótesis cambiaron.`);
-  if (signals) lines.push(signals === 1 ? "Apareció una señal relevante." : `Aparecieron ${signals} señales relevantes.`);
-  if (!lines.length) return null;
-  if (doNext) lines.push(`Haría: ${doNext.charAt(0).toLowerCase()}${doNext.slice(1)}.`);
-  return { title: "Desde tu última visita", lines, actions: [{ label: "Contame más", ask: "¿Qué pasó en la misión desde mi última visita y qué cambia para mí?" }] };
 }
 
 /** Marca que la persona ya miró la misión (para el onboarding y el "desde tu última visita"). */

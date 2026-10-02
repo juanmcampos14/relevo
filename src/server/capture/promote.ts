@@ -191,6 +191,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
               origin_campaign_id: capture.campaign_id,
               full_name: String(p.name || p.role || "Contacto sin nombre").trim(),
               contact_kind: institutional ? "canal_institucional" : "persona",
+              profile_url: typeof p.url === "string" && /^https?:\/\//.test(p.url) ? p.url : null,
               role_title: (p.role as string | null) ?? null,
               notes: `De una captura de campo (${capture.captured_at.slice(0, 10)}).`,
             },

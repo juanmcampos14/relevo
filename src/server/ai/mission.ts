@@ -172,8 +172,16 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
 }
 
 
-/** La misión que sigue el Morning Brief (por ahora, la primera misión del workspace). */
+/**
+ * ¿Esta misión tiene Morning Brief? Es una capacidad de la misión, no de Vaca Muerta: se configura en
+ * workspace.settings.brief.campaign_ids; si no está configurado, la primera misión (la que lo tuvo siempre).
+ */
 export async function isBriefMission(db: Db, missionId: string): Promise<boolean> {
-  const { data } = await db.from("campaigns").select("id").eq("kind", "mision").order("created_at").limit(1).maybeSingle();
+  const { data: m } = await db.from("campaigns").select("workspace_id").eq("id", missionId).maybeSingle();
+  if (!m) return false;
+  const { data: ws } = await db.from("workspaces").select("settings").eq("id", m.workspace_id).single();
+  const configured = (ws?.settings as { brief?: { campaign_ids?: string[] } } | null)?.brief?.campaign_ids;
+  if (configured?.length) return configured.includes(missionId);
+  const { data } = await db.from("campaigns").select("id").eq("workspace_id", m.workspace_id).eq("kind", "mision").order("created_at").limit(1).maybeSingle();
   return data?.id === missionId;
 }

@@ -40,5 +40,5 @@ export function Nearby({ slug, base }: { slug: string; base: string }) {
         <LookCard kicker="Cerca tuyo" title="Acá todavía no conozco nada." line="Puedo mirar qué hay alrededor: comercios, locales, movimiento." href={askHref(base, "¿Qué hay para mirar acá cerca? Mirá comercios, locales disponibles y movimiento alrededor de donde estoy.")} cta="Mirá vos" />
       </ul>
     );
-  return <ul className="space-y-3">{items.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} href={askHref(base, it.ask, it.scope)} />)}</ul>;
+  return <ul className="space-y-3">{items.map((it) => <LookCard key={it.id} kicker={it.kicker} title={it.title} line={it.line} href={askHref(base, it.ask, it.scope)} mapHref={it.map} />)}</ul>;
 }

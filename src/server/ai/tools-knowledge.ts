@@ -411,7 +411,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       if (!m.success) return { content: "Referencia inválida: usá 'contact:uuid'", isError: true };
       const id = m.data.split(":")[1];
       const [{ data: c }, { data: said }, { data: tasks }] = await Promise.all([
-        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, outreach_draft, contact_links(valid_until, ended_note, role_title, companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
+        db.from("contacts").select("id, full_name, role_title, contact_kind, contact_permission, relationship_status, outreach_draft, profile_url, email, phone, contact_links(valid_until, ended_note, role_title, companies(id, trade_name, legal_name))").eq("id", id).maybeSingle(),
         db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, observed_at, capture_id").eq("stated_by_contact_id", id).limit(40),
         db.from("tasks").select("id, title, status, due_on").eq("contact_id", id),
       ]);
@@ -420,6 +420,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         content: track(ctx, {
           ref: ref("contact", id),
           name: c.full_name, role: c.role_title, kind: c.contact_kind, may_contact: c.contact_permission, relationship: c.relationship_status,
+          profile_url: c.profile_url, email: c.email, phone: c.phone,
           outreach_draft: c.outreach_draft ?? null,
           companies: c.contact_links.flatMap((l) => (l.companies && !l.valid_until ? [{ ref: ref("company", l.companies.id), name: companyName(l.companies), role: l.role_title }] : [])),
           // Dónde estuvo antes (no borrar historia; no presentarla como vigente).
@@ -594,6 +595,8 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           content: track(ctx, {
             mission: { ref: brief.mission.ref, name: brief.mission.name, objective: brief.mission.objective, dates: brief.mission.dates, today: brief.mission.today, days_to_start: brief.mission.days_to_start, moment: brief.mission.moment, declared_context: brief.mission.declared_context, at_start: brief.mission.at_start, watching_for: brief.mission.watching_for },
             prepared: brief.prepared,
+            // La historia y el estado de la misión (para poner al día a quien se suma o vuelve).
+            state: await missionStateLean(db, brief.mission.ref.split(":")[1]),
             contacts_to_move: { ...brief.contacts_to_move, items: brief.contacts_to_move.items.slice(0, 8) },
             more: "Para el detalle (hipótesis, guiones AOG, activos, follow-ups, señales) llamá mission_brief con detail=true, solo si lo piden.",
           }),
@@ -831,4 +834,12 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
     default:
       return { content: `Herramienta desconocida: ${name}`, isError: true };
   }
+}
+
+async function missionStateLean(db: ToolContext["db"], campaignId: string) {
+  const { data } = await db.from("campaigns").select("synthesis").eq("id", campaignId).maybeSingle();
+  const st = (data?.synthesis as { state?: Record<string, unknown> } | null)?.state;
+  if (!st) return null;
+  const pick = (k: string) => st[k] ?? null;
+  return { story: pick("story"), searching: pick("searching"), since_start: pick("since_start"), unknowns: pick("unknowns"), next_days: pick("next_days"), you_can_help: pick("you_can_help"), fronts: Array.isArray(st.fronts) ? (st.fronts as { name: string; believe: string; know: string }[]).map((f) => ({ name: f.name, believe: f.believe, know: f.know })) : null };
 }

@@ -11,8 +11,9 @@ import { createClient } from "@/lib/supabase/client";
 import { CAPTURE_BUCKET, syncOne, type CaptureApi } from "@/domain/capture";
 import type { RefLabel } from "@/server/ai/labels";
 import { askRelevo, decideFromPanel, placeName, transcribeQuestion, undoFromPanel, type PanelDraft, type PanelReply } from "@/app/w/[slug]/ai/panel-actions";
-import { advance, correctFocus, markSent } from "@/app/hoy/[slug]/actions";
+import { advance, catchUpSince, correctFocus, markSent } from "@/app/hoy/[slug]/actions";
 import { parseReply, speakable, type ReadyMessage } from "./reply";
+import { hostOf } from "@/domain/links";
 import { FocusList, type FocusChange, type FocusView } from "./focus-list";
 
 // RELEVO (Surface): un solo producto. Ahora, Explorar, Oportunidades y Misión son cuatro formas de mirar el
@@ -23,7 +24,7 @@ import { FocusList, type FocusChange, type FocusView } from "./focus-list";
 export type Interrupt = { id: string; title: string; detail: string | null } | null;
 export type SurfaceTab = "ahora" | "explorar" | "oportunidades" | "mision";
 type Sent = { line: string; draft: PanelDraft | null } | "enviando" | { error: string };
-type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: boolean };
+type Msg = { role: "user" | "assistant"; text: string; photo?: string; labels?: Record<string, RefLabel>; drafts?: PanelDraft[]; note?: boolean; sources?: { url: string; title: string }[] };
 type Here = { lat: number; lng: number; accuracy: number };
 
 const CONV_KEY = "relevo-hoy-conversation";
@@ -106,6 +107,8 @@ export function Conversation(props: {
   placeholder?: string;
   /** Un aviso de equipo arriba: bienvenida a la misión o "desde tu última visita". */
   notice?: { title: string; lines: string[]; actions: { label: string; ask?: string; focus?: boolean }[] } | null;
+  /** Volvió después de un rato a una misión compartida: RELEVO cuenta qué cambió desde entonces. */
+  catchUpSince?: string | null;
   /** La misión de trabajo (arriba, discreta, con su menú). */
   mission?: { short: string } | null;
   children?: ReactNode;
@@ -170,7 +173,7 @@ export function Conversation(props: {
     if (res.conversationId && !scope) store.set(CONV_KEY, res.conversationId);
     if (res.conversationId) setConversationId(res.conversationId);
     if (!res.ok) { setError(res.message); return; }
-    setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts.filter((d) => !(d.action === "record_web_evidence" && d.status === "ejecutada")) }]);
+    setMessages((m) => [...m, { role: "assistant", text: res.text, labels: res.labels, drafts: res.drafts.filter((d) => !(d.action === "record_web_evidence" && d.status === "ejecutada")), sources: res.webSources }]);
     if (spoke.current) voice.say(speakable(res.text));
     if (res.homeChanged) router.refresh();
     if (res.navigate) router.push(res.navigate);
@@ -292,6 +295,7 @@ export function Conversation(props: {
       </header>
 
       <main className="mx-auto max-w-3xl px-5 pb-56">
+        {props.catchUpSince && !started && <CatchUpCard slug={slug} since={props.catchUpSince} onMore={() => ask("¿Qué pasó en la misión desde mi última visita y qué cambia para mí?")} />}
         {props.notice && !started && (
           <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
             <p className="text-[17px] font-semibold">{props.notice.title}</p>
@@ -351,6 +355,14 @@ export function Conversation(props: {
                     <div className="text-[17px] leading-[1.65] [&_a]:text-[#9A4B1F] [&_strong]:font-semibold [&_ul]:space-y-2">
                       <RichText text={r.body} labels={new Map(Object.entries(m.labels ?? {}))} />
                     </div>
+                  )}
+                  {m.sources && m.sources.length > 0 && (
+                    <p className="text-[13px] leading-relaxed text-[#9C968A]">
+                      Fuentes:{" "}
+                      {m.sources.slice(0, 6).map((src, k) => (
+                        <span key={src.url}>{k > 0 && " · "}<a href={src.url} target="_blank" rel="noopener noreferrer" title={src.title} className="underline decoration-[#D9D2C3] underline-offset-2 hover:text-[#1C1B19]">{hostOf(src.url)}</a></span>
+                      ))}
+                    </p>
                   )}
                   {r.detail && (
                     <details className="group rounded-2xl bg-[#F4F1EA] px-5 py-3">
@@ -527,5 +539,31 @@ function MissionMenu({ slug, current }: { slug: string; current: { short: string
         </div>
       )}
     </div>
+  );
+}
+
+/** "Desde tu última visita": primero qué cambió, después quién, y qué haría. Se arma al abrir, sin demorar Ahora. */
+function CatchUpCard({ slug, since, onMore }: { slug: string; since: string; onMore: () => void }) {
+  const [lines, setLines] = useState<string[] | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    catchUpSince(slug, since).then((r) => { if (alive) setLines(r?.lines ?? null); }).catch(() => { if (alive) setLines(null); });
+    return () => { alive = false; };
+  }, [slug, since]);
+  if (lines === null) return null;
+  return (
+    <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
+      <p className="text-[17px] font-semibold">Desde que estuviste</p>
+      {lines === undefined ? (
+        <p className="mt-2 text-[15px] text-[#8A8478]">Poniéndote al día…</p>
+      ) : (
+        <>
+          <div className="mt-2 space-y-1.5 text-[15px] leading-relaxed text-[#4A463F] [&_strong]:font-semibold [&_strong]:text-[#1C1B19]">
+            {lines.map((l) => <RichText key={l} text={l} labels={new Map()} />)}
+          </div>
+          <button type="button" onClick={onMore} className="mt-3 rounded-full bg-[#EFEBE2] px-4 py-2 text-[14px] font-medium">Contame más</button>
+        </>
+      )}
+    </section>
   );
 }

@@ -19,7 +19,7 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** Algo para mirar: qué es, una línea, y "Contame" (la pregunta se hace sola en la conversación de abajo). */
-export function LookCard({ kicker, title, line, links, then, href, cta = "Contame", className }: { kicker?: string | null; title: string; line?: string | null; links?: string[]; then?: string | null; href: string; cta?: string; className?: string }) {
+export function LookCard({ kicker, title, line, links, then, href, cta = "Contame", mapHref, className }: { kicker?: string | null; title: string; line?: string | null; links?: string[]; then?: string | null; href: string; cta?: string; mapHref?: string | null; className?: string }) {
   return (
     <li className={cn(card, "flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5", className)}>
       <div className="min-w-0 flex-1">
@@ -29,7 +29,10 @@ export function LookCard({ kicker, title, line, links, then, href, cta = "Contam
         {links && links.length > 0 && <p className="mt-2 text-[14px] leading-relaxed text-[#6F6A60]"><span className="text-[#1C1B19]">Se relaciona con</span> {links.join(" · ")}</p>}
         {then && <p className="mt-1 text-[14px] leading-relaxed text-[#6F6A60]"><span className="text-[#1C1B19]">Haría:</span> {then}</p>}
       </div>
-      <Link href={href} scroll={false} className="self-start rounded-full bg-[#EFEBE2] px-4 py-2 text-[14px] font-medium text-[#1C1B19] hover:bg-[#E6E0D3]">{cta}</Link>
+      <div className="flex shrink-0 gap-2 self-start">
+        <Link href={href} scroll={false} className="rounded-full bg-[#EFEBE2] px-4 py-2 text-[14px] font-medium text-[#1C1B19] hover:bg-[#E6E0D3]">{cta}</Link>
+        {mapHref && <a href={mapHref} target="_blank" rel="noopener noreferrer" className="rounded-full px-3 py-2 text-[14px] text-[#6F6A60] hover:bg-[#F4F1EA]">Ver en Maps</a>}
+      </div>
     </li>
   );
 }

@@ -13,7 +13,7 @@ import { deepCall } from "./deep";
 // background (con la síntesis del día) y la Surface lo muestra en segundos.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-estado-v2";
+const PROMPT_VERSION = "mision-estado-v3";
 
 export const StateSchema = z.object({
   purpose: z.string().describe("Qué estamos intentando conseguir, en una oración (p. ej. 'Descubrir y validar oportunidades de negocio e inversión alrededor del crecimiento de Vaca Muerta')."),
@@ -33,6 +33,8 @@ export const StateSchema = z.object({
   next_days: z.array(z.object({ when: z.string().describe("Fecha o rango legible ('12–15 oct')."), what: z.string().describe("Qué pasa, en pocas palabras.") })).describe("Las próximas etapas de la misión según el plan."),
   changed: z.array(z.string()).describe("Hasta 3 cosas que cambiaron esta semana y por qué importan. Vacío si nada importante."),
   questions: z.array(z.string()).describe("4 preguntas que la persona podría hacerle a RELEVO sobre la misión, en su voz (p. ej. '¿Qué sabemos de housing?')."),
+  story: z.string().describe("Para alguien que se suma hoy a la misión: 3 a 5 oraciones narrativas, sin cifras de inventario. Qué estamos haciendo y por qué; dónde estamos (cuánto es mapeo y cuánto validación propia); qué es lo importante ahora; qué cambió desde que empezamos y qué sigue sin validar."),
+  you_can_help: z.array(z.string()).describe("Hasta 3 lugares concretos donde alguien que se suma (con su contexto, relaciones o conocimiento) puede acelerar la misión ahora, en una oración cada uno."),
   searching: z.array(z.string()).describe("Lo que buscamos, según lo que definió el equipo (contexto declarado: tamaño, zona, presupuesto, concepto, restricciones), en pocas líneas. Es contexto, no evidencia. Vacío si no hay."),
   since_start: z.object({
     believed: z.string().describe("Qué creíamos/buscábamos al empezar la misión (de la foto del comienzo), en una oración."),

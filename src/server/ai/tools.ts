@@ -1,4 +1,5 @@
 import "server-only";
+import { mapsUrl } from "@/domain/links";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -356,7 +357,7 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
       db.from("evidence").select("id, statement, quote, evidence_type, origin_kind, verification_status, observed_at, revalidate_after, next_verification_step, created_by, sources(id, title, url)").eq(fk, id).limit(40),
       db.from("findings").select("id, kind, statement, verification_status, review_status").eq(fk, id).limit(30),
       db.from("campaign_targets").select("id, status, next_action, campaigns(id, name), visits(id, visited_at, notes)").eq(fk, id),
-      db.from("contact_links").select("relation, valid_until, ended_note, role_title, contacts(id, full_name, role_title, contact_permission, verification_status)").eq(fk, id),
+      db.from("contact_links").select("relation, valid_until, ended_note, role_title, contacts(id, full_name, role_title, contact_permission, verification_status, profile_url)").eq(fk, id),
     ]);
     const who = await authors(ctx, (claims ?? []).map((c) => c.created_by));
     return {
@@ -370,7 +371,7 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
         visits: t.visits.map((v) => ({ ref: ref("visit", v.id), visited_at: v.visited_at, notes_excerpt: clip(v.notes, 400) })),
       })),
       // Personas vigentes (a quién contactar) y, aparte, las que estuvieron (historia: no recomendarlas para acá).
-      contacts: (contacts ?? []).flatMap((l) => (l.contacts && !l.valid_until ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, relation: l.relation, role: l.role_title ?? l.contacts.role_title, may_contact: l.contacts.contact_permission, verification: l.contacts.verification_status }] : [])),
+      contacts: (contacts ?? []).flatMap((l) => (l.contacts && !l.valid_until ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, relation: l.relation, role: l.role_title ?? l.contacts.role_title, may_contact: l.contacts.contact_permission, verification: l.contacts.verification_status, profile_url: l.contacts.profile_url }] : [])),
       former_contacts: (contacts ?? []).flatMap((l) => (l.contacts && l.valid_until ? [{ ref: ref("contact", l.contacts.id), name: l.contacts.full_name, was: l.role_title, until: l.valid_until, note: l.ended_note, current: "YA NO ESTÁ: no recomendarla para esta empresa" }] : [])),
     };
   };
@@ -381,13 +382,13 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
       return { content: track(ctx, { ref: ref("company", id), name: companyName(data), ...data, notes: clip(data.notes), ...(await claimsAndFindings("company_id")) }) };
     }
     case "establishment": {
-      const { data } = await db.from("establishments").select("id, name, address_text, locality, address_status, verification_status, is_demo, notes, company_id").eq("id", id).maybeSingle();
+      const { data } = await db.from("establishments").select("id, name, address_text, locality, address_status, verification_status, is_demo, notes, company_id, latitude, longitude").eq("id", id).maybeSingle();
       if (!data) return notFound;
-      return { content: track(ctx, { ref: ref("establishment", id), ...data, notes: clip(data.notes), company: data.company_id ? { ref: ref("company", data.company_id) } : null, ...(await claimsAndFindings("establishment_id")) }) };
+      return { content: track(ctx, { ref: ref("establishment", id), ...data, maps_url: mapsUrl({ lat: data.latitude, lng: data.longitude, address: data.address_text, name: data.name, locality: data.locality }), notes: clip(data.notes), company: data.company_id ? { ref: ref("company", data.company_id) } : null, ...(await claimsAndFindings("establishment_id")) }) };
     }
     case "asset": {
       const [{ data }, { data: prices }] = await Promise.all([
-        db.from("assets").select("id, title, kind, operation, category, address_text, locality, address_status, surface_m2, land_m2, capacity_text, occupancy_declared, owner_text, broker_text, operator_text, sale_reason, economics_note, price_amount, price_currency, price_observed_on, price_source_id, price_status, material_change, first_detected_on, last_checked_on, verification_status, is_demo, notes").eq("id", id).maybeSingle(),
+        db.from("assets").select("id, title, kind, operation, category, address_text, locality, address_status, surface_m2, land_m2, capacity_text, occupancy_declared, owner_text, broker_text, operator_text, sale_reason, economics_note, price_amount, price_currency, price_observed_on, price_source_id, price_status, material_change, first_detected_on, last_checked_on, verification_status, is_demo, notes, latitude, longitude").eq("id", id).maybeSingle(),
         db.from("asset_prices").select("amount, currency, operation, period, observed_on, source_url, publisher, basis, note, origin").eq("asset_id", id).order("observed_on", { ascending: false, nullsFirst: false }),
       ]);
       if (!data) return notFound;
@@ -396,6 +397,7 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
           ref: ref("asset", id),
           ...data,
           // Historial de precios: cada observación con su fuente. Precios distintos = INCONSISTENTE, nunca una baja calculada.
+          maps_url: mapsUrl({ lat: data.latitude, lng: data.longitude, address: data.address_text, name: data.title, locality: data.locality }),
           price_history: (prices ?? []).map((p) => ({ amount: Number(p.amount), currency: p.currency, operation: p.operation, period: p.period, observed_on: p.observed_on, source: p.source_url ?? p.publisher ?? null, basis: p.basis, note: p.note, origin: p.origin })),
           notes: clip(data.notes),
           price: data.price_amount != null ? { amount: data.price_amount, currency: data.price_currency, observed_on: data.price_observed_on, source: { ref: ref("source", data.price_source_id!) } } : "sin dato publicado",

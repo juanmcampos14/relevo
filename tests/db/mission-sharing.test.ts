@@ -93,4 +93,16 @@ describe("misiones compartidas", () => {
     const { data } = await db.fran.from("campaign_members").delete().eq("campaign_id", vm).eq("user_id", ids.jenny).select("user_id");
     expect(data).toEqual([]);
   });
+
+  it("ninguna foto de LAO es accesible para Fran: ni leerla ni pedir su link", async () => {
+    const cap = (await pool.query(`insert into captures (workspace_id, client_id, captured_at, captured_by, campaign_id, body) values ($1, gen_random_uuid(), now(), $2, $3, 'Local en el Bajo') returning id`, [ws, ids.tano, lao])).rows[0].id as string;
+    const path = `${ws}/${randomUUID()}/foto.jpg`;
+    const up = await admin.storage.from("captures").upload(path, new Blob([new Uint8Array([255, 216, 255])], { type: "image/jpeg" }), { contentType: "image/jpeg" });
+    expect(up.error).toBeNull();
+    await pool.query(`insert into capture_media (workspace_id, capture_id, kind, storage_path, mime_type) values ($1, $2, 'photo', $3, 'image/jpeg')`, [ws, cap, path]);
+    expect((await db.fran.storage.from("captures").createSignedUrl(path, 60)).data).toBeNull();
+    expect((await db.fran.storage.from("captures").download(path)).data).toBeNull();
+    expect((await db.tano.storage.from("captures").createSignedUrl(path, 60)).data?.signedUrl).toBeTruthy();
+    await admin.storage.from("captures").remove([path]);
+  });
 });

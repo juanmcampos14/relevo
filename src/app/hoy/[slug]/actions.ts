@@ -13,10 +13,12 @@ import { laterPrepare } from "@/server/ai/turn";
 import { moveIsFresh, type Correction } from "@/domain/focus";
 import { askRelevo, type PanelReply } from "@/app/w/[slug]/ai/panel-actions";
 import { memoryNearby } from "@/server/geo";
+import { mapsUrl } from "@/domain/links";
 import { formatDistance } from "@/domain/geo";
 import type { LookItem } from "@/server/surface";
 import { rememberMission } from "@/server/mission/current";
 import { inviteToMission } from "@/server/mission/sharing";
+import { catchUp } from "@/server/mission/catch-up";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { siteUrl } from "@/server/brief/run";
 import { ingestDiscovery, undoIngest, type IngestEffects } from "@/server/mission/ingest";
@@ -145,6 +147,7 @@ export async function nearby(slug: string, at: { lat: number; lng: number }): Pr
     line: p.detail ?? null,
     ask: `Contame de ${p.name}, que está acá cerca.`,
     scope: p.ref,
+    map: mapsUrl({ lat: p.lat, lng: p.lng }),
   }));
 }
 
@@ -266,4 +269,21 @@ export async function revokeMissionInvite(slug: string, id: string): Promise<{ o
   const { data } = await supabase.from("mission_invitations").update({ status: "revoked" }).eq("id", id).eq("status", "pending").select("id");
   revalidatePath(`/hoy/${slug}/mision/compartir`);
   return { ok: !!data?.length };
+}
+
+/** "Desde tu última visita", interpretado por RELEVO (se pide después de mostrar Ahora, para no demorarlo). */
+export async function catchUpSince(slug: string, since: string): Promise<{ lines: string[] } | null> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(since)) return null;
+  const supabase = await createClient();
+  const mission = await activeMission(supabase);
+  if (!mission) return null;
+  const { data: crew } = await supabase.from("campaign_members").select("user_id").eq("campaign_id", mission);
+  const team = (ctx.workspace.settings as { team?: Record<string, { short?: string }> } | null)?.team ?? {};
+  const { data: profs } = crew?.length ? await supabase.from("profiles").select("user_id, display_name").in("user_id", crew.map((c) => c.user_id)) : { data: [] };
+  const names = new Map((crew ?? []).map((c) => [c.user_id, team[c.user_id]?.short ?? profs?.find((p) => p.user_id === c.user_id)?.display_name?.split(/\s+/)[0] ?? "Alguien"] as const));
+  const { now } = await liveFocus(supabase, mission, new Date(), ctx.user.id);
+  const r = await catchUp(supabase, { workspaceId: ctx.workspace.id, missionId: mission, userId: ctx.user.id, since, names, doNext: now[0]?.title ?? null });
+  if (!r) return null;
+  return { lines: [...r.changed, ...(r.next ? [`**Haría:** ${r.next.charAt(0).toLowerCase()}${r.next.slice(1)}`] : [])] };
 }

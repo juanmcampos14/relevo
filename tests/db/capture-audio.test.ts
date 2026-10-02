@@ -28,7 +28,7 @@ const fakeClient = {
           summary: "Pedro, de una empresa de flota, cuenta que pierden un día por reparación.",
           company: null,
           asset: null,
-          people: [{ key: "p1", name: "Pedro", role: null, institutional: false, existing_id: null, resolves: null, owns_asset: false }],
+          people: [{ key: "p1", name: "Pedro", role: null, institutional: false, existing_id: null, resolves: null, owns_asset: false, url: null }],
           evidence: [{ key: "e1", statement: "Tienen cuarenta camionetas", quote: "tienen cuarenta camionetas", evidence_type: "capacidad", origin: "declarado_por_persona", declared_by: null, stated_by: "p1", about: "none" as const }],
           context: [], finding_candidates: [],
           unknowns: [],

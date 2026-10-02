@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { liveFocus } from "@/server/mission/focus";
 import { Conversation, type Interrupt } from "@/components/surface/conversation";
-import { knowsLine, markSeen, missionCounts, missionState, sinceLastVisit, surfaceHello, welcomeNotice } from "@/server/surface";
+import { knowsLine, markSeen, missionCounts, missionState, surfaceHello, welcomeNotice } from "@/server/surface";
 import { after } from "next/server";
 
 export const metadata: Metadata = { title: { absolute: "RELEVO" } };
@@ -35,7 +35,9 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
     : null;
   const focus = (live?.now ?? []).map((x) => ({ id: x.id, title: x.title, why: x.why }));
   const intro = live
-    ? focus.length ? "Esto es lo que movería ahora." : "Por ahora no hay nada que mover. Contame qué ves, o mostrame algo."
+    ? focus.length
+      ? hello.membership.crew > 1 ? "Con lo que sabemos ahora, esto es lo que movería con vos." : "Esto es lo que movería ahora."
+      : "Por ahora no hay nada que mover. Contame qué ves, o mostrame algo."
     : "Contame qué necesitás, o mostrame lo que estás viendo.";
 
   // Interrumpir solo cuando importa: lo que la vigilancia marcó como material (o algo nuevo de relevancia alta)
@@ -48,14 +50,16 @@ export default async function Hoy({ params, searchParams }: PageProps<"/hoy/[slu
 
   // Quien entra a una misión que ya empezó: RELEVO lo pone en situación. Si volvés después de un rato: qué
   // aportaron los demás. Después queda marcada la visita.
-  const notice = hello.mission
-    ? (await welcomeNotice(supabase, ctx, hello)) ?? (await sinceLastVisit(supabase, ctx, hello.mission, hello.membership.lastSeenAt, focus[0]?.title ?? null))
-    : null;
+  const notice = hello.mission ? await welcomeNotice(supabase, ctx, hello) : null;
+  // Si volvés después de un rato a una misión compartida, RELEVO te cuenta qué cambió (se arma en segundos, sin demorar Ahora).
+  const last = hello.membership.lastSeenAt;
+  const catchUpSince = !notice && hello.membership.crew > 1 && last && last < hoursAgo(3) ? last : null;
   if (hello.mission && hello.membership.role) { const id = hello.mission.id; after(() => markSeen(supabase, id, ctx.user.id)); }
 
   return (
     <Conversation
       notice={notice}
+      catchUpSince={catchUpSince}
       slug={slug} workspaceId={ctx.workspace.id} missionId={hello.mission?.id ?? null} mission={hello.mission} canEdit={hello.canEdit} tab="ahora"
       greeting={hello.greeting} about={about} intro={intro} focus={focus} focusVersion={focus.map((x) => x.id).join(",")}
       missionLabel={hello.mission?.label ?? null} interrupt={interrupt}

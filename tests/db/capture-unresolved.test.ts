@@ -54,7 +54,7 @@ describe("día 1: una contratista y un encargado sin nombre", () => {
       ...base,
       summary: "Encargado de una contratista sin identificar: 35 personas, reintegro de hasta $18.000 por comida.",
       company: { name: "Contratista con ~35 personas en la zona", identified: false, existing_id: null, resolves: null, locality: "Añelo", activity: "Contratista" },
-      people: [{ key: "p1", name: null, role: "Encargado de la contratista", institutional: true, existing_id: null, resolves: null, owns_asset: false }],
+      people: [{ key: "p1", name: null, role: "Encargado de la contratista", institutional: true, existing_id: null, resolves: null, owns_asset: false, url: null }],
       evidence: [
         { key: "e1", statement: "Trabajan unas 35 personas en la zona", quote: "Son 35 personas en la zona", evidence_type: "capacidad", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "company" },
         { key: "e2", statement: "Sin vianda contratada reintegran hasta $18.000 por comida", quote: "reintegran hasta 18.000 por comida", evidence_type: "precio", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "company" },
@@ -98,7 +98,7 @@ describe("día 3: era PECOM y el encargado es Juan Pérez", () => {
       ...base,
       summary: "La contratista era PECOM y el encargado es Juan Pérez.",
       company: { name: "PECOM", identified: true, existing_id: null, resolves: orgId, locality: "Añelo", activity: null },
-      people: [{ key: "p1", name: "Juan Pérez", role: "Encargado", institutional: false, existing_id: null, resolves: actorId, owns_asset: false }],
+      people: [{ key: "p1", name: "Juan Pérez", role: "Encargado", institutional: false, existing_id: null, resolves: actorId, owns_asset: false, url: null }],
     });
     const first = await approveCapture(db, { workspaceId: ws, settings, userId, captureId: id });
     expect(first.accepted).toBe(0);
@@ -126,7 +126,7 @@ describe("refinar una hipótesis en vez de acumular contrapuestas", () => {
     const id = await capture("Otro trabajador dice que no tiene ese problema porque su empresa le da vianda.", {
       ...base,
       summary: "Un trabajador con vianda de su empresa no tiene el problema.",
-      people: [{ key: "p1", name: null, role: "Trabajador de una petrolera", institutional: false, existing_id: null, resolves: null, owns_asset: false }],
+      people: [{ key: "p1", name: null, role: "Trabajador de una petrolera", institutional: false, existing_id: null, resolves: null, owns_asset: false, url: null }],
       evidence: [{ key: "e1", statement: "Su empresa le da vianda y no tiene problema para comer", quote: "su empresa le da vianda", evidence_type: "declaracion", origin: "declarado_por_persona", stated_by: "p1", declared_by: null, about: "none" }],
       context: [], finding_candidates: [{
         statement: "La necesidad depende del esquema de alimentación", existing_finding_id: findingId, relation: "segmenta",

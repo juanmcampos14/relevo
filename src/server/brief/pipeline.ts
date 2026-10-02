@@ -7,6 +7,8 @@ import { briefDateAR, briefPeriod, changesOf, deliveryDue, matchCompanies, verti
 import { sameEvent, type Known } from "@/domain/brief/same-event";
 import { priceStatusOf } from "@/domain/radar/sheet";
 import { renderBriefEmail } from "@/domain/brief/render";
+import { isMissionBriefContent, renderMissionBriefEmail, type MissionBriefContent } from "@/domain/brief/mission-brief";
+import { briefMissionId, collectForMission, researchForMission, saveMissionBrief, writeMissionBrief, type MissionItem } from "./mission-brief";
 import type { EmailProvider } from "@/server/email/provider";
 import { collectItems, type CollectedItem } from "./collect";
 import type { ResearchEngine, SynthesisEngine } from "./engines";
@@ -19,7 +21,10 @@ import { loadBriefMemory, memoryDigest, type BriefMemory } from "./memory";
 
 type Db = SupabaseClient<Database>;
 type J = NonNullable<Json>;
-export const BRIEF_VERSION = "brief-v1-2026-10-07";
+export const BRIEF_VERSION = "brief-mision-v1-2026-10-03";
+export const LEGACY_BRIEF_VERSION = "brief-v1-2026-10-07";
+/** Los briefs de antes de la misión (brief-v1) se terminan y envían con su lógica original. */
+const isMissionVersion = (v: string | null | undefined) => (v ?? "").startsWith("brief-mision");
 const STEP_LEASE_MS = 8 * 60_000;
 export const MAX_STEP_ATTEMPTS = 4;
 const MAX_SEND_ATTEMPTS = 5;
@@ -50,7 +55,7 @@ export type Engines = { research: ResearchEngine; synthesis: SynthesisEngine; em
 export type StepOutcome = { briefId: string; did: string; status: string; more: boolean; error?: string };
 
 /** Crea (o devuelve) el brief del día. Idempotente por (workspace, fecha). */
-export async function ensureTodayBrief(db: Db, workspaceId: string, now = new Date()): Promise<string> {
+export async function ensureTodayBrief(db: Db, workspaceId: string, now = new Date(), version = BRIEF_VERSION): Promise<string> {
   const date = briefDateAR(now);
   const { data: existing } = await db.from("briefs").select("id").eq("workspace_id", workspaceId).eq("brief_date", date).maybeSingle();
   if (existing) return existing.id;
@@ -58,7 +63,7 @@ export async function ensureTodayBrief(db: Db, workspaceId: string, now = new Da
   const period = briefPeriod(now, last?.generated_at ? new Date(last.generated_at) : null);
   const { data, error } = await db
     .from("briefs")
-    .upsert({ workspace_id: workspaceId, brief_date: date, period_start: period.start.toISOString(), period_end: period.end.toISOString(), version: BRIEF_VERSION }, { onConflict: "workspace_id,brief_date", ignoreDuplicates: true })
+    .upsert({ workspace_id: workspaceId, brief_date: date, period_start: period.start.toISOString(), period_end: period.end.toISOString(), version }, { onConflict: "workspace_id,brief_date", ignoreDuplicates: true })
     .select("id")
     .maybeSingle();
   if (error) throw error;
@@ -97,6 +102,7 @@ export async function advanceBrief(db: Db, briefId: string, engines: Engines, op
   if (!(await claim(db, briefId))) return { briefId, did: "en curso en otra invocación", status: b.status, more: false };
 
   const period = { start: b.period_start, end: b.period_end };
+  if (isMissionVersion(b.version)) return advanceMissionBrief(db, b, ws, due);
   try {
     if (b.status === "recolectando") {
       const { items, errors } = await collectItems(db, b.workspace_id, { start: new Date(b.period_start), end: new Date(b.period_end) });
@@ -159,6 +165,66 @@ export async function advanceBrief(db: Db, briefId: string, engines: Engines, op
         );
       }
       return { briefId, did: `brief generado (${content.signals.length} señales)`, status: "generado", more: recipients.length > 0 && due };
+    }
+    return { briefId, did: "nada", status: b.status, more: false };
+  } catch (e) {
+    const message = (e as Error).message || "Error desconocido";
+    const attempts = b.attempts + 1;
+    await db.from("briefs").update({ error: `${b.status}: ${message}`, attempts, step_started_at: null, ...(attempts >= MAX_STEP_ATTEMPTS ? { status: "fallido" as const } : {}) }).eq("id", briefId);
+    return { briefId, did: `falló ${b.status}`, status: b.status, more: false, error: message };
+  }
+}
+
+type BriefRow = Database["public"]["Tables"]["briefs"]["Row"];
+
+/** Los pasos del Brief de la misión: recolectar → investigar (con lente de oportunidad) → escribir y guardar. */
+async function advanceMissionBrief(db: Db, b: BriefRow, ws: { settings: unknown }, due: boolean): Promise<StepOutcome> {
+  const briefId = b.id;
+  try {
+    const missionId = ((b.research as { mission_id?: string } | null)?.mission_id) ?? (await briefMissionId(db, b.workspace_id, ws.settings));
+    if (!missionId) throw new Error("No hay misión para el Brief");
+    if (b.status === "recolectando") {
+      const { items, errors } = await collectForMission(db, b.workspace_id, missionId);
+      await db.from("briefs").update({ collected: items as unknown as J, research: { mission_id: missionId, collect_errors: errors } as unknown as J, status: "investigando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
+      return { briefId, did: `recolectadas ${items.length} notas`, status: "investigando", more: true };
+    }
+    const items = (b.collected ?? []) as unknown as MissionItem[];
+    const { monthlyCapUsd, recipients } = briefSettings(ws.settings);
+    if (b.status === "investigando") {
+      const spent = await monthSpendUsd(db, b.workspace_id, b.brief_date);
+      if (spent >= monthlyCapUsd) {
+        // Tope alcanzado: sin investigación web; se escribe solo con las notas recolectadas.
+        const memo = `MODO REDUCIDO (tope mensual de IA alcanzado): sin investigación web, solo las notas recolectadas.\n\n${items.map((i) => `- ${i.publisher} · ${i.publishedAt ?? "s/f"} · ${i.title} · ${i.url}\n${(i.body ?? i.description ?? "").slice(0, 1500)}`).join("\n\n")}`;
+        await db.from("briefs").update({ research: { ...((b.research as object) ?? {}), memo, sources: [], capped: { spent, cap: monthlyCapUsd } } as unknown as J, status: "sintetizando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
+        return { briefId, did: `modo reducido (tope USD ${monthlyCapUsd})`, status: "sintetizando", more: true };
+      }
+      const r = await researchForMission(db, missionId, items);
+      await db.from("briefs").update({ research: { ...((b.research as object) ?? {}), memo: r.memo, sources: r.sources } as unknown as J, usage: { research: r.usage } as unknown as J, status: "sintetizando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
+      return { briefId, did: `investigación lista (${r.sources.length} fuentes)`, status: "sintetizando", more: true };
+    }
+    if (b.status === "sintetizando") {
+      const research = (b.research ?? {}) as { memo?: string; capped?: unknown };
+      const w = await writeMissionBrief(db, { workspaceId: b.workspace_id, missionId, memo: research.memo ?? "", items });
+      await saveMissionBrief(db, { workspaceId: b.workspace_id, briefId, missionId, brief: w.brief, items });
+      const usage: Record<string, { costUsd?: number; webSearches?: number }> = { ...((b.usage as Record<string, { costUsd?: number; webSearches?: number }>) ?? {}), synthesis: { costUsd: w.costUsd } };
+      const { data: m } = await db.from("campaigns").select("name").eq("id", missionId).single();
+      const content: MissionBriefContent = {
+        kind: "mision", mission_id: missionId, mission_name: (m?.name ?? "Misión").split("—")[0].trim(), brief: w.brief,
+        metrics: {
+          mode: research.capped ? "reducido" : "completo",
+          costUsd: Object.values(usage).reduce((a, u) => a + (u?.costUsd ?? 0), 0),
+          monthCostUsd: (await monthSpendUsd(db, b.workspace_id, b.brief_date)) + w.costUsd,
+          monthlyCapUsd, collected: items.length, webSearches: usage.research?.webSearches ?? 0, shown: w.brief.items.length, discarded: w.brief.discarded.length,
+        },
+      };
+      await db.from("briefs").update({ content: content as unknown as J, usage: usage as unknown as J, status: "generado", generated_at: new Date().toISOString(), step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
+      if (recipients.length) {
+        await db.from("brief_deliveries").upsert(
+          recipients.map((r) => ({ workspace_id: b.workspace_id, brief_id: briefId, recipient_email: r.email.trim().toLowerCase(), recipient_name: r.name || null })),
+          { onConflict: "brief_id,recipient_email", ignoreDuplicates: true },
+        );
+      }
+      return { briefId, did: `brief generado (${w.brief.items.length} cosas)`, status: "generado", more: recipients.length > 0 && due };
     }
     return { briefId, did: "nada", status: b.status, more: false };
   } catch (e) {
@@ -353,7 +419,9 @@ export async function deliverBrief(db: Db, briefId: string, provider: EmailProvi
   const ws = b.workspaces as unknown as { name: string; slug: string };
   const { data: pending } = await db.from("brief_deliveries").select("id, recipient_email, attempts").eq("brief_id", briefId).in("status", ["pendiente", "fallido"]).lt("attempts", MAX_SEND_ATTEMPTS);
   if (!pending?.length) return out;
-  const email = renderBriefEmail(b.content as unknown as BriefContent, { briefId, briefDate: b.brief_date, workspaceName: ws.name, url: `${opts.siteUrl}/w/${ws.slug}/brief/${briefId}` });
+  const email = isMissionBriefContent(b.content)
+    ? renderMissionBriefEmail(b.content.brief, { mission: b.content.mission_name, briefDate: b.brief_date, url: `${opts.siteUrl}/hoy/${ws.slug}` })
+    : renderBriefEmail(b.content as unknown as BriefContent, { briefId, briefDate: b.brief_date, workspaceName: ws.name, url: `${opts.siteUrl}/w/${ws.slug}/brief/${briefId}` });
   for (const d of pending) {
     const now = new Date().toISOString();
     if (!provider) {

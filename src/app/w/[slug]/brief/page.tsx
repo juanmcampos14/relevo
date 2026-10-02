@@ -9,6 +9,8 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { EmptyState, PageHeader, Pill, Section } from "@/components/app/bits";
 import { CheckboxField, TextAreaField, TextField } from "@/components/app/fields";
 import { BriefView } from "@/components/brief/brief-view";
+import { MissionBriefView } from "@/components/brief/mission-brief-view";
+import { isMissionBriefContent } from "@/domain/brief/mission-brief";
 import { generateBriefNow, saveBriefSettings } from "./actions";
 import { BriefStatus, type DeliveryRow } from "./status";
 
@@ -42,7 +44,7 @@ export default async function BriefPage({ params }: PageProps<"/w/[slug]/brief">
         {latest ? (
           <>
             <BriefStatus slug={slug} brief={latest} deliveries={byBrief(latest.id)} isOwner={isOwner} link />
-            {latest.status === "generado" && <BriefView slug={slug} briefId={latest.id} content={latest.content as unknown as BriefContent} canEdit={ctx.canEdit} />}
+            {latest.status === "generado" && (isMissionBriefContent(latest.content) ? <MissionBriefView content={latest.content} /> : <BriefView slug={slug} briefId={latest.id} content={latest.content as unknown as BriefContent} canEdit={ctx.canEdit} />)}
           </>
         ) : (
           <EmptyState title="Todavía no hay briefs">
@@ -60,7 +62,7 @@ export default async function BriefPage({ params }: PageProps<"/w/[slug]/brief">
                     <Link href={`/w/${slug}/brief/${b.id}`} className="font-medium hover:underline">{briefDateLabel(b.brief_date)}</Link>
                     <Pill>{b.status}</Pill>
                     {d.length > 0 && <span className="text-xs text-muted-foreground">{d.filter((x) => x.status === "enviado").length}/{d.length} enviados</span>}
-                    {b.status === "generado" && <span className="text-xs text-muted-foreground">{(b.content as unknown as BriefContent).signals?.length ?? 0} señales</span>}
+                    {b.status === "generado" && <span className="text-xs text-muted-foreground">{isMissionBriefContent(b.content) ? `${b.content.brief.items.length} cosas` : `${(b.content as unknown as BriefContent).signals?.length ?? 0} señales`}</span>}
                   </li>
                 );
               })}

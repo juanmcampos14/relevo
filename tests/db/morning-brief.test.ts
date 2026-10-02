@@ -6,7 +6,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { BriefDraft, DraftSignalT } from "@/domain/brief/contract";
 import type { EmailMessage, EmailProvider } from "@/server/email/provider";
 import type { Engines } from "@/server/brief/pipeline";
-import { advanceBrief, ensureTodayBrief } from "@/server/brief/pipeline";
+import { LEGACY_BRIEF_VERSION, advanceBrief, ensureTodayBrief } from "@/server/brief/pipeline";
 import { cleanup, createWorkspace, newPool } from "./harness";
 
 const pool = newPool();
@@ -84,8 +84,8 @@ describe("Morning Brief", () => {
 
   it("un solo brief por día (idempotente)", async () => {
     const now = new Date("2026-10-16T08:00:00Z");
-    briefId = await ensureTodayBrief(db, ws, now);
-    expect(await ensureTodayBrief(db, ws, now)).toBe(briefId);
+    briefId = await ensureTodayBrief(db, ws, now, LEGACY_BRIEF_VERSION);
+    expect(await ensureTodayBrief(db, ws, now, LEGACY_BRIEF_VERSION)).toBe(briefId);
   });
 
   it("investigar → sintetizar: señales cruzadas con la memoria, historia nueva, candidatos filtrados", async () => {
@@ -142,7 +142,7 @@ describe("Morning Brief", () => {
 
   it("al día siguiente la misma historia se actualiza (no es noticia nueva) y pasa a watchlist con memoria", async () => {
     const { data: story } = await db.from("brief_stories").select("id").eq("workspace_id", ws).single();
-    const next = await ensureTodayBrief(db, ws, new Date("2026-10-17T08:00:00Z"));
+    const next = await ensureTodayBrief(db, ws, new Date("2026-10-17T08:00:00Z"), LEGACY_BRIEF_VERSION);
     expect(next).not.toBe(briefId);
     await atStep(next, []);
     const d = draft(
@@ -170,7 +170,7 @@ describe("Morning Brief", () => {
     const asset = (await pool.query(`insert into assets (workspace_id, kind, operation, title, verification_status) values ($1, 'inmueble', 'venta', 'Complejo Prueba 7 deptos', 'unverified') returning id`, [ws])).rows[0].id;
     await pool.query(`insert into asset_prices (workspace_id, asset_id, amount, currency, observed_on, source_url) values ($1, $2, 750000, 'USD', '2026-10-17', 'https://portal-a.test/7d')`, [ws, asset]);
     const { data: story } = await db.from("brief_stories").select("id").eq("workspace_id", ws).single();
-    const id = await ensureTodayBrief(db, ws, new Date("2026-10-18T08:00:00Z"));
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-18T08:00:00Z"), LEGACY_BRIEF_VERSION);
     await atStep(id, []);
     const d = draft(
       [
@@ -198,7 +198,7 @@ describe("Morning Brief", () => {
       `insert into brief_signals (workspace_id, origin, basis, signal_type, section, vertical, headline, summary, happened_on, change, relevance, position, created_at) values ($1, 'radar_sheet', 'hecho', 'infraestructura', 'anelo', 'Transversal', 'Adjudican el bypass de Añelo por ARS 45.000 M', 'Obra vial provincial adjudicada a Contreras', now()::date - 60, 'nuevo', 'media', 0, now() - interval '60 days') returning id`,
       [ws],
     )).rows[0].id;
-    const id = await ensureTodayBrief(db, ws, new Date("2026-10-19T08:00:00Z"));
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-19T08:00:00Z"), LEGACY_BRIEF_VERSION);
     await atStep(id, []);
     const d = draft([signal({ key: "s1", headline: "El bypass de Añelo, adjudicado por ARS 45.000 M, arranca en noviembre", summary: "Contreras confirma el inicio de obra.", change: "nuevo", story_ref: "", source_url: "https://otro-medio.test/bypass", happened_on: "2026-10-19", companies: [] })], { stories: [], watchlist: [], candidates: [] });
     await advanceBrief(db, id, engines(d, null), { siteUrl: "https://relevo.test" });

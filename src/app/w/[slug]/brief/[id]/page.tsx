@@ -7,6 +7,8 @@ import type { BriefContent } from "@/domain/brief/contract";
 import { briefDateLabel } from "@/domain/brief/render";
 import { PageHeader } from "@/components/app/bits";
 import { BriefView } from "@/components/brief/brief-view";
+import { MissionBriefView } from "@/components/brief/mission-brief-view";
+import { isMissionBriefContent } from "@/domain/brief/mission-brief";
 import { BriefStatus, type DeliveryRow } from "../status";
 
 export const metadata: Metadata = { title: "Morning Brief" };
@@ -25,7 +27,7 @@ export default async function BriefDetailPage({ params }: PageProps<"/w/[slug]/b
       <PageHeader title={`Morning Brief · ${briefDateLabel(b.brief_date)}`} back={<Link href={`/w/${slug}/brief`}>← Morning Brief</Link>} />
       <div className="space-y-8">
         <BriefStatus slug={slug} brief={b} deliveries={(deliveries ?? []) as DeliveryRow[]} isOwner={ctx.role === "owner"} />
-        {b.status === "generado" && <BriefView slug={slug} briefId={b.id} content={b.content as unknown as BriefContent} canEdit={ctx.canEdit} />}
+        {b.status === "generado" && (isMissionBriefContent(b.content) ? <MissionBriefView content={b.content} /> : <BriefView slug={slug} briefId={b.id} content={b.content as unknown as BriefContent} canEdit={ctx.canEdit} />)}
       </div>
     </>
   );

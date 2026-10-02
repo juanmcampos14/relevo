@@ -102,3 +102,16 @@ ${b.watching ? `<p style="margin:0 0 20px;color:${C.muted}">${esc(b.watching)}</
   ].join("\n");
   return { subject: missionBriefSubject(m), html, text };
 }
+
+/** Lo que queda guardado en briefs.content para el Brief de la misión (el email y la pantalla salen de acá). */
+export type MissionBriefContent = {
+  kind: "mision";
+  mission_id: string;
+  mission_name: string;
+  brief: MissionBrief;
+  metrics: { mode: "completo" | "reducido"; costUsd: number; monthCostUsd: number; monthlyCapUsd: number; collected: number; webSearches: number; shown: number; discarded: number };
+};
+
+export function isMissionBriefContent(c: unknown): c is MissionBriefContent {
+  return !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "mision";
+}

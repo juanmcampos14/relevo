@@ -1,116 +1,76 @@
-// Misión como contexto: el análisis de una hipótesis suma su capa de discovery (qué creemos, nivel de
-// evidencia, quién puede ayudar, con ids verificados) y el mission brief trae en una llamada lo que el
-// Brain sabe de la misión. IA simulada; RLS real con un usuario owner.
-import { randomUUID } from "node:crypto";
-import type Anthropic from "@anthropic-ai/sdk";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+// El Morning Brief de la misión: lo mostrado queda como señal de la misión (mañana no se repite), lo leído
+// queda como visto, y el email que sale es el del Brief de la misión (mismo objeto para cada destinatario).
+import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@/lib/supabase/database.types";
-import { assessFinding } from "@/server/findings/assess";
+import type { Database, Json } from "@/lib/supabase/database.types";
+import type { MissionBrief, MissionBriefContent } from "@/domain/brief/mission-brief";
+import type { EmailMessage, EmailProvider } from "@/server/email/provider";
 import { missionBrief } from "@/server/ai/mission";
+import { BRIEF_VERSION, deliverBrief, ensureTodayBrief } from "@/server/brief/pipeline";
+import { briefMissionId, saveMissionBrief } from "@/server/brief/mission-brief";
 import { cleanup, createWorkspace, newPool } from "./harness";
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const pool = newPool();
-const admin = createClient<Database>(URL, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false } });
-const email = `tano-m-${randomUUID().slice(0, 8)}@test.local`;
-const password = randomUUID();
-let ws: string, userId: string, db: SupabaseClient<Database>, mission: string, finding: string, company: string, contact: string, question: string, evidence: string, signal: string, buyer: string;
-const prompts: string[] = [];
+const db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false } });
+let ws: string, vm: string, lao: string;
 
-const fakeClient = () =>
-  ({
-    beta: {
-      messages: {
-        parse: async (req: { messages: { content: string }[] }) => {
-          prompts.push(req.messages[0].content);
-          return {
-            stop_reason: "end_turn",
-            usage: { input_tokens: 2000, output_tokens: 600 },
-            parsed_output: {
-              summary: "Solo diseño y una declaración relacionada.",
-              dimensions: [{ key: "problema", status: "creido", summary: "La vacancia rota.", evidence_ids: [] }],
-              next_validations: [{ title: "Hablar con el operador", why: "Nadie lo validó.", gap: "evidencia_insuficiente", who: "Operador" }],
-              economics: [{ variable: "volumen", value: "120 camas publicadas por el hotel", basis: "declarado", formula: null, evidence_ids: [`evidence:${evidence}`] }],
-              discovery: {
-                belief: "La rotación pesa más que el inventario.",
-                why: "Un operador declaró ocupación alta; el resto es diseño.",
-                evidence_level: "media",
-                evidence_summary: "Una declaración relacionada.",
-                evidence_refs: [`evidence:${evidence}`, "evidence:00000000-0000-0000-0000-000000000000"],
-                signal_refs: [`signal:${signal}`],
-                question_refs: [`question:${question}`],
-                who_can_help: [
-                  { ref: `contact:${contact}`, purpose: "inteligencia", why: "Opera camas", ask: "¿Cuánto dura una asignación?" },
-                  { ref: `contact:${buyer}`, purpose: "vender_crear", why: "Compra camas para cuadrillas", ask: "¿Cuántas camas pagan y cuántas usan?" },
-                ],
-              },
-            },
-          };
-        },
-      },
-    },
-  }) as unknown as Anthropic;
+const brief: MissionBrief = {
+  opening: "Buenos días, Tano. Hay una fecha que cambia la agenda.",
+  quiet: false,
+  items: [{ title: "AOG Patagonia es del 19 al 22 de octubre", why_us: "Las reuniones del 21–22 se pisan con AOG.", moves: ["agenda"], basis: "hecho", action: "Mover las reuniones B2B al 15 o 16.", opportunity: "", connects: [], source_name: "Río Negro", source_url: "https://www.rionegro.com.ar/aog" }],
+  watching: "Sigo mirando: locales de 50 m² con precio.",
+  discarded: [{ title: "YPF invierte en Vaca Muerta", reason: "ya_lo_sabiamos" }],
+};
+
+class Mailbox implements EmailProvider {
+  name = "fake";
+  sent: EmailMessage[] = [];
+  async send(m: EmailMessage) {
+    this.sent.push(m);
+    return { ok: true as const, messageId: `m-${this.sent.length}` };
+  }
+}
 
 beforeAll(async () => {
-  ws = await createWorkspace(pool, "Misión");
-  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-  if (error) throw error;
-  userId = data.user.id;
-  await pool.query(`insert into memberships (workspace_id, user_id, role, can_approve_decisions) values ($1, $2, 'owner', true)`, [ws, userId]);
-  const q = async (sql: string, p: unknown[]) => (await pool.query(sql, p)).rows[0].id as string;
-  mission = await q(`insert into campaigns (workspace_id, name, kind, status, starts_on, ends_on) values ($1, 'Añelo — Discovery', 'mision', 'activa', '2026-10-16', '2026-10-26') returning id`, [ws]);
-  const src = await q(`insert into sources (workspace_id, kind, title) values ($1, 'crm', 'CRM') returning id`, [ws]);
-  company = await q(`insert into companies (workspace_id, trade_name, sector) values ($1, 'Hotel Prueba', 'Alojamiento') returning id`, [ws]);
-  contact = await q(`insert into contacts (workspace_id, full_name, role_title, outreach_draft) values ($1, 'Martín Prueba', 'Encargado', 'Hola Martín…') returning id`, [ws]);
-  await pool.query(`insert into contact_links (workspace_id, contact_id, company_id) values ($1, $2, $3)`, [ws, contact, company]);
-  await pool.query(`insert into campaign_targets (workspace_id, campaign_id, company_id, priority, purpose) values ($1, $2, $3, 1, 'comprar_asociar')`, [ws, mission, company]);
-  const op = await q(`insert into companies (workspace_id, trade_name, sector) values ($1, 'Operadora Prueba', 'Comprador corporativo') returning id`, [ws]);
-  buyer = await q(`insert into contacts (workspace_id, full_name, role_title) values ($1, 'Ana Compras', 'Gerente de Compras') returning id`, [ws]);
-  await pool.query(`insert into contact_links (workspace_id, contact_id, company_id) values ($1, $2, $3)`, [ws, buyer, op]);
-  finding = await q(`insert into findings (workspace_id, source_id, kind, statement, maturity, dedup_key, campaign_id) values ($1, $2, 'necesidad', 'Rotación y asignación de vacancia pesan más que inventario total', 'hipotesis', 'crm:H-VA-09', $3) returning id`, [ws, src, mission]);
-  await pool.query(`insert into finding_companies (workspace_id, finding_id, company_id) values ($1, $2, $3)`, [ws, finding, company]);
-  question = await q(`insert into research_questions (workspace_id, code, kind, industry, question, origin, campaign_id) values ($1, 'VO-Q04', 'entrevista', 'AOG · Hotel Prueba', '¿Cuánto dura una asignación de cama?', 'crm', $2) returning id`, [ws, mission]);
-  await pool.query(`insert into question_findings (workspace_id, question_id, finding_id) values ($1, $2, $3)`, [ws, question, finding]);
-  evidence = await q(`insert into evidence (workspace_id, source_id, company_id, statement, evidence_type, origin_kind, verification_status) values ($1, $2, $3, 'El encargado declaró 80% de ocupación', 'dato', 'crm_import', 'unverified') returning id`, [ws, src, company]);
-  signal = await q(`insert into brief_signals (workspace_id, origin, basis, signal_type, section, vertical, headline, change, relevance, position, finding_ids, happened_on, campaign_ids) values ($1, 'radar_sheet', 'hecho', 'demanda', 'anelo', 'Alojamiento + campamentos', 'Nueva base con 120 personas', 'nuevo', 'media', 0, array[$2]::uuid[], '2026-09-30', array[$3]::uuid[]) returning id`, [ws, finding, mission]);
-  db = createClient<Database>(URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
-  const { error: e } = await db.auth.signInWithPassword({ email, password });
-  if (e) throw e;
+  ws = await createWorkspace(pool, "Brief misión");
+  vm = (await pool.query(`insert into campaigns (workspace_id, name, kind, status) values ($1, 'Vaca Muerta / Añelo — Research', 'mision', 'activa') returning id`, [ws])).rows[0].id;
+  lao = (await pool.query(`insert into campaigns (workspace_id, name, kind, status) values ($1, 'LAO', 'mision', 'activa') returning id`, [ws])).rows[0].id;
+  await pool.query(`update workspaces set settings = $2 where id = $1`, [ws, JSON.stringify({ brief: { enabled: true, campaign_ids: [vm], recipients: [{ name: "Tano", email: "tano@test.local" }, { name: "Fran", email: "fran@test.local" }] } })]);
 });
 afterAll(async () => {
-  await cleanup(pool, [ws], [{ id: userId, email }]);
+  await cleanup(pool, [ws], []);
   await pool.end();
 });
 
-describe("misión como contexto", () => {
-  it("el análisis ve empresas, gente, evidencia relacionada, preguntas y señales, y guarda el discovery verificado", async () => {
-    const res = await assessFinding(db, { workspaceId: ws, settings: { ai_processing_consent: true }, userId, findingId: finding, client: fakeClient(), today: "2026-10-01" });
-    expect(res.ok).toBe(true);
-    const prompt = prompts.at(-1)!;
-    for (const s of [`company:${company}`, `contact:${contact}`, "tiene borrador de primer contacto", "propósito para la misión: comprar_asociar", `evidence:${evidence}`, `question:${question}`, `signal:${signal}`, "LADO DEMANDA", `contact:${buyer} · Ana Compras (Gerente de Compras)`]) expect(prompt).toContain(s);
-    const { data } = await db.from("finding_assessments").select("discovery, economics").eq("finding_id", finding).single();
-    // El propósito definido en el objetivo de la misión manda sobre lo que diga el modelo; el comprador entra del lado demanda.
-    expect(data!.discovery).toMatchObject({
-      evidence_level: "media",
-      evidence_refs: [`evidence:${evidence}`],
-      who_can_help: [
-        { ref: `contact:${contact}`, name: "Martín Prueba · Hotel Prueba", purpose: "comprar_asociar" },
-        { ref: `contact:${buyer}`, name: "Ana Compras · Operadora Prueba", purpose: "vender_crear" },
-      ],
-    });
-    // Lo publicado por la propia empresa queda DECLARADO con su evidencia, no estimado.
-    expect(data!.economics).toEqual([expect.objectContaining({ variable: "volumen", basis: "declarado", evidence_ids: [evidence] })]);
+describe("Brief de la misión", () => {
+  it("usa la misión configurada para el Brief", async () => {
+    expect(await briefMissionId(db, ws, { brief: { campaign_ids: [vm] } })).toBe(vm);
+    expect(await briefMissionId(db, ws, {})).toBe(vm);
   });
 
-  it("el mission brief trae misión, momento, hipótesis con lo que creemos y quién ayuda, outreach listo y guiones AOG", async () => {
-    const b = (await missionBrief(db, null, new Date("2026-10-01T15:00:00Z")))!;
-    expect(b.mission).toMatchObject({ name: "Añelo — Discovery", moment: "preparación", days_to_start: 15 });
-    expect(b.hypotheses).toMatchObject({ total: 1, analyzed: 1 });
-    expect(b.hypotheses.items[0]).toMatchObject({ code: "H-VA-09", evidence_level: "media", belief: "La rotación pesa más que el inventario.", companies: 1, questions: 1 });
-    expect(b.hypotheses.items[0].who_can_help[0]).toMatchObject({ name: "Martín Prueba · Hotel Prueba", purpose: "Comprar / asociarnos" });
-    expect(b.outreach_ready).toEqual([expect.objectContaining({ name: "Martín Prueba", company: expect.objectContaining({ name: "Hotel Prueba" }) })]);
-    expect(b.targets).toMatchObject({ total: 1, with_purpose: 1 });
-    expect(b.aog_scripts[0]).toMatchObject({ code: "VO-Q04", entity: "Hotel Prueba" });
+  it("lo mostrado queda como señal de esa misión y lo leído como visto", async () => {
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-20T08:00:00Z"));
+    const { data: b } = await db.from("briefs").select("version").eq("id", id).single();
+    expect(b!.version).toBe(BRIEF_VERSION);
+    await saveMissionBrief(db, { workspaceId: ws, briefId: id, missionId: vm, brief, items: [{ url: "https://www.rionegro.com.ar/aog", title: "AOG", publisher: "Río Negro", publishedAt: null, priority: "regional", description: null, body: null, alreadySeen: false, query: "AOG" }] });
+    // La misión lo ve entre lo ya reportado (así mañana no vuelve como novedad); otra misión no.
+    expect((await missionBrief(db, vm, new Date(), { withSynthesis: false }))!.recent_signals.map((s) => s.headline)).toContain("AOG Patagonia es del 19 al 22 de octubre");
+    expect((await missionBrief(db, lao, new Date(), { withSynthesis: false }))!.recent_signals).toHaveLength(0);
+    const { count } = await db.from("brief_source_items").select("id", { count: "exact", head: true }).eq("workspace_id", ws);
+    expect(count).toBe(1);
+  });
+
+  it("el email que sale es el del Brief de la misión, igual para cada destinatario", async () => {
+    const id = await ensureTodayBrief(db, ws, new Date("2026-10-21T08:00:00Z"));
+    const content: MissionBriefContent = { kind: "mision", mission_id: vm, mission_name: "Vaca Muerta / Añelo", brief, metrics: { mode: "completo", costUsd: 0.8, monthCostUsd: 0.8, monthlyCapUsd: 60, collected: 50, webSearches: 8, shown: 1, discarded: 1 } };
+    await db.from("briefs").update({ status: "generado", content: content as unknown as NonNullable<Json>, generated_at: new Date().toISOString() }).eq("id", id);
+    await db.from("brief_deliveries").insert([{ workspace_id: ws, brief_id: id, recipient_email: "tano@test.local" }, { workspace_id: ws, brief_id: id, recipient_email: "fran@test.local" }]);
+    const mail = new Mailbox();
+    expect(await deliverBrief(db, id, mail, { siteUrl: "https://relevo.test" })).toMatchObject({ sent: 2, failed: 0 });
+    expect(mail.sent[0].subject).toMatch(/^RELEVO · Vaca Muerta \/ Añelo · /);
+    expect(mail.sent[0].html).toContain("Por qué importa");
+    expect(mail.sent[0].html).toContain('href="https://www.rionegro.com.ar/aog"');
+    expect(mail.sent[0].html).toContain("https://relevo.test/hoy/");
+    expect(mail.sent[1].html).toBe(mail.sent[0].html);
   });
 });

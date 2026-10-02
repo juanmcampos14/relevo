@@ -55,7 +55,7 @@ describe("el Brain aprende sin borrar historia", () => {
     expect(vigentes).toEqual([]);
     expect((await db.from("contacts").select("role_title").eq("id", nicolas).single()).data!.role_title).toMatch(/^Antes:/);
     expect((await db.from("tasks").select("status").eq("id", outreach).single()).data!.status).toBe("done");
-    expect((await db.from("tasks").select("title").eq("id", r.effects.created_task!).single()).data!.title).toContain("reemplaza a Nicolas Raviola en PECOM");
+    expect((await db.from("tasks").select("title, campaign_id").eq("id", r.effects.created_task!).single()).data).toMatchObject({ title: expect.stringContaining("reemplaza a Nicolas Raviola en PECOM"), campaign_id: vm });
     await undoRelationship(db, nicolas, r.effects);
     const { data: back } = await db.from("contact_links").select("valid_until").eq("contact_id", nicolas).single();
     expect(back!.valid_until).toBeNull();

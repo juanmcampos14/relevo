@@ -103,7 +103,7 @@ export async function applyContactEvent(db: Db, ctx: { workspaceId: string; user
     const due = e.follow_up_on ?? followUpDay(now);
     const { data: t, error } = await db
       .from("tasks")
-      .insert({ workspace_id: ctx.workspaceId, title: `¿Respondió ${person?.full_name ?? (company ? companyName(company) : "")}? Si no, volver a escribir`, kind: "Seguimiento", channel: e.channel ?? null, due_on: due, status: "todo", contact_id: contactId, target_id: targetId, assignee_id: ctx.userId, description: [e.channel ? `Primer contacto enviado por ${e.channel} el ${isoDay(now)}.` : `Primer contacto enviado el ${isoDay(now)}.`, e.note].filter(Boolean).join(" ") })
+      .insert({ workspace_id: ctx.workspaceId, title: `¿Respondió ${person?.full_name ?? (company ? companyName(company) : "")}? Si no, volver a escribir`, kind: "Seguimiento", channel: e.channel ?? null, due_on: due, status: "todo", contact_id: contactId, target_id: targetId, campaign_id: ctx.campaignId, assignee_id: ctx.userId, description: [e.channel ? `Primer contacto enviado por ${e.channel} el ${isoDay(now)}.` : `Primer contacto enviado el ${isoDay(now)}.`, e.note].filter(Boolean).join(" ") })
       .select("id")
       .single();
     if (error) throw error;
@@ -139,7 +139,7 @@ export async function applyContactEvent(db: Db, ctx: { workspaceId: string; user
   const title = `Reunión con ${who}${e.time ? ` · ${e.time}` : ""}`;
   const { data: task, error } = await db
     .from("tasks")
-    .insert({ workspace_id: ctx.workspaceId, title, kind: "Reunión", channel: e.channel ?? null, due_on: e.date!, status: "todo", contact_id: contactId, target_id: targetId, assignee_id: ctx.userId, description: [e.objective ? `Objetivo: ${e.objective}` : null, e.place ? `Lugar: ${e.place}` : null, e.note].filter(Boolean).join("\n") || null })
+    .insert({ workspace_id: ctx.workspaceId, title, kind: "Reunión", channel: e.channel ?? null, due_on: e.date!, status: "todo", contact_id: contactId, target_id: targetId, campaign_id: ctx.campaignId, assignee_id: ctx.userId, description: [e.objective ? `Objetivo: ${e.objective}` : null, e.place ? `Lugar: ${e.place}` : null, e.note].filter(Boolean).join("\n") || null })
     .select("id")
     .single();
   if (error) throw error;

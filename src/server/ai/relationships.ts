@@ -78,7 +78,7 @@ export async function applyRelationship(db: Db, ctx: { workspaceId: string; user
     const { data: target } = ctx.campaignId ? await db.from("campaign_targets").select("id").eq("campaign_id", ctx.campaignId).eq("company_id", companyId).maybeSingle() : { data: null };
     const { data: t, error: e2 } = await db
       .from("tasks")
-      .insert({ workspace_id: ctx.workspaceId, title: `Encontrar a la persona que reemplaza a ${person.full_name} en ${org}`, kind: "Contacto", status: "todo", target_id: target?.id ?? null, assignee_id: ctx.userId, due_on: now.toISOString().slice(0, 10), description: `${person.full_name} ya no está en ${org} (${role ?? "sin cargo registrado"}).` })
+      .insert({ workspace_id: ctx.workspaceId, title: `Encontrar a la persona que reemplaza a ${person.full_name} en ${org}`, kind: "Contacto", status: "todo", target_id: target?.id ?? null, campaign_id: ctx.campaignId, assignee_id: ctx.userId, due_on: now.toISOString().slice(0, 10), description: `${person.full_name} ya no está en ${org} (${role ?? "sin cargo registrado"}).` })
       .select("id")
       .single();
     if (e2) throw e2;

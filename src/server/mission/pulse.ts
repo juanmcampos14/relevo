@@ -6,6 +6,7 @@ import { assessFinding } from "@/server/findings/assess";
 import { synthesizeMission } from "./synthesis";
 import { describeMission } from "./state";
 import { prepareMoves } from "./moves";
+import { pulseDue } from "@/domain/pulse";
 
 // Un solo cerebro: DETECTAR → ENTENDER → CRUZAR → GUARDAR → ACTUALIZAR → PRIORIZAR → ACTUAR. El Brief detecta
 // y cruza; acá lo que detectó actualiza lo que creemos (re-evaluar las hipótesis que tocó) y lo que pasa
@@ -66,13 +67,15 @@ export async function changesSince(db: Db, missionId: string, since: string) {
 
 /**
  * Pulso: si algo cambió desde la última síntesis, RELEVO re-evalúa lo que tocaron las señales, re-prioriza,
- * actualiza el estado de la misión y prepara el Avanzar de lo nuevo. Si nada cambió, no gasta.
+ * actualiza el estado de la misión y prepara el Avanzar de lo nuevo. Si nada cambió, o se hizo hace menos de
+ * PULSE_EVERY_H horas, no gasta.
  */
 export async function pulse(db: Db, m: MissionRef): Promise<{ ran: boolean; changes: Awaited<ReturnType<typeof changesSince>>; costUsd: number; reassessed: number }> {
   const { data: c } = await db.from("campaigns").select("synthesized_at").eq("id", m.id).maybeSingle();
   const since = c?.synthesized_at ?? new Date(Date.now() - 86_400_000).toISOString();
   const changes = await changesSince(db, m.id, since);
-  if (!changes.any) return { ran: false, changes, costUsd: 0, reassessed: 0 };
+  // Si nada cambió, o se priorizó hace poco (menos de PULSE_EVERY_H horas), no gasta: lo nuevo espera al próximo pulso.
+  if (!changes.any || !pulseDue(c?.synthesized_at ?? null)) return { ran: false, changes, costUsd: 0, reassessed: 0 };
   const { reassessed } = await reassessFromSignals(db, m, since);
   let cost = 0;
   const s = await synthesizeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });

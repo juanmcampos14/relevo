@@ -167,6 +167,9 @@ export async function runAgent(opts: {
   tools: ToolContext;
   /** Fotos de este turno (la persona muestra algo en la calle). Solo viajan en este turno, no en el historial. */
   images?: { mediaType: "image/jpeg" | "image/png" | "image/webp"; data: string }[];
+  /** Caché de la conversación: "1h" cuando una persona va a seguir hablando (entre mensajes pasan minutos); el
+   * trabajo de fondo corre una vez y usa la de 5 minutos (escribir a 1 hora cuesta más). */
+  cacheTtl?: "5m" | "1h";
 }): Promise<AgentResult> {
   const { client, tools } = opts;
   const turnStart: Anthropic.Beta.BetaMessageParam = {
@@ -215,9 +218,9 @@ export async function runAgent(opts: {
         fallbacks: "default",
         thinking: { type: "adaptive" },
         output_config: { effort: AI_EFFORT },
-        // Prefijo fijo (herramientas + sistema) en caché de 1 hora: entre un mensaje y otro de una persona
-        // suelen pasar más de 5 minutos. La cola de la conversación usa la caché automática de 5 minutos.
-        cache_control: { type: "ephemeral" },
+        // Prefijo fijo (herramientas + sistema) en caché de 1 hora; la conversación, según quién la usa (cacheTtl):
+        // en el campo, entre un mensaje y otro suelen pasar más de 5 minutos y releer cuesta mucho menos que reescribir.
+        cache_control: opts.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" },
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
         // Memoria de RELEVO (herramientas propias) + la web del lado de Anthropic, con citas.
         tools: [...TOOL_DEFINITIONS, { type: "web_search_20260209", name: "web_search", max_uses: 6 }, { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 }],

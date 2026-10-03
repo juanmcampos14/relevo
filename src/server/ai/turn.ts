@@ -10,6 +10,7 @@ import { prepareMoves } from "@/server/mission/moves";
 import { after } from "next/server";
 import { synthesizeMission } from "@/server/mission/synthesis";
 import { listMissions } from "@/server/mission/current";
+import { historyStart } from "@/domain/history";
 
 // Un turno de conversación con RELEVO: lo usan la página de RELEVO AI y el panel persistente.
 // Mismo motor, mismas herramientas, mismos permisos (el cliente del usuario → RLS).
@@ -18,7 +19,6 @@ type Db = SupabaseClient<Database>;
 // Tope de conversación por persona (lo que la persona le pide). El trabajo de fondo (evaluar, preparar,
 // investigar) tiene sus propios topes y no le consume este.
 const DAILY_LIMIT = 150;
-const HISTORY_ROWS = 6;
 
 const scopeLabel: Record<string, string> = {
   company: "la empresa",
@@ -66,8 +66,13 @@ export async function runTurn(
     convId = data.id;
   }
 
-  const { data: rows } = await db.from("ai_messages").select("role, api_content, citations").eq("conversation_id", convId).order("created_at", { ascending: false }).limit(HISTORY_ROWS);
-  const ordered = (rows ?? []).reverse();
+  // Ventana del historial con comienzo estable (ver historyStart): el prefijo se lee de la caché en vez de reescribirse.
+  const { count: total } = await db.from("ai_messages").select("id", { count: "exact", head: true }).eq("conversation_id", convId);
+  const start = historyStart(total ?? 0);
+  const { data: rows } = (total ?? 0) > 0
+    ? await db.from("ai_messages").select("role, api_content, citations").eq("conversation_id", convId).order("created_at", { ascending: true }).order("id", { ascending: true }).range(start, (total ?? 0) - 1)
+    : { data: [] };
+  const ordered = [...(rows ?? [])];
   while (ordered.length && ordered[0].role !== "user") ordered.shift();
   const history = ordered.flatMap((r) => (r.api_content as Anthropic.Beta.BetaMessageParam[] | null) ?? []);
   const seenRefs = new Set<string>();
@@ -114,6 +119,7 @@ export async function runTurn(
   const campaignId = mission;
   const started = Date.now();
   const result = await runAgent({
+    cacheTtl: "1h",
     client: opts.client ?? new Anthropic(),
     history,
     userText: opts.text,

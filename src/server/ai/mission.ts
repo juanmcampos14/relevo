@@ -6,6 +6,7 @@ import { GAPS, type Gap } from "@/domain/readiness";
 import { PURPOSES, type Discovery } from "@/domain/discovery";
 import { companyName } from "@/server/entities";
 import { correctionsForBrain, visible, type Focus } from "@/domain/focus";
+import { formerContacts, helperRefs, splitHelpers } from "@/server/mission/helpers-vigencia";
 
 // Mission brief: en una sola llamada, lo que el Brain sabe de una misión (fechas, hipótesis y sus gaps,
 // a quién contactar, follow-ups, agenda, AOG, activos, señales). Es materia prima: el modelo sintetiza
@@ -50,9 +51,12 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
   const daysToStart = start ? Math.ceil((start.getTime() - today.getTime()) / 86_400_000) : null;
   const latest = <T extends { created_at: string }>(xs: T[]) => [...xs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
+  // Quien dejó la empresa no se recomienda (aunque figure en un análisis anterior).
+  const former = await formerContacts(db, helperRefs((findings ?? []).map((f) => (latest(f.finding_assessments)?.discovery ?? null) as Discovery | null)));
   const hypotheses = (findings ?? []).map((f) => {
     const as = latest(f.finding_assessments);
     const d = (as?.discovery ?? null) as Discovery | null;
+    const helpers = splitHelpers(d?.who_can_help, former);
     return {
       ref: ref("finding", f.id),
       code: f.dedup_key?.replace(/^crm:/, "") ?? null,
@@ -62,7 +66,8 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
       belief: d?.belief ?? null,
       evidence_level: d?.evidence_level ?? (as ? "sin capa de discovery" : "sin analizar"),
       gaps: ((as?.gaps ?? []) as Gap[]).slice(0, 4).map((g) => GAPS[g]?.label ?? g),
-      who_can_help: (d?.who_can_help ?? []).slice(0, 3).map((h) => ({ ref: h.ref, name: h.name, purpose: PURPOSES[h.purpose], ask: h.ask })),
+      who_can_help: helpers.current.slice(0, 3).map((h) => ({ ref: h.ref, name: h.name, purpose: PURPOSES[h.purpose], ask: h.ask })),
+      ...(helpers.no_longer.length ? { no_longer_there: helpers.no_longer } : {}),
       companies: f.finding_companies[0]?.count ?? 0,
       questions: f.question_findings[0]?.count ?? 0,
       baseline_taken: f.finding_assessments.some((x) => x.baseline_campaign_id === mission.id),

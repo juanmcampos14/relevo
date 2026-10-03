@@ -7,6 +7,7 @@ import type { Discovery, EvidenceLevel } from "@/domain/discovery";
 import { GAPS, type Gap } from "@/domain/readiness";
 import type { MissionState } from "@/server/mission/state";
 import { chosenMission, listMissions, type MissionOption } from "@/server/mission/current";
+import { formerContacts, helperRefs, splitHelpers } from "@/server/mission/helpers-vigencia";
 
 // Lo común de las pantallas de RELEVO (Surface): cómo saludar a la persona y en qué misión estamos.
 
@@ -71,11 +72,13 @@ export async function opportunitiesView(db: Db, missionId: string | null): Promi
     db.from("opportunities").select("id, title, thesis, status, stage, next_action").eq("campaign_id", m).neq("status", "rechazada").order("updated_at", { ascending: false }).limit(20),
     db.from("findings").select("id, statement, review_status, finding_assessments(created_at, summary, gaps, discovery)").eq("campaign_id", m).eq("case_status", "activo").neq("review_status", "rechazado").limit(80),
   ]);
+  const former = await formerContacts(db, helperRefs((findings ?? []).map((f) => (latest(f.finding_assessments as Assessment[])?.discovery ?? null) as Discovery | null)));
   const read = (findings ?? []).map((f) => {
     const a = latest(f.finding_assessments as Assessment[]);
     const d = (a?.discovery ?? null) as Discovery | null;
     const level = d?.evidence_level ?? "nula";
-    const helper = d?.who_can_help?.[0];
+    // Quien dejó la empresa no se propone como próximo paso.
+    const helper = splitHelpers(d?.who_can_help, former).current[0];
     const gap = ((a?.gaps ?? []) as Gap[]).map((g) => GAPS[g]?.why as string | undefined).find(Boolean) ?? null;
     return {
       level, score: WEIGHT[level] + ((d?.signal_refs?.length ?? 0) > 0 ? 0.5 : 0) + ((d?.evidence_refs?.length ?? 0) > 0 ? 0.5 : 0),
@@ -117,6 +120,7 @@ export async function depthView(db: Db, findingId: string): Promise<DepthView | 
   const d = (a?.discovery ?? null) as Discovery | null;
   const signalIds = (d?.signal_refs ?? []).map((r) => r.split(":")[1]).filter(Boolean);
   const { data: sig } = signalIds.length ? await db.from("brief_signals").select("headline, source_url, happened_on").in("id", signalIds) : { data: [] };
+  const former = await formerContacts(db, helperRefs([d]));
   const gaps: string[] = ((a?.gaps ?? []) as Gap[]).map((g) => GAPS[g]?.why as string | undefined).filter((x): x is string => !!x);
   return {
     id: f.id,
@@ -126,7 +130,7 @@ export async function depthView(db: Db, findingId: string): Promise<DepthView | 
     why: d?.why ?? null,
     summary: a?.summary ?? null,
     unknowns: gaps.slice(0, 5),
-    helpers: (d?.who_can_help ?? []).slice(0, 5).map((h) => ({ name: h.name, why: h.why, ask: h.ask })),
+    helpers: splitHelpers(d?.who_can_help, former).current.slice(0, 5).map((h) => ({ name: h.name, why: h.why, ask: h.ask })),
     evidence: (f.finding_evidence ?? []).filter((x) => x.evidence).map((x) => ({
       text: x.evidence!.statement,
       stance: x.stance === "supports" ? "a favor" : x.stance === "contradicts" ? "en contra" : "contexto",

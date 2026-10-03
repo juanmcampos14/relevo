@@ -21,6 +21,8 @@ import { RelationshipInput, applyRelationship } from "./relationships";
 import { setAside } from "./set-aside";
 import { applyCorrection, forgetMovesAbout, liveFocus, stepTaken } from "@/server/mission/focus";
 import { isMissionBriefContent } from "@/domain/brief/mission-brief";
+import { formerContacts, helperRefs, splitHelpers } from "@/server/mission/helpers-vigencia";
+import type { Discovery } from "@/domain/discovery";
 
 /**
  * Centro de una consulta territorial: el punto pedido, donde está el usuario o la zona de la misión (el centro
@@ -372,7 +374,12 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           case_status: f.case_status,
           counts: { supports: m2.supports, contradicts: m2.contradicts, independent_cases: m2.independentCases },
           assessment: as ? { at: as.created_at, summary: as.summary, dimensions: dims.map((d) => ({ dimension: d.key, status: d.status, summary: d.summary, evidence: d.evidence_ids.map((e) => ({ ref: ref("evidence", e) })) })), gaps: ((as.gaps ?? []) as Gap[]).map((g) => GAPS[g]?.label ?? g) } : "sin evaluar todavía",
-          discovery: as?.discovery ?? null,
+          discovery: as?.discovery ? await (async () => {
+            // Quien dejó la empresa sale de "quién puede ayudar" y queda como "ya no está" (buscar reemplazo).
+            const d = as.discovery as unknown as Discovery;
+            const h = splitHelpers(d.who_can_help, await formerContacts(db, helperRefs([d])));
+            return { ...d, who_can_help: h.current, ...(h.no_longer.length ? { no_longer_there: h.no_longer } : {}) };
+          })() : null,
           economics: economics.map((e) => ({ variable: ECONOMICS[e.variable], value: e.value, basis: e.basis === "estimado" ? "inferido (estimación)" : e.basis, formula: e.formula, evidence: e.evidence_ids.map((x) => ({ ref: ref("evidence", x) })) })),
           opportunity_criteria: crit.items.map((i) => ({ criterion: i.label, met: i.ok, detail: i.detail })),
           evidence: rows.map((r) => ({

@@ -8,7 +8,7 @@ import { costOf } from "@/server/ai/pricing";
 // Extracción de una captura de campo: la IA PROPONE (docs/04-modelo-canonico.md §2).
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
 
-export const EXTRACT_MODEL = "claude-opus-5-5";
+export const EXTRACT_MODEL = "claude-sonnet-5-5";
 export const EXTRACT_PROMPT_VERSION = "captura-v9";
 
 const EVIDENCE_TYPES = ["dato", "declaracion", "observacion", "precio", "capacidad", "contacto", "propiedad", "documento", "publicacion", "otro"] as const;

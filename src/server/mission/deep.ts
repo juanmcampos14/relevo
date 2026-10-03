@@ -12,7 +12,9 @@ import { addUsage, costOf, type TokenUsage } from "@/server/ai/pricing";
 // son infraestructura: el producto nunca los nombra. Cada corrida queda registrada con costo y duración.
 
 type Db = SupabaseClient<Database>;
-export const DEEP_MODEL = "claude-opus-5-5";
+// Por costo, el trabajo de fondo corre en Sonnet 5.5; lo que medimos que necesita Opus lo pide explícito
+// (la síntesis de Ahora: con Sonnet no respetaba lo que la persona puso primero).
+export const DEEP_MODEL = "claude-sonnet-5-5";
 export type DeepModel = "claude-opus-5-5" | "claude-sonnet-5-5";
 
 export type DeepResult<T> = { ok: true; value: T; runId: string | null; costUsd: number } | { ok: false; message: string };

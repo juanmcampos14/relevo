@@ -53,7 +53,7 @@ describe("RELEVO AI", () => {
     expect(r.usage.costUsd).toBeGreaterThan(0);
     // Prompt de sistema estable, fallbacks y caché en cada llamada.
     const params = (create.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
-    expect(params).toMatchObject({ model: "claude-opus-5-5", fallbacks: "default", cache_control: { type: "ephemeral" } });
+    expect(params).toMatchObject({ model: "claude-sonnet-5-5", fallbacks: "default", cache_control: { type: "ephemeral" } });
     expect(String(params.system)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 

@@ -28,7 +28,9 @@ export interface SynthesisEngine {
 // ---------------------------------------------------------------------------------------------
 // Claude
 
-export const BRIEF_MODEL = "claude-opus-5-5";
+// El Brief queda en Opus: medido el 2026-10-03, Sonnet casi no investigó (1 titular sin abrir contra 4 cosas
+// accionables) por ~USD 0,50/día menos. Para priorizar costo: RELEVO_BRIEF_MODEL=claude-sonnet-5-5 en Vercel.
+export const BRIEF_MODEL = (process.env.RELEVO_BRIEF_MODEL ?? "claude-opus-5-5") as "claude-opus-5-5" | "claude-sonnet-5-5";
 
 const usageOf = (u: Anthropic.Beta.BetaUsage, acc: EngineUsage) => {
   addUsage(acc, u);

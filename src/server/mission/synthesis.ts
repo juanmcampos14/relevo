@@ -64,7 +64,7 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   const members = (crew ?? []).map((c) => ({ user_id: c.user_id, name: team[c.user_id]?.short ?? profs?.find((p) => p.user_id === c.user_id)?.display_name?.split(/\s+/)[0] ?? "Alguien" }));
   const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections, equipo_de_la_mision: members.length > 1 ? members.map((m) => m.name) : [] });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
-  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId, model: opts.model });
+  const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId, model: opts.model ?? "claude-opus-5-5" });
   if (!r.ok) return r;
   const byName = new Map(members.map((m) => [m.name.toLowerCase(), m.user_id]));
   const clean = (xs: z.infer<typeof Item>[], n: number) => xs.slice(0, n).map((x) => ({ ...x, refs: x.refs.filter((ref) => allowed.has(ref)), for_user: members.length > 1 ? byName.get(x.for.trim().toLowerCase()) ?? null : null }));

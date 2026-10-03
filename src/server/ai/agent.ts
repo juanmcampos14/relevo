@@ -5,7 +5,9 @@ import { addUsage, costOf } from "./pricing";
 import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tools";
 
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
-export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-opus-5-5";
+// Conversación en Sonnet 5.5 por costo (mitad que Opus; calidad comparable en las pruebas). Para volver a Opus
+// sin tocar código: RELEVO_CONVERSATION_MODEL=claude-opus-5-5 en Vercel.
+export const AI_MODEL = process.env.RELEVO_CONVERSATION_MODEL ?? "claude-sonnet-5-5";
 const AI_EFFORT = (process.env.RELEVO_CONVERSATION_EFFORT ?? "low") as "low" | "medium" | "high";
 export const PROMPT_VERSION = "relevo-calle-v7";
 const MAX_TOOL_ROUNDS = 8;

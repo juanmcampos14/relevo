@@ -22,7 +22,7 @@ import {
 } from "@/domain/readiness";
 
 type Db = SupabaseClient<Database>;
-const MODEL = "claude-opus-5-5";
+const MODEL = "claude-sonnet-5-5";
 const PROMPT_VERSION = "finding-estado-v6";
 const DAILY_LIMIT = 60; // evaluaciones de hipótesis por día (no cuenta la conversación)
 const GAP_KEYS = Object.keys(GAPS) as [Gap, ...Gap[]];

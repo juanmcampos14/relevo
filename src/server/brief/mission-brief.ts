@@ -6,6 +6,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { MAX_BRIEF_ITEMS, MissionBriefSchema, tidyBrief, type MissionBrief } from "@/domain/brief/mission-brief";
 import { deepCall } from "@/server/mission/deep";
 import type { CollectedItem } from "./collect";
+import { BRIEF_MODEL } from "./engines";
 import { OPPORTUNITY_QUERIES, RESEARCH_BASE, missionContext, pilotCollect, research } from "./pilot";
 import { originalUrl } from "@/server/news/original-url";
 
@@ -17,7 +18,8 @@ type Db = SupabaseClient<Database>;
 export type MissionItem = CollectedItem & { alreadySeen: boolean; query: string };
 
 const RESEARCH = `${RESEARCH_BASE}
-Leé todo también con lente de oportunidad: además de lo que cambia la misión, buscá lo que podría convertirse en negocio (problemas y cuellos de botella, demanda que se repite, servicios que faltan, infraestructura insuficiente, empresas y contratistas que entran o crecen, búsquedas de personal, licitaciones, activos y cambios de precio). Ejemplos de lo que sí sirve: una fecha que cambia nuestra agenda y obliga a decidir; un local disponible con precio; una empresa que busca depósito o proveedores en la zona.`;
+Leé todo también con lente de oportunidad: además de lo que cambia la misión, buscá lo que podría convertirse en negocio (problemas y cuellos de botella, demanda que se repite, servicios que faltan, infraestructura insuficiente, empresas y contratistas que entran o crecen, búsquedas de personal, licitaciones, activos y cambios de precio). Ejemplos de lo que sí sirve: una fecha que cambia nuestra agenda y obliga a decidir; un local disponible con precio; una empresa que busca depósito o proveedores en la zona.
+Usá web_search y web_fetch: abrí las notas que podrían importar (un titular no alcanza para afirmar nada) y buscá lo que las notas no cubren de la agenda, los pedidos de aviso y las preguntas abiertas de la misión.`;
 
 const SYSTEM = `Sos RELEVO escribiendo el Morning Brief de una misión. No es un newsletter ni un clipping: es "qué cambió desde ayer, qué significa para lo que buscamos y qué haría".
 Solo entra lo que cambia una hipótesis, una decisión, una prioridad, la agenda o una acción, o lo que puede convertirse en una oportunidad concreta. Una re-confirmación de algo que ya sabemos NO entra (va a descartados como ya_lo_sabiamos). Lo que ya reportamos o descartamos no vuelve, salvo que cambie.
@@ -39,7 +41,7 @@ export async function collectForMission(db: Db, workspaceId: string, missionId: 
 
 export async function researchForMission(db: Db, missionId: string, items: CollectedItem[], client: Anthropic = new Anthropic()) {
   const mission = await missionContext(db, missionId);
-  return research(client, RESEARCH, mission.text, items, 10);
+  return research(client, RESEARCH, mission.text, items, 6);
 }
 
 export async function writeMissionBrief(db: Db, o: { workspaceId: string; missionId: string; memo: string; items: MissionItem[]; client?: Anthropic }) {
@@ -47,6 +49,7 @@ export async function writeMissionBrief(db: Db, o: { workspaceId: string; missio
   const s = await deepCall(db, {
     workspaceId: o.workspaceId,
     promptVersion: "brief-mision-v1",
+    model: BRIEF_MODEL,
     effort: "medium",
     schema: MissionBriefSchema,
     client: o.client,

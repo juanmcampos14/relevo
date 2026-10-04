@@ -67,6 +67,9 @@ describe("foco de RELEVO", () => {
     const it0 = { ...base().items[0], move: { text: "x", citations: [], at: now.toISOString() } };
     expect(moveIsFresh(it0, now)).toBe(true);
     expect(moveIsFresh(it0, new Date(now.getTime() + 21 * 3_600_000))).toBe(false);
+    // Con más margen (misión sin cambios desde que se preparó) sigue sirviendo hasta ese límite.
+    expect(moveIsFresh(it0, new Date(now.getTime() + 21 * 3_600_000), 48)).toBe(true);
+    expect(moveIsFresh(it0, new Date(now.getTime() + 49 * 3_600_000), 48)).toBe(false);
     expect(moveIsFresh({ ...it0, updated_at: new Date(now.getTime() + 1000).toISOString() }, now)).toBe(false);
   });
 });

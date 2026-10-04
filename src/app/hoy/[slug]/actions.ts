@@ -10,7 +10,8 @@ import { draftsView, type PanelDraft } from "@/server/ai/panel-view";
 import { applyContactEvent, ContactEventInput, followUpDay } from "@/server/ai/contact-events";
 import { activeMission, applyCorrection, liveFocus, signMessages, stepTaken } from "@/server/mission/focus";
 import { laterPrepare } from "@/server/ai/turn";
-import { moveIsFresh, type Correction } from "@/domain/focus";
+import { type Correction } from "@/domain/focus";
+import { moveServes } from "@/server/mission/changes";
 import { askRelevo, type PanelReply } from "@/app/w/[slug]/ai/panel-actions";
 import { memoryNearby } from "@/server/geo";
 import { mapsUrl } from "@/domain/links";
@@ -38,7 +39,7 @@ export async function advance(slug: string, input: { focusId: string; conversati
   if (!item) return { ok: false, conversationId: input.conversationId, message: "Esa prioridad ya no está. Te muestro lo de ahora." };
   const question = `Avanzar: ${item.title}`;
   const now = new Date();
-  if (!item.move || !moveIsFresh(item, now)) {
+  if (!item.move || !mission || !(await moveServes(supabase, { missionId: mission, workspaceId: ctx.workspace.id }, item, now))) {
     return askRelevo(slug, { conversationId: input.conversationId, scope: "", screen: "Conversar (calle)", text: question, here: input.here, place: input.place });
   }
   // Ya preparado: queda en la conversación (para seguir hablando de eso) y se muestra sin esperar.

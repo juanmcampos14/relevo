@@ -25,8 +25,10 @@ export async function GET(request: NextRequest) {
   const db = createAdminClient();
   const { data: missions } = await db.from("campaigns").select("id, workspace_id, ends_on, workspaces(slug, settings)").eq("kind", "mision").eq("status", "activa");
   const active = (missions ?? []).filter((m) => !m.ends_on || m.ends_on >= new Date().toISOString().slice(0, 10));
+  // Cada misión en paralelo: en serie, los objetivos de una (cada 3 días, ~4 minutos) agotaban el tiempo de
+  // la función y la siguiente se quedaba sin síntesis de la mañana (pasó el 4/10 con Añelo).
   after(async () => {
-    for (const m of active) {
+    await Promise.allSettled(active.map(async (m) => {
       const { data: last } = await db.from("campaign_targets").select("briefed_at").eq("campaign_id", m.id).not("briefed_at", "is", null).order("briefed_at").limit(1).maybeSingle();
       const { count: unbriefed } = await db.from("campaign_targets").select("id", { count: "exact", head: true }).eq("campaign_id", m.id).is("briefed_at", null).not("company_id", "is", null);
       if (unbriefed || !last?.briefed_at || Date.now() - new Date(last.briefed_at).getTime() > TARGETS_EVERY_H * 3_600_000) {
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest) {
       console.info("mision sintesis", m.id, s.ok ? `USD ${s.costUsd.toFixed(2)}` : s.message);
       const e = await describeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
       console.info("mision estado", m.id, e.ok ? (e.skipped ? "sin cambios" : `USD ${e.costUsd.toFixed(2)}`) : e.message);
-    }
+    }));
   });
   return NextResponse.json({ scheduled: active.map((m) => m.id) }, { status: 202 });
 }

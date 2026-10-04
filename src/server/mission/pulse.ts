@@ -7,6 +7,9 @@ import { synthesizeMission } from "./synthesis";
 import { describeMission } from "./state";
 import { prepareMoves } from "./moves";
 import { pulseDue } from "@/domain/pulse";
+import { changesSince } from "./changes";
+
+export { changesSince };
 
 // Un solo cerebro: DETECTAR → ENTENDER → CRUZAR → GUARDAR → ACTUALIZAR → PRIORIZAR → ACTUAR. El Brief detecta
 // y cruza; acá lo que detectó actualiza lo que creemos (re-evaluar las hipótesis que tocó) y lo que pasa
@@ -51,20 +54,6 @@ export async function reassessFromSignals(db: Db, m: MissionRef, since: string):
   return { reassessed: done };
 }
 
-/** ¿Pasó algo desde la última síntesis que cambie el presente? */
-export async function changesSince(db: Db, missionId: string, since: string) {
-  const count = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0;
-  const [captures, actions, signals, assessments] = await Promise.all([
-    count(db.from("captures").select("id", { count: "exact", head: true }).eq("campaign_id", missionId).gt("captured_at", since)),
-    count(db.from("ai_action_drafts").select("id", { count: "exact", head: true }).eq("status", "ejecutada").gt("decided_at", since)),
-    count(db.from("brief_signals").select("id", { count: "exact", head: true }).contains("campaign_ids", [missionId]).in("relevance", ["alta", "media"]).gt("created_at", since)),
-    count(db.from("finding_assessments").select("id, findings!inner(campaign_id)", { count: "exact", head: true }).eq("findings.campaign_id", missionId).gt("created_at", since)),
-  ]);
-  const { data: c } = await db.from("campaigns").select("synthesis").eq("id", missionId).maybeSingle();
-  const log = ((c?.synthesis as { focus?: { log?: { at: string }[] } } | null)?.focus?.log ?? []).filter((l) => l.at > since).length;
-  return { captures, actions, signals, assessments, corrections: log, any: captures + actions + signals + assessments + log > 0 };
-}
-
 /**
  * Pulso: si algo cambió desde la última síntesis, RELEVO re-evalúa lo que tocaron las señales, re-prioriza,
  * actualiza el estado de la misión y prepara el Avanzar de lo nuevo. Si nada cambió, o se hizo hace menos de
@@ -73,7 +62,7 @@ export async function changesSince(db: Db, missionId: string, since: string) {
 export async function pulse(db: Db, m: MissionRef): Promise<{ ran: boolean; changes: Awaited<ReturnType<typeof changesSince>>; costUsd: number; reassessed: number }> {
   const { data: c } = await db.from("campaigns").select("synthesized_at").eq("id", m.id).maybeSingle();
   const since = c?.synthesized_at ?? new Date(Date.now() - 86_400_000).toISOString();
-  const changes = await changesSince(db, m.id, since);
+  const changes = await changesSince(db, m.id, since, m.workspace_id);
   // Si nada cambió, o se priorizó hace poco (menos de PULSE_EVERY_H horas), no gasta: lo nuevo espera al próximo pulso.
   if (!changes.any || !pulseDue(c?.synthesized_at ?? null)) return { ran: false, changes, costUsd: 0, reassessed: 0 };
   const { reassessed } = await reassessFromSignals(db, m, since);

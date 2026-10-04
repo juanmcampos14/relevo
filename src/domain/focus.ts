@@ -170,8 +170,11 @@ export function resolveByRefs(focus: Focus, refs: string[], note: string, now: D
   return { focus: next, resolved };
 }
 
-/** ¿El Avanzar preparado sigue sirviendo? Si cambió la prioridad o pasó un día, se vuelve a preparar. */
-export const moveIsFresh = (it: FocusItem, now: Date) => !!it.move && it.move.at >= it.updated_at && now.getTime() - new Date(it.move.at).getTime() < 20 * 3_600_000;
+/** Hasta cuántas horas sirve un Avanzar preparado si la misión no cambió desde entonces (ver moveServes). */
+export const MOVE_QUIET_H = 48;
+
+/** ¿El Avanzar preparado sigue sirviendo? Si cambió la prioridad o pasaron `maxH` horas (un día), se vuelve a preparar. */
+export const moveIsFresh = (it: FocusItem, now: Date, maxH = 20) => !!it.move && it.move.at >= it.updated_at && now.getTime() - new Date(it.move.at).getTime() < maxH * 3_600_000;
 
 /** Para la síntesis: lo que la persona corrigió en los últimos días, en lenguaje humano. */
 export const correctionsForBrain = (focus: Focus, now: Date) => {

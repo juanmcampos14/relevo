@@ -3,9 +3,10 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { moveIsFresh, visible } from "@/domain/focus";
+import { visible } from "@/domain/focus";
 import { AI_MODEL, runAgent } from "@/server/ai/agent";
 import { SIGNATURE, loadFocus, updateFocus } from "./focus";
+import { moveServes } from "./changes";
 
 // "RELEVO ya trabajó" también para Avanzar: lo que se ve en el home llega con su próximo paso preparado
 // (persona encontrada, mensaje listo), así en la calle tocar Avanzar responde al instante.
@@ -23,7 +24,9 @@ export async function prepareMoves(db: Db, opts: { workspaceId: string; campaign
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { prepared: 0, costUsd: 0 };
   const focus = await loadFocus(db, opts.campaignId);
   const now = new Date();
-  const todo = visible(focus, now, opts.max ?? 3).filter((x) => !moveIsFresh(x, now));
+  // Solo lo que falta, cambió o venció: si en la misión no pasó nada, el Avanzar de ayer sigue sirviendo.
+  const todo = [];
+  for (const x of visible(focus, now, opts.max ?? 3)) if (!(await moveServes(db, { missionId: opts.campaignId, workspaceId: opts.workspaceId }, x, now))) todo.push(x);
   let cost = 0;
   let prepared = 0;
   const when = new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(now);

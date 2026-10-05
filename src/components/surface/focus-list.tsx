@@ -8,7 +8,8 @@ import { cn } from "cn";
 // apretado y arrastrar), o el menú: primero, mañana, ya lo hice, ya no importa. La corrección se aplica al
 // instante acá y en el Brain.
 
-export type FocusView = { id: string; title: string; why: string };
+/** `changed`: qué cambió alrededor de esta prioridad desde hace poco (una señal, un aporte del equipo). */
+export type FocusView = { id: string; title: string; why: string; changed?: string | null };
 export type FocusChange =
   | { kind: "orden"; ids: string[] }
   | { kind: "primero"; id: string }
@@ -110,6 +111,7 @@ export function FocusList({ initial, disabled, canEdit, onAdvance, onChange }: {
           <div className="min-w-0 flex-1 sm:flex sm:items-start sm:gap-4">
             <div className="min-w-0 flex-1">
               <p className={cn("leading-snug font-medium", i === 0 ? "text-[17px]" : "text-[16px]")}>{it.title}</p>
+              {it.changed && <p className="mt-1 text-[14px] leading-relaxed text-[#9A4B1F]"><span className="font-medium">Cambió:</span> {it.changed}</p>}
               {it.why && <p className={cn("mt-1 text-[15px] leading-relaxed text-[#6F6A60]", i > 0 && "hidden sm:block")}>{it.why}</p>}
             </div>
             <div className="mt-3 flex shrink-0 items-center gap-1 sm:mt-0">

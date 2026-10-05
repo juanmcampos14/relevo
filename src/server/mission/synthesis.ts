@@ -8,18 +8,20 @@ import { missionBrief } from "@/server/ai/mission";
 import { deepCall, type DeepModel } from "./deep";
 import { randomUUID } from "node:crypto";
 import { EMPTY_FOCUS, correctionsForBrain, mergeSynthesis, type Focus } from "@/domain/focus";
+import { logSkip, materialSince } from "./material";
 
 // "RELEVO ya trabajó": la síntesis diaria de la misión se calcula en background (después del Brief) y la
 // conversación responde desde ella en segundos. Lenguaje humano, sin jerga interna; referencias reales.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-sintesis-v3";
+const PROMPT_VERSION = "mision-sintesis-v4";
 
 const Item = z.object({
   title: z.string().describe("Qué haría, con verbo, en lenguaje humano (p. ej. 'Mover las presentaciones con YPF, Vista y Tecpetrol')."),
   why: z.string().describe("Por qué ahora, en una oración."),
   refs: z.array(z.string()).describe("Referencias 'tipo:uuid' del material que lo sostienen (empresas, personas, tareas, hipótesis)."),
   for: z.string().describe("Nombre de quién del equipo debería hacerlo (de equipo_de_la_mision), o '' si puede ser cualquiera."),
+  changed: z.string().describe("Si algo de lo_que_cambio_desde_la_ultima_vez cambia esta cosa (la sube, la reordena, le cambia la pregunta), qué cambió en una oración ('Neuquén anunció una prueba de bitrenes: preguntale a Martín si cambia su flota'); '' si no la tocó."),
 });
 export const SynthesisSchema = z.object({
   opening: z.string().describe("Una oración de apertura que diga cuántas cosas haría hoy y para qué (sin saludo, sin nombre, sin cifras internas)."),
@@ -39,9 +41,22 @@ Reglas:
 - Usá solo referencias que aparezcan en el material. Cada cosa lleva las referencias de las empresas o personas con las que hay que moverse.
 - Las correcciones de la persona mandan: lo que sacó o dio por hecho no vuelve; lo que puso primero va primero; lo que pospuso no es de hoy.
 - Si hoy hay una sola cosa realmente importante, proponé una sola.
+- Lo que no cambió puede quedar igual: si algo sigue siendo lo más importante, se mantiene (no rotes por rotar). Una novedad no desplaza una prioridad salvo que la cambie: decí qué cambió en "changed" solo cuando lo nuevo toca esa cosa.
 - Si la misión tiene equipo (equipo_de_la_mision), decí de quién es cada movimiento (for) cuando corresponde a alguien en particular; si puede hacerlo cualquiera, dejalo vacío.`;
 
-export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null; model?: DeepModel; dryRun?: boolean }) {
+export async function synthesizeMission(db: Db, opts: { workspaceId: string; campaignId: string; client?: Pick<Anthropic, "beta">; today?: Date; userId?: string | null; model?: DeepModel; dryRun?: boolean; force?: boolean }) {
+  // Sin cambio material desde la última síntesis, no se vuelve a pensar (Opus cuesta y daría lo mismo).
+  const { data: last } = await db.from("campaigns").select("synthesis, synthesized_at").eq("id", opts.campaignId).maybeSingle();
+  const hadFocus = !!((last?.synthesis as { focus?: Focus } | null)?.focus?.items?.length);
+  let changes: { kind: string; text: string; by: string | null }[] = [];
+  if (last?.synthesized_at && hadFocus && !opts.force) {
+    const m = await materialSince(db, { missionId: opts.campaignId, workspaceId: opts.workspaceId, since: last.synthesized_at, now: opts.today });
+    if (!m.any && !opts.dryRun) {
+      await logSkip(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, reason: "sin cambio material" });
+      return { ok: true as const, skipped: true as const, synthesis: last.synthesis as unknown as MissionSynthesis, costUsd: 0 };
+    }
+    changes = m.items.slice(0, 15).map((x) => ({ kind: x.kind, text: x.text, by: x.by }));
+  }
   const brief = await missionBrief(db, opts.campaignId, opts.today, { withSynthesis: false });
   if (!brief) return { ok: false as const, message: "No hay misión" };
   const { data: targets } = await db.from("campaign_targets").select("briefing, companies(id, trade_name, legal_name)").eq("campaign_id", opts.campaignId).not("briefing", "is", null);
@@ -62,7 +77,9 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   const team = ((ws?.settings as { team?: Record<string, { short?: string; full?: string }> } | null)?.team) ?? {};
   const { data: profs } = crew?.length ? await db.from("profiles").select("user_id, display_name").in("user_id", crew.map((c) => c.user_id)) : { data: [] };
   const members = (crew ?? []).map((c) => ({ user_id: c.user_id, name: team[c.user_id]?.short ?? profs?.find((p) => p.user_id === c.user_id)?.display_name?.split(/\s+/)[0] ?? "Alguien" }));
-  const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, correcciones_de_la_persona: corrections, equipo_de_la_mision: members.length > 1 ? members.map((m) => m.name) : [] });
+  const who = (id: string | null) => (id ? members.find((m) => m.user_id === id)?.name ?? "alguien del equipo" : "RELEVO");
+  const lo_que_cambio_desde_la_ultima_vez = changes.map((c) => ({ que: c.kind, quien: who(c.by), dato: c.text }));
+  const material = JSON.stringify({ ...brief, shortlist, prioridades_actuales: current, lo_que_cambio_desde_la_ultima_vez, correcciones_de_la_persona: corrections, equipo_de_la_mision: members.length > 1 ? members.map((m) => m.name) : [] });
   const allowed = new Set([...material.matchAll(/"([a-z]+:[0-9a-f-]{36})"/g)].map((m) => m[1]));
   const r = await deepCall(db, { workspaceId: opts.workspaceId, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt: `MATERIAL DEL BRAIN (JSON):\n${material}`, schema: SynthesisSchema, client: opts.client, userId: opts.userId, model: opts.model ?? "claude-opus-5-5" });
   if (!r.ok) return r;
@@ -78,11 +95,11 @@ export async function synthesizeMission(db: Db, opts: { workspaceId: string; cam
   };
   // El plan de AOG y el estado de la misión se preparan aparte y se conservan al renovar la síntesis del día. El foco se actualiza con lo
   // nuevo sin pisar lo que la persona decidió (se relee por si cambió mientras se pensaba).
-  if (opts.dryRun) return { ok: true as const, synthesis, costUsd: r.costUsd };
+  if (opts.dryRun) return { ok: true as const, skipped: false as const, synthesis, costUsd: r.costUsd };
   const { data: latest } = await db.from("campaigns").select("synthesis").eq("id", opts.campaignId).single();
   const keep = (latest?.synthesis ?? {}) as { aog?: unknown; focus?: Focus; state?: unknown };
   const merged = mergeSynthesis(keep.focus?.items ? keep.focus : EMPTY_FOCUS, { today: synthesis.today, week: synthesis.this_week }, new Date(), randomUUID);
   const { error } = await db.from("campaigns").update({ synthesis: { ...synthesis, ...(keep.aog ? { aog: keep.aog } : {}), ...(keep.state ? { state: keep.state } : {}), focus: merged } as unknown as Json, synthesized_at: synthesis.computed_at }).eq("id", opts.campaignId);
   if (error) return { ok: false as const, message: error.message };
-  return { ok: true as const, synthesis, costUsd: r.costUsd };
+  return { ok: true as const, skipped: false as const, synthesis, costUsd: r.costUsd };
 }

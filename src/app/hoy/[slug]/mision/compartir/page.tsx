@@ -18,7 +18,7 @@ export default async function Compartir({ params }: PageProps<"/hoy/[slug]/misio
   const mission = hello.mission;
   const [{ data: rows }, { data: inv }] = mission
     ? await Promise.all([
-        supabase.from("campaign_members").select("user_id, role").eq("campaign_id", mission.id).order("joined_at"),
+        supabase.from("campaign_members").select("user_id, role, brief_email").eq("campaign_id", mission.id).order("joined_at"),
         supabase.from("mission_invitations").select("id, email, role").eq("campaign_id", mission.id).eq("status", "pending").order("created_at"),
       ])
     : [{ data: [] }, { data: [] }];
@@ -26,7 +26,7 @@ export default async function Compartir({ params }: PageProps<"/hoy/[slug]/misio
   const team = (ctx.workspace.settings as { team?: Record<string, { short?: string; full?: string }> } | null)?.team ?? {};
   const members: MemberView[] = (rows ?? []).map((r) => {
     const p = (profiles ?? []).find((x) => x.user_id === r.user_id);
-    return { userId: r.user_id, name: team[r.user_id]?.full ?? p?.display_name ?? p?.email ?? "Alguien del equipo", email: p?.email ?? null, role: r.role as MemberView["role"], me: r.user_id === ctx.user.id };
+    return { userId: r.user_id, name: team[r.user_id]?.full ?? p?.display_name ?? p?.email ?? "Alguien del equipo", email: p?.email ?? null, role: r.role as MemberView["role"], me: r.user_id === ctx.user.id, brief: r.brief_email };
   });
   const invites: InviteView[] = (inv ?? []).map((i) => ({ id: i.id, email: i.email, role: i.role as InviteView["role"] }));
   return (

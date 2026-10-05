@@ -38,7 +38,8 @@ export async function missionBrief(db: Db, campaignId: string | null, today = ne
     db.from("campaign_targets").select("status, assets!inner(id, title, category, locality, price_status, latitude, asset_prices(amount, currency, operation, period, observed_on))").eq("campaign_id", mission.id).neq("status", "descartado").not("asset_id", "is", null).limit(40),
     // Las historias del Morning Brief son de la misión que el Brief sigue (la primera).
     db.from("brief_stories").select("id, title, status, watch_reason, last_seen_on").neq("status", "cerrada").order("last_seen_on", { ascending: false }).limit((await isBriefMission(db, mission.id)) ? 12 : 0),
-    db.from("brief_signals").select("headline, basis, change, happened_on, publisher, source_url, vertical").contains("campaign_ids", [mission.id]).gte("created_at", week).order("happened_on", { ascending: false, nullsFirst: false }).limit(12),
+    // Lo material reportado en 14 días, lo más reciente primero (ordenar por fecha del hecho dejaba afuera lo del Brief, que no la tiene).
+    db.from("brief_signals").select("headline, basis, change, happened_on, publisher, source_url, vertical").contains("campaign_ids", [mission.id]).eq("material", true).gte("created_at", new Date(today.getTime() - 14 * 86_400_000).toISOString()).order("created_at", { ascending: false }).limit(20),
     db.from("evidence").select("id", { count: "exact", head: true }).eq("campaign_id", mission.id).gte("created_at", week),
     db.from("captures").select("id", { count: "exact", head: true }).eq("campaign_id", mission.id).gte("captured_at", week),
     db.from("establishments").select("id", { count: "exact", head: true }).not("latitude", "is", null),

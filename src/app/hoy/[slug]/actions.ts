@@ -17,7 +17,7 @@ import { memoryNearby } from "@/server/geo";
 import { mapsUrl } from "@/domain/links";
 import { formatDistance } from "@/domain/geo";
 import type { LookItem } from "@/server/surface";
-import { rememberMission } from "@/server/mission/current";
+import { chosenMission, forgetMission, rememberMission } from "@/server/mission/current";
 import { inviteToMission } from "@/server/mission/sharing";
 import { catchUp } from "@/server/mission/catch-up";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -164,6 +164,30 @@ export async function chooseMission(slug: string, missionId: string): Promise<{ 
   return { ok: true };
 }
 
+/**
+ * Eliminar una misión = archivarla (solo quien la creó: lo decide la base). Desaparece de las misiones de
+ * todos, el trabajo de fondo la deja de mirar y no se borra nada: se puede deshacer.
+ */
+export async function deleteMission(slug: string, missionId: string): Promise<{ ok: boolean; message?: string }> {
+  await getWorkspaceContext(slug);
+  if (!/^[0-9a-f-]{36}$/.test(missionId)) return { ok: false };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("archive_mission", { p_campaign: missionId });
+  if (error) return { ok: false, message: error.code === "42501" ? "Solo quien creó la misión puede eliminarla." : "No se pudo eliminar la misión." };
+  if ((await chosenMission(supabase)) === null) await forgetMission();
+  revalidatePath(`/hoy/${slug}`, "layout");
+  return { ok: true };
+}
+
+export async function restoreMission(slug: string, missionId: string): Promise<{ ok: boolean }> {
+  await getWorkspaceContext(slug);
+  if (!/^[0-9a-f-]{36}$/.test(missionId)) return { ok: false };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("restore_mission", { p_campaign: missionId });
+  revalidatePath(`/hoy/${slug}`, "layout");
+  return { ok: !error };
+}
+
 export type DraftResult = { ok: true; draft: MissionDraft } | { ok: false; message: string };
 
 /** "¿Qué querés investigar?" → nombre, objetivo, contexto y cómo vigilarla (y una pregunta si falta algo). */
@@ -260,6 +284,18 @@ export async function updateMissionMember(slug: string, userId: string, change: 
     ? supabase.from("campaign_members").delete().eq("campaign_id", mission).eq("user_id", userId).neq("role", "owner").select("user_id")
     : supabase.from("campaign_members").update({ role: change }).eq("campaign_id", mission).eq("user_id", userId).neq("role", "owner").select("user_id");
   const { data } = await q;
+  revalidatePath(`/hoy/${slug}/mision/compartir`);
+  return { ok: !!data?.length };
+}
+
+/** Quién recibe el Morning Brief de la misión (quien la creó lo decide para todos; cada uno, para sí). */
+export async function setMissionBrief(slug: string, userId: string, on: boolean): Promise<{ ok: boolean }> {
+  await getWorkspaceContext(slug);
+  if (!/^[0-9a-f-]{36}$/.test(userId)) return { ok: false };
+  const supabase = await createClient();
+  const mission = await activeMission(supabase);
+  if (!mission) return { ok: false };
+  const { data } = await supabase.from("campaign_members").update({ brief_email: on }).eq("campaign_id", mission).eq("user_id", userId).select("user_id");
   revalidatePath(`/hoy/${slug}/mision/compartir`);
   return { ok: !!data?.length };
 }

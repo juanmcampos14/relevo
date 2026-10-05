@@ -16,10 +16,12 @@ export default async function Misiones({ params, searchParams }: PageProps<"/hoy
   const ctx = await getWorkspaceContext(slug);
   const supabase = await createClient();
   const hello = await surfaceHello(supabase, ctx);
+  // Las que creó esta persona: solo esas se pueden eliminar.
+  const { data: mine } = await supabase.from("campaign_members").select("campaign_id").eq("user_id", ctx.user.id).eq("role", "owner");
   return (
     <Conversation slug={slug} workspaceId={ctx.workspace.id} missionId={null} canEdit={ctx.canEdit} tab="ahora" screen="Elegir misión"
       initialAsk={typeof sp.q === "string" ? sp.q.slice(0, 500) : null} placeholder="Decime en qué misión trabajar…">
-      <MissionPicker slug={slug} missions={hello.missions} current={hello.chosen ? hello.mission?.id ?? null : null} />
+      <MissionPicker slug={slug} missions={hello.missions} current={hello.chosen ? hello.mission?.id ?? null : null} owned={(mine ?? []).map((m) => m.campaign_id)} />
     </Conversation>
   );
 }

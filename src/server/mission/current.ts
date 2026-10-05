@@ -39,6 +39,11 @@ export async function workingMission(db: Db): Promise<string | null> {
   return (await listMissions(db))[0]?.id ?? null;
 }
 
+/** La misión elegida ya no existe (se eliminó): se olvida, y al volver RELEVO pregunta o toma la primera. */
+export async function forgetMission(): Promise<void> {
+  (await cookies()).delete(MISSION_COOKIE);
+}
+
 export async function rememberMission(id: string): Promise<void> {
   (await cookies()).set(MISSION_COOKIE, id, { path: "/", sameSite: "lax", httpOnly: true, secure: process.env.NODE_ENV === "production" });
 }

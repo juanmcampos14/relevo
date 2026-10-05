@@ -555,7 +555,7 @@ function CatchUpCard({ slug, since, onMore }: { slug: string; since: string; onM
   if (lines === null) return null;
   return (
     <section className={cn("mt-4 rounded-3xl bg-white px-6 py-5", shadow)} aria-live="polite">
-      <p className="text-[17px] font-semibold">Desde que estuviste</p>
+      <p className="text-[17px] font-semibold">Desde tu última visita</p>
       {lines === undefined ? (
         <p className="mt-2 text-[15px] text-[#8A8478]">Poniéndote al día…</p>
       ) : (

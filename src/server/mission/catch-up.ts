@@ -1,9 +1,11 @@
 import "server-only";
 
 import * as z from "zod/v4";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { deepCall } from "./deep";
+import { materialSince } from "./material";
 
 // "Desde tu última visita": no un activity feed. Primero qué cambió (y por qué importa), después quién lo
 // hizo, y qué haría. Lo escribe RELEVO con lo que aportaron los demás y lo que apareció desde entonces.
@@ -15,24 +17,20 @@ export const CatchUpSchema = z.object({
 });
 export type CatchUp = z.infer<typeof CatchUpSchema>;
 
-export async function catchUp(db: Db, o: { workspaceId: string; missionId: string; userId: string; since: string; names: Map<string, string>; doNext: string | null }): Promise<CatchUp | null> {
-  const [{ data: ev }, { data: caps }, { data: assessed }, { data: signals }, { data: mission }] = await Promise.all([
-    db.from("evidence").select("statement, created_by").eq("campaign_id", o.missionId).gt("created_at", o.since).neq("created_by", o.userId).not("created_by", "is", null).limit(20),
-    db.from("captures").select("ai_summary, captured_by").eq("campaign_id", o.missionId).gt("captured_at", o.since).neq("captured_by", o.userId).limit(10),
-    db.from("finding_assessments").select("summary, discovery, findings!inner(statement, campaign_id)").eq("findings.campaign_id", o.missionId).gt("created_at", o.since).limit(8),
-    db.from("brief_signals").select("headline, why_it_matters").contains("campaign_ids", [o.missionId]).in("relevance", ["alta", "media"]).gt("created_at", o.since).limit(6),
-    db.from("campaigns").select("name").eq("id", o.missionId).single(),
-  ]);
-  if (!ev?.length && !caps?.length && !assessed?.length && !signals?.length) return null;
+export async function catchUp(db: Db, o: { workspaceId: string; missionId: string; userId: string; since: string; names: Map<string, string>; doNext: string | null; client?: Pick<Anthropic, "beta"> }): Promise<CatchUp | null> {
+  // Lo mismo que decide si la síntesis vuelve a pensar: solo lo material, sin lo que hizo esta persona.
+  const m = await materialSince(db, { missionId: o.missionId, workspaceId: o.workspaceId, since: o.since, excludeUser: o.userId });
+  if (!m.any) return null;
+  const { data: mission } = await db.from("campaigns").select("name").eq("id", o.missionId).single();
   const who = (id: string | null) => (id ? o.names.get(id) ?? "alguien del equipo" : "RELEVO");
   const prompt = JSON.stringify({
     mision: mission?.name,
-    aportes_del_equipo: [...(ev ?? []).map((e) => ({ quien: who(e.created_by), dato: e.statement })), ...(caps ?? []).map((c) => ({ quien: who(c.captured_by), captura: c.ai_summary }))],
-    hipotesis_que_cambiaron: (assessed ?? []).map((a) => ({ hipotesis: (a.findings as { statement: string }).statement, lectura: a.summary, cree: (a.discovery as { belief?: string } | null)?.belief ?? null })),
-    senales_nuevas: signals ?? [],
+    cambios_materiales: m.items.slice(0, 15).map((x) => ({ que: KIND[x.kind], quien: who(x.by), dato: x.text })),
     lo_que_haria_relevo_ahora: o.doNext,
   });
-  const r = await deepCall(db, { workspaceId: o.workspaceId, userId: o.userId, promptVersion: "equipo-desde-tu-visita-v1", effort: "low", schema: CatchUpSchema, prompt,
-    system: "Contás a alguien del equipo qué cambió en su misión desde su última visita. Interpretá, no listes: qué cambió en lo que sabemos o creemos y por qué importa. Nada de conteos ('sumó 7 datos'), nada de ids. Español rioplatense, corto." });
+  const r = await deepCall(db, { workspaceId: o.workspaceId, userId: o.userId, client: o.client, promptVersion: "equipo-desde-tu-visita-v2", effort: "low", schema: CatchUpSchema, prompt,
+    system: "Contás a alguien del equipo qué cambió en su misión desde su última visita. Elegí lo que cambia una decisión, una prioridad, una reunión o una oportunidad (1 a 3 cosas como mucho; si es una sola, una sola) y decí por qué importa y para qué conversación o acción. Interpretá, no listes: nada de conteos ni ids. Si un cambio es de otra persona del equipo, nombrala. Español rioplatense, corto." });
   return r.ok ? { changed: r.value.changed.slice(0, 3), next: r.value.next } : null;
 }
+
+const KIND: Record<string, string> = { senal: "señal de afuera", aporte: "aporte del equipo", hipotesis: "cambio en una hipótesis", oportunidad: "oportunidad", accion: "acción hecha", agenda: "agenda que se acerca", correccion: "corrección de prioridades" };

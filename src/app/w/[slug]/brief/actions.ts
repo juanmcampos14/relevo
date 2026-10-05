@@ -27,9 +27,10 @@ export async function saveBriefSettings(slug: string, _: ActionState, fd: FormDa
   const enabled = fd.get("enabled") === "on";
   const cap = Number(String(fd.get("monthly_cap_usd") ?? "").replace(",", "."));
   if (!Number.isFinite(cap) || cap < 5 || cap > 500) return { errors: { monthly_cap_usd: "Entre USD 5 y 500 por mes." } };
-  if (enabled && !parsed.data.length) return { errors: { recipients: "Agregá al menos un destinatario." } };
   const supabase = await createClient();
-  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), brief: { enabled, recipients: parsed.data, monthlyCapUsd: cap } };
+  // Se conserva lo demás del Brief (hora de entrega, misión): antes se perdía al guardar.
+  const prev = ((ctx.workspace.settings as { brief?: Record<string, unknown> } | null)?.brief) ?? {};
+  const settings = { ...((ctx.workspace.settings as Record<string, unknown> | null) ?? {}), brief: { ...prev, enabled, recipients: parsed.data, monthlyCapUsd: cap } };
   const { data, error } = await supabase.from("workspaces").update({ settings }).eq("id", ctx.workspace.id).select("id");
   if (error) return { message: dbErrorMessage(error) };
   if (!data?.length) return { message: "Solo el owner puede cambiar esta configuración." };

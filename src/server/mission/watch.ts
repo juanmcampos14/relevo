@@ -12,6 +12,8 @@ import { configuredEmailProvider } from "@/server/email/provider";
 import { deepCall } from "./deep";
 import { ingestDiscovery, type Discovered } from "./ingest";
 import { originalUrl } from "@/server/news/original-url";
+import { placeSignal } from "@/domain/material";
+import { knownEvents } from "./material";
 
 // Vigilancia activa de cada misión: RELEVO no espera a que la persona entre. Durante el día:
 // DETECTAR (noticias nuevas de las búsquedas de la misión y de sus actores) → CRUZAR con lo que la misión
@@ -20,7 +22,7 @@ import { originalUrl } from "@/server/news/original-url";
 // nada = silencio. Si no hay nada nuevo, no se llama a la IA.
 
 type Db = SupabaseClient<Database>;
-const PROMPT_VERSION = "mision-vigilancia-v2";
+const PROMPT_VERSION = "mision-vigilancia-v3";
 const MAX_ITEMS = 30;
 const MAX_ALERTS_PER_DAY = 3;
 
@@ -43,6 +45,7 @@ export const WatchSchema = z.object({
     action: z.string().describe("Qué haría, en una oración, o '' si nada."),
     alert: z.boolean().describe("true SOLO si cambia algo material (una hipótesis, un actor importante nuevo, un activo, o merece una acción ya) o si cumple un pedido de aviso de la persona. Casi siempre false."),
     matches_request: z.string().describe("Si cumple un pedido de aviso, cuál (en sus palabras); si no, ''."),
+    same_as: z.string().describe("Si la nota cuenta un hecho que ya está en hechos_conocidos (aunque sea otro medio u otras palabras), su ref 'hecho:…'; si es un hecho distinto, ''."),
     discovered: z.array(z.object({
       kind: z.enum(["empresa", "persona", "activo"]),
       name: z.string().describe("Nombre que identifica (un activo: qué es y dónde, nunca la promesa del vendedor como renta o capacidad proyectada)."),
@@ -55,17 +58,18 @@ export const WatchSchema = z.object({
 
 const SYSTEM = `Sos el radar de RELEVO para una misión de investigación de oportunidades de negocio. Recibís notas nuevas y la memoria de la misión. Tu criterio es el producto: no sos un agregador.
 Para cada nota preguntate: ¿esto cambia algo de lo que sabemos, creemos o estamos siguiendo? ¿crea o modifica una señal, un actor, una relación, una hipótesis, una oportunidad o una acción? Una nota grande de una operadora puede no cambiar nada; una chica donde aparece por primera vez una contratista puede cambiar mucho.
+Artículo ≠ hecho: una nota de otro medio sobre un hecho que ya está en hechos_conocidos no es nueva; marcá same_as con su ref (y si trae un dato nuevo —monto, fecha, operador, ubicación, contrato—, decilo en headline).
 Devolvé solo las que cambian algo, o las que cumplen un pedido de aviso de la persona. Ruido = afuera. Nada de inventar: referencias solo de la memoria; actores nuevos solo si la nota los nombra.`;
 
 async function missionMemory(db: Db, m: WatchMission) {
-  const [{ data: findings }, { data: targets }, { data: recent }] = await Promise.all([
+  const [{ data: findings }, { data: targets }, known] = await Promise.all([
     db.from("findings").select("id, statement").eq("campaign_id", m.id).eq("case_status", "activo").neq("review_status", "rechazado").limit(60),
     db.from("campaign_targets").select("priority, companies(id, trade_name, legal_name), assets(id, title)").eq("campaign_id", m.id).neq("status", "descartado").limit(300),
-    db.from("brief_signals").select("headline").contains("campaign_ids", [m.id]).gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString()).limit(60),
+    knownEvents(db, m.id),
   ]);
   const companies = (targets ?? []).flatMap((t) => (t.companies ? [{ ref: `company:${t.companies.id}`, name: companyName(t.companies), priority: t.priority }] : []));
   const assets = (targets ?? []).flatMap((t) => (t.assets ? [{ ref: `asset:${t.assets.id}`, title: t.assets.title }] : []));
-  return { findings: (findings ?? []).map((f) => ({ ref: `finding:${f.id}`, statement: f.statement })), companies, assets, recent: (recent ?? []).map((r) => r.headline) };
+  return { findings: (findings ?? []).map((f) => ({ ref: `finding:${f.id}`, statement: f.statement })), companies, assets, known };
 }
 
 /** Qué buscar: lo que se configuró para la misión + sus actores más importantes. */
@@ -102,7 +106,7 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
   const prompt = JSON.stringify({
     mision: { nombre: m.name, objetivo: m.objective, contexto: m.watch?.context ?? null, zona: m.watch?.region ?? null },
     pedidos_de_aviso: (m.watch?.criteria ?? []).map((c) => c.text),
-    memoria: { hipotesis: memory.findings, empresas: memory.companies.map(({ ref, name }) => ({ ref, name })), activos: memory.assets, senales_recientes: memory.recent },
+    memoria: { hipotesis: memory.findings, empresas: memory.companies.map(({ ref, name }) => ({ ref, name })), activos: memory.assets, hechos_conocidos: memory.known.slice(-60).map((k) => ({ ref: `hecho:${k.id}`, hecho: k.headline, desde: k.happened_on })) },
     notas: fresh.map((i, n) => ({ n, title: i.title, publisher: i.publisher, date: i.publishedAt, snippet: i.snippet })),
   });
   const r = await deepCall(db, { workspaceId: m.workspace_id, promptVersion: PROMPT_VERSION, system: SYSTEM, prompt, schema: WatchSchema, client: opts.client, effort: "low" });
@@ -116,28 +120,43 @@ export async function watchMission(db: Db, m: WatchMission, opts: { client?: Pic
   const toAlert: { headline: string; matters: string; url: string }[] = [];
   const discovered: Discovered[] = [];
   let saved = 0;
+  let material = 0;
   for (const s of r.value.signals) {
     const item = fresh[s.item];
     if (!item || (s.relevance === "baja" && !s.matches_request)) continue;
     // La fuente que se guarda y se manda es la nota del medio, no la redirección de Google Noticias.
     const url = await originalUrl(item.url);
+    const company_ids = ids(s.company_refs, "company");
+    const asset_ids = ids(s.asset_refs, "asset");
+    // Artículo ≠ hecho: otra nota sobre un hecho conocido es una fuente más (no material) salvo que traiga un dato nuevo.
+    const place = placeSignal(
+      { headline: s.headline, summary: item.snippet, happened_on: item.publishedAt?.slice(0, 10) ?? null, company_ids, asset_ids, change: s.change, relevance: s.relevance },
+      memory.known,
+      { sameAs: s.same_as.startsWith("hecho:") ? s.same_as.slice(6) : null },
+    );
     // Avisa lo material o lo que la persona pidió que le avisen (aunque no sea de relevancia alta).
-    const alert = s.alert && (s.relevance === "alta" || !!s.matches_request) && alerts < MAX_ALERTS_PER_DAY;
+    const alert = place.material && s.alert && (s.relevance === "alta" || !!s.matches_request) && alerts < MAX_ALERTS_PER_DAY;
     const { data: row, error } = await db.from("brief_signals").insert({
       workspace_id: m.workspace_id, brief_id: null, origin: "vigilancia", headline: s.headline.slice(0, 400), summary: item.snippet?.slice(0, 1000) ?? null,
       happened_on: item.publishedAt?.slice(0, 10) ?? null, source_url: /^https?:\/\//.test(url) ? url : null, source_title: item.title.slice(0, 300), publisher: item.publisher,
-      basis: s.basis, signal_type: s.signal_type, section: "general", why_it_matters: s.matters, reading: s.matters, change: s.change, relevance: s.relevance,
-      company_ids: ids(s.company_refs, "company"), finding_ids: ids(s.finding_refs, "finding"), asset_ids: ids(s.asset_refs, "asset"), campaign_ids: [m.id],
+      basis: s.basis, signal_type: s.signal_type, section: "general", why_it_matters: s.matters, reading: s.matters, change: place.change, relevance: s.relevance,
+      company_ids, finding_ids: ids(s.finding_refs, "finding"), asset_ids, campaign_ids: [m.id],
       suggested_action: s.action || null, alerted_at: alert ? new Date().toISOString() : null,
+      event_id: place.kind === "nueva" ? null : place.eventId, material: place.material,
     } as never).select("id").single();
     if (error || !row) continue;
     saved++;
+    if (place.material) material++;
+    const id = (row as { id: string }).id;
+    // Lo que entró en esta corrida también cuenta como conocido para las notas siguientes.
+    if (place.kind === "nueva") memory.known.push({ id, headline: s.headline, summary: item.snippet, happened_on: item.publishedAt?.slice(0, 10) ?? null, story_id: null, text: `${s.headline} ${item.snippet ?? ""}`, company_ids, asset_ids });
+    else { const ev = memory.known.find((k) => k.id === place.eventId); if (ev) ev.text += ` ${s.headline} ${item.snippet ?? ""}`; }
     if (alert) { alerts++; toAlert.push({ headline: s.headline, matters: s.matches_request ? `${s.matters} (Me pediste que te avise: ${s.matches_request}.)` : s.matters, url }); }
-    for (const d of s.discovered) discovered.push({ ...d, maybe: d.maybe && allowed.has(d.maybe) ? d.maybe : "", source_url: url, source_title: item.title, signal_id: (row as { id: string }).id });
+    for (const d of s.discovered) discovered.push({ ...d, maybe: d.maybe && allowed.has(d.maybe) ? d.maybe : "", source_url: url, source_title: item.title, signal_id: id });
   }
   const ingest = discovered.length ? await ingestDiscovery(db, { workspaceId: m.workspace_id, missionId: m.id }, discovered) : { ingested: 0, questions: 0 };
   if (toAlert.length) await sendAlerts(m, toAlert, opts.siteUrl).catch(() => null);
-  return { items: fresh.length, signals: saved, alerts: toAlert.length, ingested: ingest.ingested, questions: ingest.questions, costUsd: r.costUsd };
+  return { items: fresh.length, signals: saved, material, alerts: toAlert.length, ingested: ingest.ingested, questions: ingest.questions, costUsd: r.costUsd };
 }
 
 /** Avisar solo lo que cambia algo: un mail corto por cada señal material (además del aviso en Ahora). */

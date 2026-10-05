@@ -27,6 +27,9 @@ export type FocusItem = {
   done_refs?: string[];
   /** Avanzar ya preparado en background (para responder al instante). */
   move?: FocusMove | null;
+  /** Qué cambió alrededor de esta prioridad (una señal, un aporte) y cuándo: la Surface lo dice sin rotarla. */
+  changed?: string | null;
+  changed_at?: string | null;
   updated_at: string;
 };
 export type FocusLog = { at: string; by: string | null; item: string; what: string; note?: string | null };
@@ -62,21 +65,26 @@ export function visible(focus: Focus, now: Date, max = 3, me?: string | null): F
  * Nueva síntesis → foco. Conserva lo que la persona decidió: lo que sacó o hizo no vuelve (por 7 días),
  * lo que fijó mantiene su lugar, lo que agregó sigue. Lo demás se reemplaza por lo que propone RELEVO.
  */
-export function mergeSynthesis(focus: Focus, proposed: { today: { title: string; why: string; refs: string[]; for_user?: string | null }[]; week: { title: string; why: string; refs: string[]; for_user?: string | null }[] }, now: Date, newId: () => string): Focus {
+type Proposed = { title: string; why: string; refs: string[]; for_user?: string | null; changed?: string | null };
+export function mergeSynthesis(focus: Focus, proposed: { today: Proposed[]; week: Proposed[] }, now: Date, newId: () => string): Focus {
   const at = now.toISOString();
   const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const closed = focus.items.filter((x) => (x.status === "hecha" || x.status === "sacada") && x.updated_at >= weekAgo);
   const kept = focus.items.filter((x) => (x.status === "activa" || x.status === "pospuesta") && (x.pinned || x.source === "persona"));
   const previous = focus.items.filter((x) => x.status === "activa" || x.status === "pospuesta");
   const next: FocusItem[] = [...kept];
-  const add = (p: { title: string; why: string; refs: string[]; for_user?: string | null }, tier: "hoy" | "semana") => {
+  const add = (p: Proposed, tier: "hoy" | "semana") => {
     if (closed.some((c) => sameItem(c, p)) || next.some((n) => sameItem(n, p))) return;
     const prev = previous.find((x) => sameItem(x, p));
-    // Si es la misma cosa, se conserva su id, su estado (pospuesta) y el Avanzar ya preparado si el título no cambió.
+    // Si es la misma cosa, se conserva su id, su estado (pospuesta) y el Avanzar ya preparado si el título no
+    // cambió y nada material la tocó (si algo la cambió, el Avanzar se vuelve a preparar con lo nuevo).
+    const changed = p.changed?.trim() || null;
+    const same = !!prev && norm(prev.title) === norm(p.title) && !changed;
     next.push({
       id: prev?.id ?? newId(), title: p.title, why: p.why, refs: p.refs, tier, source: "relevo", for_user: p.for_user ?? null,
       status: prev?.status ?? "activa", until: prev?.until ?? null, note: prev?.note ?? null, rank: 0,
-      move: prev && norm(prev.title) === norm(p.title) ? prev.move ?? null : null, updated_at: prev && norm(prev.title) === norm(p.title) ? prev.updated_at : at,
+      move: same ? prev!.move ?? null : null, updated_at: same ? prev!.updated_at : at,
+      changed: changed ?? prev?.changed ?? null, changed_at: changed ? at : prev?.changed_at ?? null,
     });
   };
   proposed.today.forEach((p) => add(p, "hoy"));
@@ -169,9 +177,6 @@ export function resolveByRefs(focus: Focus, refs: string[], note: string, now: D
   }
   return { focus: next, resolved };
 }
-
-/** Hasta cuántas horas sirve un Avanzar preparado si la misión no cambió desde entonces (ver moveServes). */
-export const MOVE_QUIET_H = 48;
 
 /** ¿El Avanzar preparado sigue sirviendo? Si cambió la prioridad o pasaron `maxH` horas (un día), se vuelve a preparar. */
 export const moveIsFresh = (it: FocusItem, now: Date, maxH = 20) => !!it.move && it.move.at >= it.updated_at && now.getTime() - new Date(it.move.at).getTime() < maxH * 3_600_000;

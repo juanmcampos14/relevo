@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         console.info("mision re-evaluadas", m.id, ra.reassessed.length);
       }
       const s = await synthesizeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
-      console.info("mision sintesis", m.id, s.ok ? `USD ${s.costUsd.toFixed(2)}` : s.message);
+      console.info("mision sintesis", m.id, s.ok ? (s.skipped ? "sin cambio material" : `USD ${s.costUsd.toFixed(2)}`) : s.message);
       const e = await describeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
       console.info("mision estado", m.id, e.ok ? (e.skipped ? "sin cambios" : `USD ${e.costUsd.toFixed(2)}`) : e.message);
     }));

@@ -3,12 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "cn";
-import { inviteToCurrentMission, revokeMissionInvite, updateMissionMember } from "@/app/hoy/[slug]/actions";
+import { inviteToCurrentMission, revokeMissionInvite, setMissionBrief, updateMissionMember } from "@/app/hoy/[slug]/actions";
 import { card } from "./cards";
 
 // Compartir la misión: un mail y si puede trabajar o solo mirar. Nada más.
 
-export type MemberView = { userId: string; name: string; email: string | null; role: "owner" | "member" | "viewer"; me: boolean };
+export type MemberView = { userId: string; name: string; email: string | null; role: "owner" | "member" | "viewer"; me: boolean; brief: boolean };
 export type InviteView = { id: string; email: string; role: "member" | "viewer" };
 
 const ROLE = { owner: "Creó la misión", member: "Puede trabajar", viewer: "Solo mira" } as const;
@@ -32,12 +32,15 @@ export function ShareMission({ slug, members, invites, isOwner }: { slug: string
           <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2 py-3">
             <div className="min-w-0">
               <p className="text-[16px] font-medium">{m.name}{m.me && <span className="text-[#9C968A]"> · vos</span>}</p>
-              <p className="text-[14px] text-[#6F6A60]">{ROLE[m.role]}{m.email ? ` · ${m.email}` : ""}</p>
+              <p className="text-[14px] text-[#6F6A60]">{ROLE[m.role]}{m.email ? ` · ${m.email}` : ""}{m.brief ? " · recibe el Morning Brief" : ""}</p>
             </div>
-            {isOwner && m.role !== "owner" && (
-              <div className="flex gap-1">
+            {(isOwner || m.me) && (
+              <div className="flex flex-wrap gap-1">
+                <button type="button" disabled={pending} aria-pressed={m.brief} onClick={() => start(async () => { await setMissionBrief(slug, m.userId, !m.brief); router.refresh(); })} className="rounded-full px-3 py-1.5 text-[13px] text-[#6F6A60] hover:bg-[#F4F1EA]">{m.brief ? "Sin Morning Brief" : "Que reciba el Brief"}</button>
+                {isOwner && m.role !== "owner" && (<>
                 <button type="button" disabled={pending} onClick={() => start(async () => { await updateMissionMember(slug, m.userId, m.role === "member" ? "viewer" : "member"); router.refresh(); })} className="rounded-full px-3 py-1.5 text-[13px] text-[#6F6A60] hover:bg-[#F4F1EA]">{m.role === "member" ? "Que solo mire" : "Que pueda trabajar"}</button>
                 <button type="button" disabled={pending} onClick={() => start(async () => { await updateMissionMember(slug, m.userId, "sacar"); router.refresh(); })} className="rounded-full px-3 py-1.5 text-[13px] text-[#A3402A] hover:bg-[#F4F1EA]">Sacar</button>
+                </>)}
               </div>
             )}
           </li>

@@ -8,6 +8,7 @@ import { describeMission } from "./state";
 import { prepareMoves } from "./moves";
 import { pulseDue } from "@/domain/pulse";
 import { changesSince } from "./changes";
+import { logSkip } from "./material";
 
 export { changesSince };
 
@@ -64,7 +65,11 @@ export async function pulse(db: Db, m: MissionRef): Promise<{ ran: boolean; chan
   const since = c?.synthesized_at ?? new Date(Date.now() - 86_400_000).toISOString();
   const changes = await changesSince(db, m.id, since, m.workspace_id);
   // Si nada cambió, o se priorizó hace poco (menos de PULSE_EVERY_H horas), no gasta: lo nuevo espera al próximo pulso.
-  if (!changes.any || !pulseDue(c?.synthesized_at ?? null)) return { ran: false, changes, costUsd: 0, reassessed: 0 };
+  if (!changes.any) {
+    await logSkip(db, { workspaceId: m.workspace_id, promptVersion: "mision-pulso", reason: "sin cambio material" });
+    return { ran: false, changes, costUsd: 0, reassessed: 0 };
+  }
+  if (!pulseDue(c?.synthesized_at ?? null)) return { ran: false, changes, costUsd: 0, reassessed: 0 };
   const { reassessed } = await reassessFromSignals(db, m, since);
   let cost = 0;
   const s = await synthesizeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });

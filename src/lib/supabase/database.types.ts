@@ -337,16 +337,22 @@ isOneToOne: false
                   ]
                 },"brief_signals": {
                   Row: {
-                    "alerted_at": string | null,"asset_ids": (string)[],"basis": string,"brief_id": string | null,"campaign_ids": (string)[],"change": string,"companies": (string)[],"company_ids": (string)[],"created_at": string,"external_ref": string | null,"finding_ids": (string)[],"geography": string | null,"happened_on": string | null,"headline": string,"id": string,"implication": string | null,"next_action": string | null,"origin": string,"people": (string)[],"position": number,"publisher": string | null,"reading": string | null,"relevance": string,"roles": (string)[],"section": string,"signal_type": string,"source_title": string | null,"source_url": string | null,"status": string,"story_id": string | null,"subsector": string | null,"suggested_action": string | null,"summary": string | null,"validation_status": string | null,"vertical": string | null,"why_it_matters": string | null,"workspace_id": string
+                    "alerted_at": string | null,"asset_ids": (string)[],"basis": string,"brief_id": string | null,"campaign_ids": (string)[],"change": string,"companies": (string)[],"company_ids": (string)[],"created_at": string,"event_id": string | null,"external_ref": string | null,"finding_ids": (string)[],"geography": string | null,"happened_on": string | null,"headline": string,"id": string,"implication": string | null,"material": boolean,"next_action": string | null,"origin": string,"people": (string)[],"position": number,"publisher": string | null,"reading": string | null,"relevance": string,"roles": (string)[],"section": string,"signal_type": string,"source_title": string | null,"source_url": string | null,"status": string,"story_id": string | null,"subsector": string | null,"suggested_action": string | null,"summary": string | null,"validation_status": string | null,"vertical": string | null,"why_it_matters": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "alerted_at"?: string | null,"asset_ids"?: (string)[],"basis": string,"brief_id"?: string | null,"campaign_ids"?: (string)[],"change": string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"external_ref"?: string | null,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline": string,"id"?: string,"implication"?: string | null,"next_action"?: string | null,"origin"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance": string,"roles"?: (string)[],"section": string,"signal_type": string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"validation_status"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id": string
+                    "alerted_at"?: string | null,"asset_ids"?: (string)[],"basis": string,"brief_id"?: string | null,"campaign_ids"?: (string)[],"change": string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"event_id"?: string | null,"external_ref"?: string | null,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline": string,"id"?: string,"implication"?: string | null,"material"?: boolean,"next_action"?: string | null,"origin"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance": string,"roles"?: (string)[],"section": string,"signal_type": string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"validation_status"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "alerted_at"?: string | null,"asset_ids"?: (string)[],"basis"?: string,"brief_id"?: string | null,"campaign_ids"?: (string)[],"change"?: string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"external_ref"?: string | null,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline"?: string,"id"?: string,"implication"?: string | null,"next_action"?: string | null,"origin"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance"?: string,"roles"?: (string)[],"section"?: string,"signal_type"?: string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"validation_status"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id"?: string
+                    "alerted_at"?: string | null,"asset_ids"?: (string)[],"basis"?: string,"brief_id"?: string | null,"campaign_ids"?: (string)[],"change"?: string,"companies"?: (string)[],"company_ids"?: (string)[],"created_at"?: string,"event_id"?: string | null,"external_ref"?: string | null,"finding_ids"?: (string)[],"geography"?: string | null,"happened_on"?: string | null,"headline"?: string,"id"?: string,"implication"?: string | null,"material"?: boolean,"next_action"?: string | null,"origin"?: string,"people"?: (string)[],"position"?: number,"publisher"?: string | null,"reading"?: string | null,"relevance"?: string,"roles"?: (string)[],"section"?: string,"signal_type"?: string,"source_title"?: string | null,"source_url"?: string | null,"status"?: string,"story_id"?: string | null,"subsector"?: string | null,"suggested_action"?: string | null,"summary"?: string | null,"validation_status"?: string | null,"vertical"?: string | null,"why_it_matters"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "brief_signals_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: false
+      referencedRelation: "brief_signals"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "brief_signals_workspace_id_brief_id_fkey"
       columns: ["workspace_id","brief_id"]
 isOneToOne: false
@@ -481,13 +487,13 @@ isOneToOne: false
                   ]
                 },"campaign_members": {
                   Row: {
-                    "campaign_id": string,"invited_by": string | null,"joined_at": string,"last_seen_at": string | null,"role": string,"user_id": string,"workspace_id": string
+                    "brief_email": boolean,"campaign_id": string,"invited_by": string | null,"joined_at": string,"last_seen_at": string | null,"role": string,"user_id": string,"workspace_id": string
                   }
                   Insert: {
-                    "campaign_id": string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role": string,"user_id": string,"workspace_id": string
+                    "brief_email"?: boolean,"campaign_id": string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role": string,"user_id": string,"workspace_id": string
                   }
                   Update: {
-                    "campaign_id"?: string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role"?: string,"user_id"?: string,"workspace_id"?: string
+                    "brief_email"?: boolean,"campaign_id"?: string,"invited_by"?: string | null,"joined_at"?: string,"last_seen_at"?: string | null,"role"?: string,"user_id"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -568,13 +574,13 @@ isOneToOne: false
                   ]
                 },"campaigns": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"ends_on": string | null,"id": string,"kind": string,"name": string,"objective": string | null,"owner_id": string | null,"starts_on": string | null,"status": string,"synthesis": Json | null,"synthesized_at": string | null,"updated_at": string,"watch": Json | null,"workspace_id": string,"zone": string | null
+                    "archived_at": string | null,"archived_by": string | null,"archived_status": string | null,"created_at": string,"created_by": string | null,"ends_on": string | null,"id": string,"kind": string,"name": string,"objective": string | null,"owner_id": string | null,"starts_on": string | null,"status": string,"synthesis": Json | null,"synthesized_at": string | null,"updated_at": string,"watch": Json | null,"workspace_id": string,"zone": string | null
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name": string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"watch"?: Json | null,"workspace_id": string,"zone"?: string | null
+                    "archived_at"?: string | null,"archived_by"?: string | null,"archived_status"?: string | null,"created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name": string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"watch"?: Json | null,"workspace_id": string,"zone"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"watch"?: Json | null,"workspace_id"?: string,"zone"?: string | null
+                    "archived_at"?: string | null,"archived_by"?: string | null,"archived_status"?: string | null,"created_at"?: string,"created_by"?: string | null,"ends_on"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"objective"?: string | null,"owner_id"?: string | null,"starts_on"?: string | null,"status"?: string,"synthesis"?: Json | null,"synthesized_at"?: string | null,"updated_at"?: string,"watch"?: Json | null,"workspace_id"?: string,"zone"?: string | null
                   }
                   Relationships: [
                     {
@@ -2054,6 +2060,9 @@ isOneToOne: false
             "accept_pending_invitations":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
+"archive_mission":
+{ Args: { "p_campaign": string }; Returns: undefined
+                           },
 "campaign_role":
 { Args: { "c": string }; Returns: string
                            },
@@ -2091,7 +2100,7 @@ isOneToOne: false
 { Args: { "p_decision": string,"p_note": string,"p_verdict": string }; Returns: undefined
                            },
 "entity_visible":
-{ Args: { "col": string,"id": string,"origin": string }; Returns: boolean
+{ Args: { "p_col": string,"p_id": string,"p_origin": string }; Returns: boolean
                            },
 "finding_visible":
 { Args: { "f": string }; Returns: boolean
@@ -2132,8 +2141,14 @@ isOneToOne: false
 "refine_finding":
 { Args: { "p_capture_id": string,"p_finding_id": string,"p_proposal_id": string,"p_reason": string,"p_relation": string,"p_statement": string }; Returns: undefined
                            },
+"restore_mission":
+{ Args: { "p_campaign": string }; Returns: undefined
+                           },
 "shares_workspace_with":
 { Args: { "other": string }; Returns: boolean
+                           },
+"storage_media_visible":
+{ Args: { "object_name": string }; Returns: boolean
                            },
 "storage_workspace":
 { Args: { "object_name": string }; Returns: string

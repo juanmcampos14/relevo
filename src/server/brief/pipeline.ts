@@ -8,7 +8,7 @@ import { sameEvent, type Known } from "@/domain/brief/same-event";
 import { priceStatusOf } from "@/domain/radar/sheet";
 import { renderBriefEmail } from "@/domain/brief/render";
 import { isMissionBriefContent, renderMissionBriefEmail, type MissionBriefContent } from "@/domain/brief/mission-brief";
-import { briefMissionId, collectForMission, researchForMission, saveMissionBrief, writeMissionBrief, type MissionItem } from "./mission-brief";
+import { briefMissionId, briefRecipients, collectForMission, researchForMission, dedupeMissionBrief, saveMissionBrief, writeMissionBrief, type MissionItem } from "./mission-brief";
 import type { EmailProvider } from "@/server/email/provider";
 import { collectItems, type CollectedItem } from "./collect";
 import type { ResearchEngine, SynthesisEngine } from "./engines";
@@ -204,8 +204,11 @@ async function advanceMissionBrief(db: Db, b: BriefRow, ws: { settings: unknown 
     }
     if (b.status === "sintetizando") {
       const research = (b.research ?? {}) as { memo?: string; capped?: unknown };
-      const w = await writeMissionBrief(db, { workspaceId: b.workspace_id, missionId, memo: research.memo ?? "", items });
-      await saveMissionBrief(db, { workspaceId: b.workspace_id, briefId, missionId, brief: w.brief, items });
+      const written = await writeMissionBrief(db, { workspaceId: b.workspace_id, missionId, memo: research.memo ?? "", items });
+      // Lo que repite un hecho conocido no vuelve a entrar al Brief (queda como fuente más de ese hecho).
+      const d = await dedupeMissionBrief(db, missionId, written.brief, briefId);
+      const w = { ...written, brief: d.brief };
+      await saveMissionBrief(db, { workspaceId: b.workspace_id, briefId, missionId, brief: w.brief, items, shown: d.shown, repeated: d.repeated });
       const usage: Record<string, { costUsd?: number; webSearches?: number }> = { ...((b.usage as Record<string, { costUsd?: number; webSearches?: number }>) ?? {}), synthesis: { costUsd: w.costUsd } };
       const { data: m } = await db.from("campaigns").select("name").eq("id", missionId).single();
       const content: MissionBriefContent = {
@@ -218,13 +221,15 @@ async function advanceMissionBrief(db: Db, b: BriefRow, ws: { settings: unknown 
         },
       };
       await db.from("briefs").update({ content: content as unknown as J, usage: usage as unknown as J, status: "generado", generated_at: new Date().toISOString(), step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
-      if (recipients.length) {
+      // Mismo Brief para todos: la lista del workspace + los miembros de la misión que lo reciben.
+      const to = await briefRecipients(db, missionId, recipients);
+      if (to.length) {
         await db.from("brief_deliveries").upsert(
-          recipients.map((r) => ({ workspace_id: b.workspace_id, brief_id: briefId, recipient_email: r.email.trim().toLowerCase(), recipient_name: r.name || null })),
+          to.map((r) => ({ workspace_id: b.workspace_id, brief_id: briefId, recipient_email: r.email, recipient_name: r.name || null })),
           { onConflict: "brief_id,recipient_email", ignoreDuplicates: true },
         );
       }
-      return { briefId, did: `brief generado (${w.brief.items.length} cosas)`, status: "generado", more: recipients.length > 0 && due };
+      return { briefId, did: `brief generado (${w.brief.items.length} cosas)`, status: "generado", more: to.length > 0 && due };
     }
     return { briefId, did: "nada", status: b.status, more: false };
   } catch (e) {

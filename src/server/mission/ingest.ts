@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { normalizeName } from "@/domain/crm-import/dedupe";
+import { entityMatch } from "@/domain/reconcile";
 import { originalUrl } from "@/server/news/original-url";
 
 // Lo que RELEVO descubre (vigilancia, Morning Brief) entra a la memoria sin que nadie lo apruebe cuando la
@@ -67,8 +68,9 @@ export async function ingestDiscovery(db: Db, opts: { workspaceId: string; missi
     }
     if (d.kind === "empresa") {
       const { data: all } = await db.from("companies").select("id, trade_name, legal_name").limit(2000);
-      const exact = (all ?? []).find((c) => [c.trade_name, c.legal_name].some((n) => n && normalizeName(n) === normalizeName(name)));
-      const near = (all ?? []).find((c) => [c.trade_name, c.legal_name].some((n) => n && similar(n, name)));
+      // Identidad semántica ("Lavandería X", "Lavandería X Añelo", "Lavandería X SRL" = la misma).
+      const exact = (all ?? []).find((c) => [c.trade_name, c.legal_name].some((n) => n && entityMatch(n, name) === "misma"));
+      const near = (all ?? []).find((c) => [c.trade_name, c.legal_name].some((n) => n && (similar(n, name) || entityMatch(n, name) === "posible")));
       if (exact) {
         const target = await ensureTarget(db, opts.workspaceId, opts.missionId, "company_id", exact.id);
         if (target) await audit(db, opts.workspaceId, d, `${name} ya estaba en la memoria: la sumé a la misión.`, { mission_id: opts.missionId, table: "campaign_targets", id: target, created: true, target_id: target, link_id: null, source_id: null });

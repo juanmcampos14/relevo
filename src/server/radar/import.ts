@@ -6,6 +6,7 @@ import { mapRadar, priceStatusOf } from "@/domain/radar/sheet";
 import { matchCompanies } from "@/domain/brief/derive";
 import { parseTab } from "@/server/crm-import/parse";
 import { ingestPatch } from "@/server/locks";
+import { sameListing } from "@/domain/reconcile";
 
 // RADAR DE MERCADO del Sheet → Radar de RELEVO. Reejecutable: señales por ID (RAD-xxx), activos por
 // radar_ref, precios solo si son una observación nueva (nunca se pisa el historial). Mientras el Sheet
@@ -21,14 +22,18 @@ export type RadarReport = {
   conversations: { created: number; existing: number };
   hypothesesLinked: string[];
   seenUrls: number;
+  /** Id del activo de cada fila (para reconciliar las señales nuevas contra su activo). */
+  assetIds: Record<string, string>;
+  /** Publicaciones nuevas que resultaron ser un activo que ya seguíamos (otra ref, mismo activo). */
+  sameAsset: { ref: string; asset: string }[];
 };
 
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]+/g, " ").trim();
 const words = (s: string) => new Set(fold(s).split(" ").filter((w) => w.length >= 4 && !["complejo", "anelo", "departamentos", "publicado", "precio"].includes(w)));
 
-export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuffer, opts: { dryRun: boolean }): Promise<RadarReport> {
+export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuffer, opts: { dryRun: boolean; newSignals?: "crear" | "omitir" }): Promise<RadarReport> {
   const plan = mapRadar(await parseTab(buffer, "RADAR DE MERCADO", "Hallazgo"));
-  const r: RadarReport = { dryRun: opts.dryRun, signals: { created: [], updated: [] }, assets: { created: [], updated: [], inconsistent: [], review: [], discrepancies: [] }, prices: { added: 0, existing: 0 }, conversations: { created: 0, existing: 0 }, hypothesesLinked: [], seenUrls: 0 };
+  const r: RadarReport = { dryRun: opts.dryRun, signals: { created: [], updated: [] }, assets: { created: [], updated: [], inconsistent: [], review: [], discrepancies: [] }, prices: { added: 0, existing: 0 }, conversations: { created: 0, existing: 0 }, hypothesesLinked: [], seenUrls: 0, assetIds: {}, sameAsset: [] };
   const today = new Date().toISOString().slice(0, 10);
 
   // Fuente "RADAR del Sheet" (procedencia de lo migrado).
@@ -44,6 +49,7 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
   // 1. Activos y su historial de precios.
   const { data: existingAssets } = await db.from("assets").select("*").eq("workspace_id", workspaceId).not("radar_ref", "is", null);
   const currentByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, a as Record<string, unknown>]));
+  const { data: allAssets } = await db.from("assets").select("id, title, locality, surface_m2, operation, asset_prices(source_url)").eq("workspace_id", workspaceId);
   const assetByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, a.id]));
   // Campos corregidos a mano en RELEVO: el Sheet no los pisa (ni su estado de precio, si está bloqueado).
   const lockedByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, new Set(a.locked_fields ?? [])]));
@@ -57,7 +63,14 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
     const locked = lockedByRef.get(a.ref) ?? new Set<string>();
     if (a.materialChange?.startsWith("REVISAR") && !locked.has("material_change")) r.assets.review.push(a.ref);
     let id = assetByRef.get(a.ref);
-    if (id) {
+    // Antes de crear: ¿es un activo que ya seguimos con otra referencia (misma ficha, misma superficie y zona)?
+    if (!id) {
+      const twin = (allAssets ?? []).find((x) => [null, ...x.asset_prices.map((p) => p.source_url)].some((url) => sameListing({ url: a.prices[0]?.url, title: a.title, locality: a.locality, surface_m2: a.surfaceM2, operation: a.operation }, { url, title: x.title, locality: x.locality, surface_m2: x.surface_m2, operation: x.operation })));
+      if (twin) { id = twin.id; assetByRef.set(a.ref, twin.id); r.sameAsset.push({ ref: a.ref, asset: twin.title }); }
+    }
+    if (id && !currentByRef.has(a.ref)) {
+      // Mismo activo con otra referencia: solo suma la observación de precio (abajo); no se pisa nada.
+    } else if (id) {
       r.assets.updated.push(a.ref);
       // Lo corregido a mano no se pisa: si el Sheet trae otro valor, queda como discrepancia para decidir.
       const { apply: free, discrepancies } = await ingestPatch(db, { workspaceId, table: "assets", id, current: currentByRef.get(a.ref) ?? {}, incoming: fields, source: "radar_sheet", sourceRef: a.ref, dryRun: opts.dryRun });
@@ -111,6 +124,8 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
       if (!opts.dryRun) await db.from("brief_signals").update(row).eq("id", existing);
     } else {
       r.signals.created.push(s.ref);
+      // Las señales nuevas no se crean acá: pasan por la reconciliación (src/server/radar/reconcile.ts).
+      if (opts.newSignals === "omitir") continue;
       if (!opts.dryRun) {
         const { error } = await db.from("brief_signals").insert({ workspace_id: workspaceId, brief_id: null, origin: "radar_sheet", external_ref: s.ref, change: "nuevo", relevance: "media", position: 0, ...row });
         if (error) throw new Error(`${s.ref}: ${error.message}`);
@@ -155,5 +170,6 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
     }
   }
   void today;
+  r.assetIds = Object.fromEntries(assetByRef);
   return r;
 }

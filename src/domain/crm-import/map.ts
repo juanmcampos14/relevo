@@ -250,7 +250,8 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
       address_text: txt(v["Dirección"]),
       public_phone: phone,
       website,
-      sector: txt(v["Sector"]),
+      // El Sheet renombró la columna ("Sector" → "Sector / actividad", 06/10): se aceptan las dos.
+      sector: txt(v["Sector"] ?? v["Sector / actividad"]),
       priority: priority ?? 2,
       stage: stage ?? "investigacion",
       owner_name: txt(v["Responsable"]),

@@ -25,6 +25,8 @@ const hashOf = (v: Record<string, string | null>) => createHash("sha256").update
 const idOf = (r: Raw) => (r.values["ID"] ?? "").trim().toUpperCase();
 type Conflict = { field: string; sheet: unknown; relevo: unknown };
 /** El importador guarda los conflictos como { conflicts: [...] } (o una lista, en filas viejas). */
+/** ¿La fila vaciaría un dato que RELEVO tiene? (una columna renombrada o borrada no puede borrar información en silencio). */
+const emptiesData = (c: unknown) => ((c as { updates?: { from: unknown; to: unknown }[] } | null)?.updates ?? []).some((u) => u.from !== null && u.from !== "" && (u.to === null || u.to === ""));
 const conflictsOf = (c: unknown): Conflict[] => (Array.isArray(c) ? c : ((c as { conflicts?: Conflict[] } | null)?.conflicts ?? []));
 
 export type SyncResult = {
@@ -85,7 +87,7 @@ export async function syncSheet(
       // Lo que no choca con nada se aplica solo; lo que choca con una corrección de RELEVO queda como
       // información diferente (y la fila, pendiente en el lote); los posibles duplicados, para revisar.
       const { data: rows } = await db.from("import_rows").select("id, action, issues, conflicts, entity_type, target_entity_id, mapped").eq("batch_id", batchId);
-      const safe = (rows ?? []).filter((r) => (r.action === "crear" || r.action === "actualizar") && !conflictsOf(r.conflicts).length && !(r.issues as { severity: string }[]).some((i) => i.severity === "bloquea" || i.severity === "revisar"));
+      const safe = (rows ?? []).filter((r) => (r.action === "crear" || r.action === "actualizar") && !conflictsOf(r.conflicts).length && !(r.issues as { severity: string }[]).some((i) => i.severity === "bloquea" || i.severity === "revisar") && !emptiesData(r.conflicts));
       if (safe.length) await db.from("import_rows").update({ decision: "aprobada", decided_at: new Date().toISOString() }).in("id", safe.map((r) => r.id));
       const applied = safe.length ? await applyBatch(db, o.workspaceId, batchId) : { applied: 0, unchanged: 0, errors: [] };
       let diferente = 0;
@@ -151,7 +153,7 @@ async function previewSheet(db: Db, o: { workspaceId: string; sheetId: string; b
     const { rows: planned } = await planImport(db, o.workspaceId, { ...parsed, rows: { companies: rows.companies ?? [], contacts: rows.contacts ?? [], tasks: rows.tasks ?? [], sources: rows.sources ?? [] } });
     for (const r of planned) {
       const t = (out.plan[r.entity_type] ??= {});
-      const k = r.action === "crear" || r.action === "actualizar" ? ((r.issues as { severity: string }[]).some((i) => i.severity === "bloquea" || i.severity === "revisar") || conflictsOf(r.conflicts).length ? `${r.action}_revisar` : `${r.action}_solo`) : r.action;
+      const k = r.action === "crear" || r.action === "actualizar" ? ((r.issues as { severity: string }[]).some((i) => i.severity === "bloquea" || i.severity === "revisar") || conflictsOf(r.conflicts).length || emptiesData(r.conflicts) ? `${r.action}_revisar` : `${r.action}_solo`) : r.action;
       t[k] = (t[k] ?? 0) + 1;
     }
   }

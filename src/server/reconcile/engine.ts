@@ -245,7 +245,9 @@ export async function reconcileFact(db: Db, ctx: Ctx, fact: Fact, j: Judgement, 
   }
   if (triage === "seguir" && j.watch && w) {
     const { data: m } = await db.from("campaigns").select("watch").eq("id", ctx.missionId).single();
-    await db.from("campaigns").update({ watch: addCriterion((m?.watch as WatchConfig | null) ?? null, { text: j.watch }) as unknown as Json }).eq("id", ctx.missionId);
+    // El pedido de aviso dice sobre qué es (no solo qué mirar).
+    const about = fact.statement.replace(/^Hecho publicado(?: en [^:]+)?:\s*/i, "").split(/;|\.\s(?=[A-ZÁÉÍÓÚ])/)[0].slice(0, 90);
+    await db.from("campaigns").update({ watch: addCriterion((m?.watch as WatchConfig | null) ?? null, { text: `${about}: ${j.watch}` }) as unknown as Json }).eq("id", ctx.missionId);
   }
   if (triage === "descartar" && out.action === "crear") out.action = "rechazar";
   return out;

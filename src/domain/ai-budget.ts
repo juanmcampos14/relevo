@@ -7,7 +7,7 @@
 
 export type BudgetWindow = { start: Date; end: Date; cap: number };
 
-export const DEFAULT_MONTHLY_CAP_USD = 20;
+export const DEFAULT_MONTHLY_CAP_USD = 15;
 /** Fecha desde la que rige el tope (lo gastado antes no cuenta). */
 export const BUDGET_SINCE = "2026-10-07T03:00:00Z";
 

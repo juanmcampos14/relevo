@@ -123,7 +123,8 @@ describe("Radar reconciliado", () => {
     // El activo existe (publicación, sin verificar); el pedido de aviso quedó; ninguna oportunidad nueva.
     expect(run.import.assets.created).toEqual(["RAD-ACT-10"]);
     const { data: m } = await db.from("campaigns").select("watch").eq("id", vm).single();
-    expect((m!.watch as { criteria: { text: string }[] }).criteria.map((c) => c.text)).toContain("Renta de galpones en el Parque Industrial");
+    // El pedido de aviso dice sobre qué es y qué mirar.
+    expect((m!.watch as { criteria: { text: string }[] }).criteria.map((c) => c.text)).toContain("Galpón 450 m² sobre predio 5.000 m² en Añelo: Renta de galpones en el Parque Industrial");
     expect((await db.from("opportunities").select("id", { count: "exact", head: true }).eq("workspace_id", ws)).count).toBe(oppsBefore);
     // Reimportar no duplica: las filas ya son conocidas.
     const again = await reconcileRadar(db, { workspaceId: ws, missionId: vm, buffer: await book(), fileName: "radar.xlsx", dryRun: true, client: ai.client });

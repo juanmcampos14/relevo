@@ -15,8 +15,8 @@ import { migrateRadar, type RadarReport } from "./import";
 
 type Db = SupabaseClient<Database>;
 
-export async function reconcileRadar(db: Db, o: { workspaceId: string; missionId: string; buffer: ArrayBuffer; fileName: string; dryRun: boolean; client?: Pick<Anthropic, "beta"> }): Promise<{ import: RadarReport; run: SourceRun }> {
-  const report = await migrateRadar(db, o.workspaceId, o.buffer, { dryRun: o.dryRun, newSignals: "omitir" });
+export async function reconcileRadar(db: Db, o: { workspaceId: string; missionId: string; buffer: ArrayBuffer; fileName: string; dryRun: boolean; client?: Pick<Anthropic, "beta">; onlyRefs?: Set<string> }): Promise<{ import: RadarReport; run: SourceRun }> {
+  const report = await migrateRadar(db, o.workspaceId, o.buffer, { dryRun: o.dryRun, newSignals: "omitir", onlyRefs: o.onlyRefs });
   const plan = mapRadar(await parseTab(o.buffer, "RADAR DE MERCADO", "Hallazgo"));
   const fresh = new Set(report.signals.created);
   const facts: Fact[] = plan.signals.filter((s) => fresh.has(s.ref)).map((s) => {

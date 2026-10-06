@@ -31,8 +31,11 @@ export type RadarReport = {
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-z0-9]+/g, " ").trim();
 const words = (s: string) => new Set(fold(s).split(" ").filter((w) => w.length >= 4 && !["complejo", "anelo", "departamentos", "publicado", "precio"].includes(w)));
 
-export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuffer, opts: { dryRun: boolean; newSignals?: "crear" | "omitir" }): Promise<RadarReport> {
-  const plan = mapRadar(await parseTab(buffer, "RADAR DE MERCADO", "Hallazgo"));
+export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuffer, opts: { dryRun: boolean; newSignals?: "crear" | "omitir"; onlyRefs?: Set<string> }): Promise<RadarReport> {
+  const full = mapRadar(await parseTab(buffer, "RADAR DE MERCADO", "Hallazgo"));
+  // Sincronización incremental: solo las filas que cambiaron desde la última vez.
+  const only = (ref: string) => !opts.onlyRefs || opts.onlyRefs.has(ref);
+  const plan = { ...full, signals: full.signals.filter((x) => only(x.ref)), assets: full.assets.filter((x) => only(x.ref)), conversations: full.conversations.filter((x) => only(x.ref)) };
   const r: RadarReport = { dryRun: opts.dryRun, signals: { created: [], updated: [] }, assets: { created: [], updated: [], inconsistent: [], review: [], discrepancies: [] }, prices: { added: 0, existing: 0 }, conversations: { created: 0, existing: 0 }, hypothesesLinked: [], seenUrls: 0, assetIds: {}, sameAsset: [] };
   const today = new Date().toISOString().slice(0, 10);
 

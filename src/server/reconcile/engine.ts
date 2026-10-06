@@ -18,8 +18,9 @@ import { setCardSection } from "@/server/opportunities/candidate";
 // Brain primero: nada se promueve a oportunidad ni se descarta solo.
 
 type Db = SupabaseClient<Database>;
-export type Triage = "importa" | "seguir" | "next" | "descartar";
-const STATUS: Record<Triage, "incorporada" | "seguida" | "procesada" | "descartada"> = { importa: "incorporada", seguir: "seguida", next: "procesada", descartar: "descartada" };
+export type Triage = "importa" | "seguir" | "contexto" | "descartar";
+// "contexto" se guarda como "procesada": entendido y en memoria, sin acción. La única "próxima acción" es la tarea.
+const STATUS: Record<Triage, "incorporada" | "seguida" | "procesada" | "descartada"> = { importa: "incorporada", seguir: "seguida", contexto: "procesada", descartar: "descartada" };
 
 export type FactEntity = { kind: "empresa" | "persona" | "activo"; name: string; role?: PartyRole | null };
 export type FactValue = { variable: string; value: string; unit?: string | null; about?: string | null };
@@ -70,7 +71,7 @@ const JudgeSchema = z.object({
     key: z.string(),
     same_as: z.string().describe("Si cuenta un hecho que ya está en hechos_conocidos (aunque sea otro medio u otras palabras), su ref 'hecho:…'; si no, ''."),
     material: z.boolean().describe("true si cambia una hipótesis, una prioridad, la agenda, un candidato o una próxima acción. Contexto general = false. Lo que la misión sacó del foco no es material salvo que cambie eso."),
-    triage: z.enum(["importa", "seguir", "next", "descartar"]).describe("importa: material, cambia algo. seguir: no cambia nada hoy pero hay que vigilarlo. next: entendido, no requiere acción. descartar: no es relevante para la misión."),
+    triage: z.enum(["importa", "seguir", "contexto", "descartar"]).describe("importa: material, cambia algo (si hay un paso concreto, va en next_action). seguir: no cambia nada hoy pero hay que vigilarlo. contexto: entendido, queda en memoria, no requiere acción. descartar: no es relevante para la misión."),
     why: z.string().describe("Por qué, en una oración, en lenguaje humano."),
     finding_refs: z.array(z.string()).describe("'finding:…' de la misión que toca (solo si la conexión es clara; una señal sin hipótesis está bien)."),
     candidate_refs: z.array(z.string()).describe("'opportunity:…' de candidatos cuya ficha cambia con este dato."),
@@ -173,7 +174,7 @@ export async function reconcileFact(db: Db, ctx: Ctx, fact: Fact, j: Judgement, 
   out.material = material;
   if (place.kind === "misma") { out.action = "sin_cambios"; out.sourceAdded = `${fact.source_url ?? ctx.sourceLabel} como fuente de un hecho que ya conocíamos`; out.reconciledAgainst.push(`hecho ${known.find((k) => k.id === place.eventId)?.headline ?? place.eventId}`); }
   if (place.kind === "actualiza") { out.action = "actualizar"; out.updated.push(`hecho conocido, con dato nuevo (${place.novel.join(", ")})`); out.reconciledAgainst.push(`hecho ${known.find((k) => k.id === place.eventId)?.headline ?? place.eventId}`); }
-  const triage: Triage = place.kind === "misma" && j.triage === "importa" ? "next" : j.triage;
+  const triage: Triage = place.kind === "misma" && j.triage === "importa" ? "contexto" : j.triage;
   out.triage = triage;
   if (w) {
     const { data: s, error } = await db.from("brief_signals").insert({

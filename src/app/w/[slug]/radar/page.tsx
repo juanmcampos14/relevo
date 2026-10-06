@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { CHANGE_LABEL, BASIS_LABEL } from "@/domain/brief/contract";
 import { EmptyState, PageHeader, Pill, Section, formatDate } from "@/components/app/bits";
-import { DiscrepancyButtons, TriageButtons } from "./triage";
+import { DiscrepancyButtons, SyncNow, TriageButtons } from "./triage";
 
 export const metadata: Metadata = { title: "Radar" };
 
@@ -19,17 +19,31 @@ export default async function RadarPage({ params }: PageProps<"/w/[slug]/radar">
   const ctx = await getWorkspaceContext(slug);
   const supabase = await createClient();
   const base = `/w/${slug}`;
-  const [{ data: assets }, { data: signals }, { data: attention }, { data: diffs }] = await Promise.all([
+  const [{ data: assets }, { data: signals }, { data: attention }, { data: diffs }, { data: syncs }] = await Promise.all([
     supabase.from("assets").select("id, title, category, locality, operation, price_status, broker_text, owner_text, capacity_text, occupancy_declared, material_change, radar_ref, last_checked_on, asset_prices(amount, currency, operation, period, observed_on, source_url, publisher, origin, note), findings(id, dedup_key, statement)").eq("is_demo", false).order("last_checked_on", { ascending: false, nullsFirst: false }),
     supabase.from("brief_signals").select("id, headline, happened_on, source_url, publisher, origin, external_ref, change, basis, brief_id, story_id, status, brief_stories(title)").order("happened_on", { ascending: false, nullsFirst: false }).limit(80),
     // Lo que merece atención: lo que RELEVO juzgó que importa y todavía nadie confirmó.
     supabase.from("brief_signals").select("id, headline, triage_reason, suggested_action, source_url, publisher, origin, external_ref, happened_on").eq("status", "incorporada").is("triaged_by", null).order("created_at", { ascending: false }).limit(20),
     supabase.from("source_discrepancies").select("id, entity_type, entity_id, field, current_value, incoming_value, source, source_ref").eq("status", "pendiente").order("created_at", { ascending: false }).limit(20),
+    supabase.from("sheet_syncs").select("status, started_at, changed, result, error").order("started_at", { ascending: false }).limit(20),
   ]);
+  // El Sheet como fuente viva: cuándo se verificó por última vez y qué hizo RELEVO con el último cambio.
+  const lastCheck = syncs?.[0];
+  const lastChange = syncs?.find((x) => x.status === "procesado");
+  const changedRows = (c: unknown) => Object.values((c ?? {}) as Record<string, { nuevas: string[]; modificadas: string[] }>).reduce((n, t) => n + t.nuevas.length + t.modificadas.length, 0);
+  const when = (iso: string) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(iso));
   return (
     <>
       <PageHeader title="Radar" subtitle="Lo que RELEVO aprendió afuera, guardado con su fuente: activos con historial de precios y señales. Una observación no es una conclusión." />
       <div className="space-y-8">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm shadow-xs">
+          <span className="font-medium">Sheet operativo</span>
+          <span className="text-muted-foreground">
+            {lastCheck ? <>Última verificación: {when(lastCheck.started_at)}{lastCheck.status === "error" ? ` · error: ${lastCheck.error}` : ""}</> : "Todavía no se sincronizó"}
+            {lastChange ? <> · Último cambio procesado: {when(lastChange.started_at)} ({changedRows(lastChange.changed)} filas)</> : null}
+          </span>
+          {ctx.canEdit && <span className="ml-auto"><SyncNow slug={slug} /></span>}
+        </div>
         {(attention?.length || diffs?.length) ? (
           <Section title="Merece tu atención">
             <ul className="divide-y rounded-xl border bg-card text-sm shadow-xs">

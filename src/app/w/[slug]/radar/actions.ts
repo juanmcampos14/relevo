@@ -6,10 +6,13 @@ import { getWorkspaceContext } from "@/server/context";
 import { dbErrorMessage, type ActionState } from "@/server/action-result";
 import { addCriterion, type WatchConfig } from "@/server/mission/watch";
 import type { Json } from "@/lib/supabase/database.types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { syncWorkspaceSheet } from "@/server/sheet/run";
 
 // Triage de lo que entra: IMPORTA (cambia algo: queda su próxima acción) · SEGUIR (pedido de aviso) ·
-// NEXT (entendido, sale del trabajo activo y queda en memoria) · DESCARTAR (no vuelve salvo cambio material).
-const STATUS = { importa: "incorporada", seguir: "seguida", next: "procesada", descartar: "descartada" } as const;
+// CONTEXTO (entendido, sale del trabajo activo y queda en memoria, sin acción) · DESCARTAR (no vuelve salvo
+// cambio material). La única "próxima acción" es la tarea: Importa la crea si hay un paso concreto.
+const STATUS = { importa: "incorporada", seguir: "seguida", contexto: "procesada", descartar: "descartada" } as const;
 export type TriageChoice = keyof typeof STATUS;
 
 export async function triageSignal(slug: string, signalId: string, choice: TriageChoice): Promise<ActionState> {
@@ -30,7 +33,7 @@ export async function triageSignal(slug: string, signalId: string, choice: Triag
     await supabase.from("campaigns").update({ watch: addCriterion((m?.watch as WatchConfig | null) ?? null, { text: s.headline.slice(0, 200), by: ctx.user.id }) as unknown as Json }).eq("id", mission);
   }
   revalidatePath(`/w/${slug}/radar`);
-  return { ok: true, message: choice === "importa" ? "Importa: quedó su próxima acción." : choice === "seguir" ? "Lo sigo: te aviso si cambia." : choice === "next" ? "Entendido: sale del trabajo activo." : "Descartado." };
+  return { ok: true, message: choice === "importa" ? "Importa: quedó su próxima acción." : choice === "seguir" ? "Lo sigo: te aviso si cambia." : choice === "contexto" ? "Guardado como contexto: no requiere acción." : "Descartado." };
 }
 
 const TABLE = { company: "companies", contact: "contacts", establishment: "establishments", asset: "assets" } as const;
@@ -49,4 +52,15 @@ export async function decideDiscrepancy(slug: string, id: string, verdict: "acep
   await supabase.from("source_discrepancies").update({ status: verdict, decided_by: ctx.user.id, decided_at: new Date().toISOString() }).eq("id", id);
   revalidatePath(`/w/${slug}/radar`);
   return { ok: true, message: verdict === "aceptada" ? "Actualizado con el dato nuevo." : "Se mantiene lo que había." };
+}
+
+/** Sincronizar el Sheet operativo ahora (además de las corridas de cada hora). */
+export async function syncSheetNow(slug: string): Promise<ActionState> {
+  const ctx = await getWorkspaceContext(slug);
+  if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
+  const r = await syncWorkspaceSheet(createAdminClient(), ctx.workspace.id, ctx.workspace.settings, "manual").catch((e) => ({ status: "error" as const, error: (e as Error).message }));
+  revalidatePath(`/w/${slug}/radar`);
+  if (r.status === "sin_cambios") return { ok: true, message: "El Sheet no cambió desde la última sincronización." };
+  if (r.status === "procesado") return { ok: true, message: "Listo: procesé lo que cambió en el Sheet." };
+  return { message: r.error ?? "No se pudo sincronizar." };
 }

@@ -60,7 +60,7 @@ const pick = (v: Record<string, unknown>, cols: string[], only?: string[]) =>
 
 async function crmSourceId(db: Db, workspaceId: string): Promise<string> {
   const title = "CRM Daicou (Google Sheets)";
-  const { data } = await db.from("sources").select("id").eq("kind", "crm").eq("title", title).maybeSingle();
+  const { data } = await db.from("sources").select("id").eq("workspace_id", workspaceId).eq("kind", "crm").eq("title", title).maybeSingle();
   if (data) return data.id;
   const { data: created, error } = await db
     .from("sources")
@@ -79,7 +79,7 @@ const arNoon = (date: string) => `${date}T12:00:00-03:00`;
 
 /** Fuente que el CRM cita en texto libre: se registra una vez (tipo "crm") y se reutiliza. */
 async function citedSourceId(db: Db, workspaceId: string, text: string, externalId: string): Promise<string> {
-  const { data } = await db.from("sources").select("id").eq("kind", "crm").eq("title", text).maybeSingle();
+  const { data } = await db.from("sources").select("id").eq("workspace_id", workspaceId).eq("kind", "crm").eq("title", text).maybeSingle();
   if (data) return data.id;
   const { data: created, error } = await db
     .from("sources")
@@ -94,10 +94,10 @@ async function citedSourceId(db: Db, workspaceId: string, text: string, external
  * La vertical sale de la taxonomía acordada, no del texto libre del Sheet: si el sector coincide con una
  * vertical existente se vincula; si no, queda como sector de la empresa (sin crear verticales nuevas).
  */
-async function verticalId(db: Db, name: string, cache: Map<string, string | null>): Promise<string | null> {
+async function verticalId(db: Db, workspaceId: string, name: string, cache: Map<string, string | null>): Promise<string | null> {
   const key = fold(name);
   if (cache.has(key)) return cache.get(key)!;
-  const { data: all } = await db.from("verticals").select("id, name").eq("status", "activa");
+  const { data: all } = await db.from("verticals").select("id, name").eq("workspace_id", workspaceId).eq("status", "activa");
   const hit = (all ?? []).find((v) => fold(v.name) === key)?.id ?? null;
   cache.set(key, hit);
   return hit;
@@ -206,7 +206,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
         let alias: string | undefined;
         if (creating) {
           // La misma URL puede estar cargada a mano: se reutiliza en vez de duplicarla.
-          const { data: same } = sourceRow.url ? await db.from("sources").select("id").eq("url", sourceRow.url).maybeSingle() : { data: null };
+          const { data: same } = sourceRow.url ? await db.from("sources").select("id").eq("workspace_id", workspaceId).eq("url", sourceRow.url).maybeSingle() : { data: null };
           if (same) {
             id = same.id;
             alias = [...ctx.refs.values()].find((r) => r.entity_type === "source" && r.entity_id === same.id && r.external_id !== row.external_id)?.external_id;
@@ -288,7 +288,7 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
             }
           }
           if (ids.target && v.sector && (creating || only.includes("sector"))) {
-            const vid = await verticalId(db, v.sector as string, verticals);
+            const vid = await verticalId(db, workspaceId, v.sector as string, verticals);
             if (vid) {
               const { error } = await db.from("target_verticals").upsert({ workspace_id: workspaceId, target_id: ids.target, vertical_id: vid }, { onConflict: "target_id,vertical_id", ignoreDuplicates: true });
               if (error) throw error;

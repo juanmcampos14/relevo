@@ -103,14 +103,14 @@ describe("Radar reconciliado", () => {
     // Lo que el Brain ya sabía de los bitrenes (otro medio, otras palabras).
     const known = (await db.from("brief_signals").insert({ workspace_id: ws, origin: "vigilancia", basis: "hecho", signal_type: "otro", section: "general", headline: "Vialidad anuncia prueba piloto de bitrenes entre Plaza Huincul y Añelo", change: "nuevo", relevance: "alta", campaign_ids: [vm], happened_on: "2026-10-05" } as never).select("id").single()).data!.id;
     const ai = fakeAI(null, () => ({ items: [
-      { key: "RAD-INF-03", same_as: `hecho:${known}`, material: false, triage: "next", why: "Ya lo sabíamos por la vigilancia.", finding_refs: [], candidate_refs: [], next_action: "", watch: "" },
-      { key: "RAD-MKT-02", same_as: "", material: false, triage: "next", why: "Contexto de escala.", finding_refs: [], candidate_refs: [], next_action: "", watch: "" },
+      { key: "RAD-INF-03", same_as: `hecho:${known}`, material: false, triage: "contexto", why: "Ya lo sabíamos por la vigilancia.", finding_refs: [], candidate_refs: [], next_action: "", watch: "" },
+      { key: "RAD-MKT-02", same_as: "", material: false, triage: "contexto", why: "Contexto de escala.", finding_refs: [], candidate_refs: [], next_action: "", watch: "" },
       { key: "RAD-ACT-10", same_as: "", material: false, triage: "seguir", why: "Los galpones salieron del foco; seguimos el precio como referencia.", finding_refs: [], candidate_refs: [], next_action: "", watch: "Renta de galpones en el Parque Industrial" },
     ] }));
     const { count: oppsBefore } = await db.from("opportunities").select("id", { count: "exact", head: true }).eq("workspace_id", ws);
     // En seco: no escribe nada.
     const dry = await reconcileRadar(db, { workspaceId: ws, missionId: vm, buffer: await book(), fileName: "radar.xlsx", dryRun: true, client: ai.client });
-    expect(dry.run.outcomes.map((o) => [o.key, o.action, o.triage])).toEqual([["RAD-INF-03", "sin_cambios", "next"], ["RAD-MKT-02", "crear", "next"], ["RAD-ACT-10", "crear", "seguir"]]);
+    expect(dry.run.outcomes.map((o) => [o.key, o.action, o.triage])).toEqual([["RAD-INF-03", "sin_cambios", "contexto"], ["RAD-MKT-02", "crear", "contexto"], ["RAD-ACT-10", "crear", "seguir"]]);
     expect((await db.from("brief_signals").select("id").eq("workspace_id", ws).not("external_ref", "is", null)).data).toEqual([]);
 
     const run = await reconcileRadar(db, { workspaceId: ws, missionId: vm, buffer: await book(), fileName: "radar.xlsx", dryRun: false, client: ai.client });

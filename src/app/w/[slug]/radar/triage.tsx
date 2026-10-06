@@ -2,12 +2,12 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { decideDiscrepancy, triageSignal, type TriageChoice } from "./actions";
+import { decideDiscrepancy, syncSheetNow, triageSignal, type TriageChoice } from "./actions";
 
 const CHOICES: { key: TriageChoice; label: string; hint: string }[] = [
   { key: "importa", label: "Importa", hint: "Cambia algo: queda su próxima acción" },
   { key: "seguir", label: "Seguir", hint: "Vigilar: te aviso si cambia" },
-  { key: "next", label: "Next", hint: "Entendido: sale del trabajo activo" },
+  { key: "contexto", label: "Contexto", hint: "Entendido: queda en memoria, sin acción" },
   { key: "descartar", label: "Descartar", hint: "No relevante" },
 ];
 
@@ -32,5 +32,14 @@ export function DiscrepancyButtons({ slug, id }: { slug: string; id: string }) {
       <button type="button" disabled={pending} onClick={() => go("descartada")} className="rounded-full border px-3 py-1 text-xs hover:bg-muted">Mantener lo actual</button>
       <button type="button" disabled={pending} onClick={() => go("aceptada")} className="rounded-full border px-3 py-1 text-xs hover:bg-muted">Usar el dato nuevo</button>
     </div>
+  );
+}
+
+export function SyncNow({ slug }: { slug: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button type="button" disabled={pending} onClick={() => start(async () => { const r = await syncSheetNow(slug); if (r.ok) toast.success(r.message); else toast.error(r.message); })} className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50">
+      {pending ? "Sincronizando…" : "Sincronizar ahora"}
+    </button>
   );
 }

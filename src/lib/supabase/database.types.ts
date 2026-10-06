@@ -1694,6 +1694,44 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"sheet_rows": {
+                  Row: {
+                    "external_id": string,"first_seen_at": string,"last_batch_id": string | null,"last_changed_at": string,"last_processed_at": string | null,"row_hash": string,"row_number": number | null,"sheet_id": string,"tab": string,"values": NonNullable<Json>,"workspace_id": string
+                  }
+                  Insert: {
+                    "external_id": string,"first_seen_at"?: string,"last_batch_id"?: string | null,"last_changed_at"?: string,"last_processed_at"?: string | null,"row_hash": string,"row_number"?: number | null,"sheet_id": string,"tab": string,"values"?: NonNullable<Json>,"workspace_id": string
+                  }
+                  Update: {
+                    "external_id"?: string,"first_seen_at"?: string,"last_batch_id"?: string | null,"last_changed_at"?: string,"last_processed_at"?: string | null,"row_hash"?: string,"row_number"?: number | null,"sheet_id"?: string,"tab"?: string,"values"?: NonNullable<Json>,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sheet_rows_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"sheet_syncs": {
+                  Row: {
+                    "batch_ids": (string)[],"changed": NonNullable<Json>,"error": string | null,"finished_at": string | null,"id": string,"result": NonNullable<Json>,"sheet_id": string,"sheet_modified_at": string | null,"started_at": string,"status": string,"trigger": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "batch_ids"?: (string)[],"changed"?: NonNullable<Json>,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"result"?: NonNullable<Json>,"sheet_id": string,"sheet_modified_at"?: string | null,"started_at"?: string,"status": string,"trigger": string,"workspace_id": string
+                  }
+                  Update: {
+                    "batch_ids"?: (string)[],"changed"?: NonNullable<Json>,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"result"?: NonNullable<Json>,"sheet_id"?: string,"sheet_modified_at"?: string | null,"started_at"?: string,"status"?: string,"trigger"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sheet_syncs_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"source_discrepancies": {
                   Row: {
                     "created_at": string,"current_value": string | null,"decided_at": string | null,"decided_by": string | null,"entity_id": string,"entity_type": string,"field": string,"id": string,"incoming_value": string | null,"source": string,"source_ref": string | null,"source_url": string | null,"status": string,"workspace_id": string

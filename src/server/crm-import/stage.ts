@@ -59,11 +59,18 @@ export type StageContext = {
 const refKey = (type: string, ext: string) => `${type}:${ext.toUpperCase()}`;
 
 export async function loadStageContext(db: Db, workspaceId: string): Promise<StageContext> {
-  const [{ data: memberships }, { data: mission }, { data: refs }] = await Promise.all([
+  // Todo filtrado por workspace: con la sesión de una persona lo garantizaba RLS, pero la sincronización
+  // automática corre con el cliente de servicio (vería otros workspaces).
+  const [{ data: memberships }, { data: ws }, { data: refs }] = await Promise.all([
     db.from("memberships").select("user_id").eq("workspace_id", workspaceId).eq("status", "active"),
-    db.from("campaigns").select("id").eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle(),
-    db.from("external_refs").select("external_id, entity_type, entity_id, last_values").eq("source_system", "google_sheets"),
+    db.from("workspaces").select("settings").eq("id", workspaceId).maybeSingle(),
+    db.from("external_refs").select("external_id, entity_type, entity_id, last_values").eq("workspace_id", workspaceId).eq("source_system", "google_sheets"),
   ]);
+  // La misión: la que se configuró para el Sheet operativo; si no, la primera misión activa del workspace.
+  const configured = (ws?.settings as { sheet_sync?: { mission_id?: string } } | null)?.sheet_sync?.mission_id ?? null;
+  const { data: mission } = configured
+    ? await db.from("campaigns").select("id").eq("id", configured).eq("workspace_id", workspaceId).maybeSingle()
+    : await db.from("campaigns").select("id").eq("workspace_id", workspaceId).eq("kind", "mision").eq("status", "activa").order("created_at").limit(1).maybeSingle();
   const ids = (memberships ?? []).map((m) => m.user_id);
   const { data: profiles } = ids.length ? await db.from("profiles").select("user_id, display_name, email").in("user_id", ids) : { data: [] };
   return {
@@ -231,15 +238,14 @@ export async function planImport(db: Db, workspaceId: string, parsed: ParsedWork
       : [];
   };
 
-  // Posibles duplicados: empresas de RELEVO que no vienen de este CRM.
-  const importedIds = new Set([...ctx.refs.values()].filter((r) => r.entity_type === "company").map((r) => r.entity_id));
-  const { data: existing } = await db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone, tax_id");
-  const pool = (existing ?? []).filter((c) => !importedIds.has(c.id)).map((c) => ({ id: c.id, name: c.trade_name ?? c.legal_name ?? "", locality: c.locality, website: c.website, phone: c.public_phone, tax_id: c.tax_id }));
+  // Posibles duplicados de una fila NUEVA: cualquier empresa de RELEVO, también las que vinieron del Sheet
+  // (con el Sheet vivo, el research puede cargar la misma empresa con otro ID: AN-0035 / AN-0096).
+  const { data: existing } = await db.from("companies").select("id, trade_name, legal_name, locality, website, public_phone, tax_id").eq("workspace_id", workspaceId);
+  const pool = (existing ?? []).map((c) => ({ id: c.id, name: c.trade_name ?? c.legal_name ?? "", locality: c.locality, website: c.website, phone: c.public_phone, tax_id: c.tax_id }));
 
-  // Personas que ya están en RELEVO sin venir de este CRM (p. ej. creadas desde una captura).
-  const importedContacts = new Set([...ctx.refs.values()].filter((r) => r.entity_type === "contact").map((r) => r.entity_id));
-  const { data: existingContacts } = await db.from("contacts").select("id, full_name, email, phone, contact_links(companies(trade_name, legal_name))").eq("contact_kind", "persona");
-  const contactPool = (existingContacts ?? []).filter((c) => !importedContacts.has(c.id)).map((c) => ({
+  // Personas que ya están en RELEVO (de una captura o del mismo Sheet con otro ID).
+  const { data: existingContacts } = await db.from("contacts").select("id, full_name, email, phone, contact_links(companies(trade_name, legal_name))").eq("workspace_id", workspaceId).eq("contact_kind", "persona");
+  const contactPool = (existingContacts ?? []).map((c) => ({
     id: c.id, name: c.full_name, email: c.email, phone: c.phone,
     companies: c.contact_links.map((l) => l.companies?.trade_name ?? l.companies?.legal_name).filter((x): x is string => !!x),
   }));

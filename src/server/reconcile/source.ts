@@ -28,7 +28,7 @@ export async function reconcileSource(
   const outcomes: Outcome[] = [];
   for (const f of facts) {
     // Sin juicio (falló la IA) no se decide por la persona: queda para revisar, como contexto.
-    const j = judged.get(f.key) ?? { same_as: null, material: false, triage: "next" as const, why: "Sin juicio automático: revisar.", finding_ids: [], candidate_ids: [], next_action: null, watch: null };
+    const j = judged.get(f.key) ?? { same_as: null, material: false, triage: "contexto" as const, why: "Sin juicio automático: revisar.", finding_ids: [], candidate_ids: [], next_action: null, watch: null };
     const o = await reconcileFact(db, ctx, f, j, known, pool);
     if (!judged.has(f.key)) o.review.push("RELEVO no pudo juzgarlo: revisalo.");
     outcomes.push(o);

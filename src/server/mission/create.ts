@@ -30,7 +30,7 @@ export type MissionDraft = z.infer<typeof MissionDraftSchema>;
 const SYSTEM = `Convertís lo que una persona quiere investigar en una misión de RELEVO (un motor que descubre y valida oportunidades de negocio e inversión). Español rioplatense, claro y corto. No inventes datos. No es una entrevista: si se puede empezar a investigar con lo que dijo, no preguntes nada (lo que falte se aprende en el camino).`;
 
 export async function draftMission(db: Db, opts: { workspaceId: string; userId: string; text: string; client?: Pick<Anthropic, "beta"> }) {
-  return deepCall(db, { userFacing: true, workspaceId: opts.workspaceId, userId: opts.userId, promptVersion: "mision-alta-v1", system: SYSTEM, prompt: `Lo que quiere investigar:\n${opts.text}`, schema: MissionDraftSchema, client: opts.client, effort: "low" });
+  return deepCall(db, { workspaceId: opts.workspaceId, userId: opts.userId, promptVersion: "mision-alta-v1", system: SYSTEM, prompt: `Lo que quiere investigar:\n${opts.text}`, schema: MissionDraftSchema, client: opts.client, effort: "low" });
 }
 
 /** Crea la misión y deja a RELEVO trabajando: estado inicial y un primer panorama en el inicio. */

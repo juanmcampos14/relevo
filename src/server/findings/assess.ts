@@ -8,7 +8,6 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { ECONOMIC_KEYS, sanitizeEconomics } from "@/domain/economics";
 import { BUYER_ROLE, DEMAND_SECTOR, EVIDENCE_LEVEL_KEYS, PURPOSE_KEYS, sanitizeDiscovery, type Purpose } from "@/domain/discovery";
 import { costOf } from "@/server/ai/pricing";
-import { budgetBlock } from "@/server/ai/budget";
 import {
   DIMENSIONS,
   DIMENSION_KEYS,
@@ -101,13 +100,11 @@ const bareId = (id: string) => id.replace(/^evidence:/, "");
 
 export type AssessResult = { ok: true; assessmentId: string; proposals: number } | { ok: false; message: string };
 
-export async function assessFinding(db: Db, opts: { workspaceId: string; settings: unknown; userId: string; findingId: string; client?: Anthropic; today?: string; background?: boolean }): Promise<AssessResult> {
+export async function assessFinding(db: Db, opts: { workspaceId: string; settings: unknown; userId: string; findingId: string; client?: Anthropic; today?: string }): Promise<AssessResult> {
   if ((opts.settings as { ai_processing_consent?: boolean } | null)?.ai_processing_consent !== true) {
     return { ok: false, message: "El workspace no habilitó el procesamiento con IA." };
   }
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, message: "La IA no está configurada en este entorno." };
-  const blocked = await budgetBlock(opts.background ? "background" : "user");
-  if (blocked) return { ok: false, message: blocked };
   const since = new Date(Date.now() - 86_400_000).toISOString();
   const { count } = await db.from("ai_runs").select("id", { count: "exact", head: true }).eq("user_id", opts.userId).like("prompt_version", "finding-estado%").gte("created_at", since);
   if ((count ?? 0) >= DAILY_LIMIT) return { ok: false, message: `Llegamos al tope de ${DAILY_LIMIT} evaluaciones de hipótesis en 24 horas.` };

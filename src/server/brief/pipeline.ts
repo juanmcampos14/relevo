@@ -11,7 +11,7 @@ import { isMissionBriefContent, renderMissionBriefEmail, type MissionBriefConten
 import { briefMissionId, briefRecipients, collectForMission, researchForMission, dedupeMissionBrief, saveMissionBrief, writeMissionBrief, type MissionItem } from "./mission-brief";
 import type { EmailProvider } from "@/server/email/provider";
 import { collectItems, type CollectedItem } from "./collect";
-import { BRIEF_MODEL, type ResearchEngine, type SynthesisEngine } from "./engines";
+import type { ResearchEngine, SynthesisEngine } from "./engines";
 import { loadBriefMemory, memoryDigest, type BriefMemory } from "./memory";
 
 // Morning Brief: máquina de estados por brief (un brief por workspace y día).
@@ -199,8 +199,6 @@ async function advanceMissionBrief(db: Db, b: BriefRow, ws: { settings: unknown 
         return { briefId, did: `modo reducido (tope USD ${monthlyCapUsd})`, status: "sintetizando", more: true };
       }
       const r = await researchForMission(db, missionId, items);
-      // La investigación web también queda en ai_runs: el tope mensual se calcula desde ahí.
-      await db.from("ai_runs").insert({ workspace_id: b.workspace_id, user_id: null, model: BRIEF_MODEL, prompt_version: "brief-investigacion-v1", status: "ok", input_tokens: r.usage.input, output_tokens: r.usage.output, cache_read_tokens: r.usage.cacheRead, cache_write_tokens: r.usage.cacheWrite, cost_usd: Number(r.usage.costUsd.toFixed(5)), error: null, duration_ms: null });
       await db.from("briefs").update({ research: { ...((b.research as object) ?? {}), memo: r.memo, sources: r.sources } as unknown as J, usage: { research: r.usage } as unknown as J, status: "sintetizando", step_started_at: null, attempts: 0, error: null }).eq("id", briefId);
       return { briefId, did: `investigación lista (${r.sources.length} fuentes)`, status: "sintetizando", more: true };
     }

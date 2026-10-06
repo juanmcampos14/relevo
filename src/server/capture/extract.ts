@@ -4,7 +4,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
 import { costOf } from "@/server/ai/pricing";
-import { budgetBlock } from "@/server/ai/budget";
 
 // Extracción de una captura de campo: la IA PROPONE (docs/04-modelo-canonico.md §2).
 // Nada de esto se escribe en RELEVO sin que una persona lo acepte.
@@ -173,8 +172,6 @@ export type ExtractionResult =
 
 export async function extractCapture(client: Anthropic, ctx: ExtractionContext): Promise<ExtractionResult> {
   const started = Date.now();
-  const blocked = await budgetBlock("user");
-  if (blocked) return { ok: false, status: "error", error: blocked, durationMs: 0 };
   // Lo estable primero (lo reutiliza la caché): listas del workspace. Lo variable al final: la captura.
   const reference = [
     "EMPRESAS EXISTENTES (id · nombre · localidad):",

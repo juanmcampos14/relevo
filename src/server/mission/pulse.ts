@@ -49,7 +49,7 @@ export async function reassessFromSignals(db: Db, m: MissionRef, since: string):
   if (!userId) return { reassessed: [] };
   const done: string[] = [];
   for (const findingId of due) {
-    const r = await assessFinding(db, { workspaceId: m.workspace_id, settings: m.settings, userId, findingId, background: true }).catch(() => null);
+    const r = await assessFinding(db, { workspaceId: m.workspace_id, settings: m.settings, userId, findingId }).catch(() => null);
     if (r?.ok) done.push(findingId);
   }
   return { reassessed: done };
@@ -76,9 +76,7 @@ export async function pulse(db: Db, m: MissionRef): Promise<{ ran: boolean; chan
   if (s.ok) cost += s.costUsd;
   const e = await describeMission(db, { workspaceId: m.workspace_id, campaignId: m.id });
   if (e.ok) cost += e.costUsd;
-  if (process.env.RELEVO_PREPARE_MOVES === "1") {
-    const p = await prepareMoves(db, { workspaceId: m.workspace_id, campaignId: m.id, slug: m.slug, settings: m.settings });
-    cost += p.costUsd;
-  }
+  const p = await prepareMoves(db, { workspaceId: m.workspace_id, campaignId: m.id, slug: m.slug, settings: m.settings });
+  cost += p.costUsd;
   return { ran: true, changes, costUsd: cost, reassessed: reassessed.length };
 }

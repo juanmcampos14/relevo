@@ -34,6 +34,7 @@ export async function reconcileRadar(db: Db, o: { workspaceId: string; missionId
       entities: s.entity && s.section !== "activos" ? [{ kind: "empresa" as const, name: s.entity }] : [],
       values: [],
       asset_ids: asset && report.assetIds[asset.ref] ? [report.assetIds[asset.ref]] : [],
+      linkOnly: true,
     };
   });
   const run = await reconcileSource(db, { workspaceId: o.workspaceId, missionId: o.missionId, origin: "radar_sheet", sourceLabel: "RADAR DE MERCADO (Sheet)", externalRef: true, system: "radar", fileName: o.fileName, content: JSON.stringify(facts), dryRun: o.dryRun }, facts, { client: o.client });

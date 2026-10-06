@@ -35,8 +35,10 @@ export type Fact = {
   entities: FactEntity[];
   values: FactValue[];
   asset_ids?: string[];
+  /** Las entidades solo se vinculan si ya existen (p. ej. la columna "entidad" del Radar trae temas, no actores). */
+  linkOnly?: boolean;
 };
-export type Judgement = { same_as: string | null; material: boolean; triage: Triage; why: string; finding_ids: string[]; candidate_ids: string[]; next_action: string | null; watch: string | null };
+export type Judgement = { same_as: string | null; material: boolean; triage: Triage; why: string; finding_ids: string[]; candidate_ids: string[]; next_action: string | null; watch: string | null; byModel?: boolean };
 
 export type Outcome = {
   key: string;
@@ -106,7 +108,7 @@ export async function judgeFacts(db: Db, ctx: Ctx, facts: Fact[], known: KnownEv
   const kset = new Set(known.map((k) => k.id));
   for (const it of r.value.items) {
     const same = it.same_as.startsWith("hecho:") ? it.same_as.slice(6) : null;
-    judged.set(it.key, { same_as: same && kset.has(same) ? same : null, material: it.material, triage: it.triage, why: it.why, finding_ids: ids(it.finding_refs, "finding", fset), candidate_ids: ids(it.candidate_refs, "opportunity", oset), next_action: it.next_action.trim() || null, watch: it.watch.trim() || null });
+    judged.set(it.key, { same_as: same && kset.has(same) ? same : null, material: it.material, triage: it.triage, why: it.why, finding_ids: ids(it.finding_refs, "finding", fset), candidate_ids: ids(it.candidate_refs, "opportunity", oset), next_action: it.next_action.trim() || null, watch: it.watch.trim() || null, byModel: true });
   }
   return { judged, costUsd: r.costUsd };
 }
@@ -143,6 +145,7 @@ export async function reconcileFact(db: Db, ctx: Ctx, fact: Fact, j: Judgement, 
       if (e.kind === "empresa") companyIds.push(m.item.id);
       continue;
     }
+    if (fact.linkOnly) continue;
     if (m?.kind === "posible") {
       out.review.push(`¿${e.name} es ${m.item.names[0]}?`);
       if (w) await db.from("brief_candidates").insert({ workspace_id: ctx.workspaceId, brief_id: null, campaign_id: ctx.missionId, kind: e.kind, name: e.name.slice(0, 200), detail: fact.statement.slice(0, 600), source_url: fact.source_url ?? null, question: `¿${e.name} es la misma que ${m.item.names[0]}?`, maybe_ref: `${e.kind === "empresa" ? "company" : "contact"}:${m.item.id}` });
@@ -161,7 +164,11 @@ export async function reconcileFact(db: Db, ctx: Ctx, fact: Fact, j: Judgement, 
   }
 
   // 2. ¿Hecho conocido o nuevo? Artículo ≠ hecho.
-  const place = placeSignal({ headline: fact.statement, summary: fact.summary, happened_on: fact.happened_on, company_ids: companyIds, asset_ids: fact.asset_ids ?? [], change: "nuevo", relevance: j.material ? "alta" : "media" }, known, { sameAs: j.same_as });
+  // Si juzgó el modelo, manda su lectura de "mismo hecho" (la regla fija confunde publicaciones distintas y
+  // notas que comparten palabras); la regla queda como red cuando no hubo juicio. Una publicación de un
+  // activo nunca es "el mismo hecho" por regla: eso lo resuelve la reconciliación de activos.
+  const pool_ = j.byModel || fact.section === "activos" ? known.filter((k) => k.id === j.same_as) : known;
+  const place = placeSignal({ headline: fact.statement, summary: fact.summary, happened_on: fact.happened_on, company_ids: companyIds, asset_ids: fact.asset_ids ?? [], change: "nuevo", relevance: j.material ? "alta" : "media" }, pool_, { sameAs: j.same_as });
   const material = place.kind === "misma" ? false : j.material && place.material !== false;
   out.material = material;
   if (place.kind === "misma") { out.action = "sin_cambios"; out.sourceAdded = `${fact.source_url ?? ctx.sourceLabel} como fuente de un hecho que ya conocíamos`; out.reconciledAgainst.push(`hecho ${known.find((k) => k.id === place.eventId)?.headline ?? place.eventId}`); }

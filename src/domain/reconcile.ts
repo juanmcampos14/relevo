@@ -55,9 +55,14 @@ export function sameListing(a: ListingLike, b: ListingLike): boolean {
   if (!a.surface_m2 || !b.surface_m2) return false;
   if (a.operation && b.operation && a.operation !== b.operation) return false;
   const near = Math.abs(a.surface_m2 - b.surface_m2) / Math.max(a.surface_m2, b.surface_m2) <= 0.05;
-  const loc = (s?: string | null) => entityKey(s ?? "");
-  const sameLoc = !loc(a.locality) || !loc(b.locality) || loc(a.locality).split(" ").some((t) => loc(b.locality).includes(t));
-  return near && sameLoc;
+  const words = (x?: string | null) => new Set(entityKey(x ?? "").split(" ").filter((t) => t.length >= 4 && !/^\d+$/.test(t)));
+  const la = words(a.locality);
+  const lb = words(b.locality);
+  const sameLoc = !la.size || !lb.size || [...la].some((t) => lb.has(t));
+  // Que hablen de lo mismo (galpón con galpón, complejo con complejo): 500 m² de galpón no es un complejo de 500 m².
+  const ta = words(a.title);
+  const sameKind = [...words(b.title)].some((t) => ta.has(t));
+  return near && sameLoc && sameKind;
 }
 
 export type CandidateImpact = {

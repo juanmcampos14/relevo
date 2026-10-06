@@ -19,8 +19,10 @@ describe("identidad semántica", () => {
 describe("publicaciones", () => {
   it("misma ficha o misma superficie y operación en la misma zona = mismo activo (un precio más, no un activo nuevo)", () => {
     expect(sameListing({ title: "a", url: "https://www.zonaprop.com.ar/propiedades/clasificado/x-60297615.html?utm=1" }, { title: "b", url: "https://www.zonaprop.com.ar/propiedades/clasificado/x-60297615.html" })).toBe(true);
-    expect(sameListing({ title: "Galpón 450", surface_m2: 450, operation: "alquiler", locality: "Parque Industrial · Añelo" }, { title: "Galpón PI", surface_m2: 455, operation: "alquiler", locality: "Parque Industrial Añelo" })).toBe(true);
+    expect(sameListing({ title: "Galpón 450", surface_m2: 450, operation: "alquiler", locality: "Parque Industrial · Añelo" }, { title: "Galpón · Parque Industrial", surface_m2: 455, operation: "alquiler", locality: "Parque Industrial Añelo" })).toBe(true);
     expect(sameListing({ title: "Galpón 450", surface_m2: 450, operation: "alquiler" }, { title: "Galpón 300", surface_m2: 300, operation: "alquiler" })).toBe(false);
+    // Misma superficie y operación pero otra cosa (caso real del Radar del 06/10).
+    expect(sameListing({ title: "Base operativa 6.000 m² · PIN 3", surface_m2: 500, operation: "venta", locality: "Parque Industrial N°3 · Añelo" }, { title: "Complejo departamentos + local · Ruta 7", surface_m2: 500, operation: "venta", locality: "Ruta Provincial 7 · Añelo" })).toBe(false);
     // Los índices de un portal (misma URL de listado) no identifican un activo.
     expect(sameListing({ title: "Edificio 28", url: "https://inmuebles.mercadolibre.com.ar/venta/neuquen/anelo/" }, { title: "Cabañas", url: "https://inmuebles.mercadolibre.com.ar/venta/neuquen/anelo/" })).toBe(false);
   });

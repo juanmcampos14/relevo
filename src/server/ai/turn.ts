@@ -119,7 +119,9 @@ export async function runTurn(
   const campaignId = mission;
   const started = Date.now();
   const result = await runAgent({
-    cacheTtl: "1h",
+    // Caché de 5 minutos: medido el 2026-10-06, la mayor parte del costo eran mensajes sueltos con más de una hora
+    // de diferencia, donde la de 1 hora ya venció y se paga al doble. Con RELEVO_CONVERSATION_CACHE=1h se vuelve.
+    cacheTtl: process.env.RELEVO_CONVERSATION_CACHE === "1h" ? "1h" : "5m",
     client: opts.client ?? new Anthropic(),
     history,
     userText: opts.text,

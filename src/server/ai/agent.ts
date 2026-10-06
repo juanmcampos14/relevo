@@ -220,10 +220,10 @@ export async function runAgent(opts: {
         fallbacks: "default",
         thinking: { type: "adaptive" },
         output_config: { effort: AI_EFFORT },
-        // Prefijo fijo (herramientas + sistema) en caché de 1 hora; la conversación, según quién la usa (cacheTtl):
-        // en el campo, entre un mensaje y otro suelen pasar más de 5 minutos y releer cuesta mucho menos que reescribir.
+        // Prefijo fijo (herramientas + sistema) y conversación con la misma caché (cacheTtl): 5 minutos por defecto,
+        // que cuesta menos al escribirse; 1 hora solo si se pide (sesiones con mensajes cada 5–60 minutos).
         cache_control: opts.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
+        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: opts.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } }],
         // Memoria de RELEVO (herramientas propias) + la web del lado de Anthropic, con citas.
         tools: [...TOOL_DEFINITIONS, { type: "web_search_20260209", name: "web_search", max_uses: 6 }, { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 }],
         messages,

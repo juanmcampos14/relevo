@@ -86,14 +86,14 @@ export async function syncSheet(
       const batchId = await stageImport(db, o.workspaceId, filtered, { fileName: `Sheet operativo · sincronización ${new Date().toISOString().slice(0, 16)}`, sha256: createHash("sha256").update(Buffer.from(o.buffer)).digest("hex") });
       // Lo que no choca con nada se aplica solo; lo que choca con una corrección de RELEVO queda como
       // información diferente (y la fila, pendiente en el lote); los posibles duplicados, para revisar.
-      const { data: rows } = await db.from("import_rows").select("id, action, issues, conflicts, entity_type, target_entity_id, mapped").eq("batch_id", batchId);
+      const { data: rows } = await db.from("import_rows").select("id, external_id, action, issues, conflicts, entity_type, target_entity_id, mapped").eq("batch_id", batchId);
       const safe = (rows ?? []).filter((r) => (r.action === "crear" || r.action === "actualizar") && !conflictsOf(r.conflicts).length && !(r.issues as { severity: string }[]).some((i) => i.severity === "bloquea" || i.severity === "revisar") && !emptiesData(r.conflicts));
       if (safe.length) await db.from("import_rows").update({ decision: "aprobada", decided_at: new Date().toISOString() }).in("id", safe.map((r) => r.id));
       const applied = safe.length ? await applyBatch(db, o.workspaceId, batchId) : { applied: 0, unchanged: 0, errors: [] };
       let diferente = 0;
       for (const r of (rows ?? []).filter((x) => conflictsOf(x.conflicts).length && x.target_entity_id && (x.entity_type === "company" || x.entity_type === "contact"))) {
         for (const c of conflictsOf(r.conflicts)) {
-          const { error } = await db.from("source_discrepancies").upsert({ workspace_id: o.workspaceId, entity_type: r.entity_type as "company" | "contact", entity_id: r.target_entity_id!, field: c.field, current_value: c.relevo == null ? null : String(c.relevo), incoming_value: c.sheet == null ? null : String(c.sheet), source: "google_sheets", source_ref: (r.mapped as { externalId?: string }).externalId ?? null }, { ignoreDuplicates: true });
+          const { error } = await db.from("source_discrepancies").upsert({ workspace_id: o.workspaceId, entity_type: r.entity_type as "company" | "contact", entity_id: r.target_entity_id!, field: c.field, current_value: c.relevo == null ? null : String(c.relevo), incoming_value: c.sheet == null ? null : String(c.sheet), source: "google_sheets", source_ref: r.external_id }, { ignoreDuplicates: true });
           if (!error) diferente++;
         }
       }

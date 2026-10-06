@@ -96,6 +96,7 @@ describe("Sheet vivo: RELEVO procesa solo lo que cambió", () => {
     expect(lavNow!.notes).toMatch(/Raúl/);
     const { data: diff } = await db.from("source_discrepancies").select("field, current_value, incoming_value, source").eq("entity_id", lav).eq("status", "pendiente");
     expect(diff).toEqual([expect.objectContaining({ field: "notes", source: "google_sheets", incoming_value: expect.stringMatching(/validar propietario/) })]);
+    expect((await db.from("source_discrepancies").select("source_ref").eq("entity_id", lav).single()).data!.source_ref).toBe("AN-9101");
     // Lo que ya sabíamos es una fuente más, no una novedad; no genera trabajo.
     const { data: bit } = await db.from("brief_signals").select("event_id, material, status").eq("external_ref", "RAD-902").single();
     expect(bit).toEqual({ event_id: knownBitrenes, material: false, status: "procesada" });

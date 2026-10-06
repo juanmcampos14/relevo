@@ -11,6 +11,7 @@ import { after } from "next/server";
 import { synthesizeMission } from "@/server/mission/synthesis";
 import { listMissions } from "@/server/mission/current";
 import { historyStart } from "@/domain/history";
+import { pulseDue } from "@/domain/pulse";
 
 // Un turno de conversación con RELEVO: lo usan la página de RELEVO AI y el panel persistente.
 // Mismo motor, mismas herramientas, mismos permisos (el cliente del usuario → RLS).
@@ -119,7 +120,10 @@ export async function runTurn(
   const campaignId = mission;
   const started = Date.now();
   const result = await runAgent({
-    cacheTtl: "1h",
+    // Caché de 5 minutos: medido el 2026-10-06, la mayor parte del costo eran mensajes sueltos con más de una hora
+    // de diferencia, donde la de 1 hora ya venció y se paga al doble. Con RELEVO_CONVERSATION_CACHE=1h se vuelve.
+    cacheTtl: process.env.RELEVO_CONVERSATION_CACHE === "1h" ? "1h" : "5m",
+    userFacing: true,
     client: opts.client ?? new Anthropic(),
     history,
     userText: opts.text,
@@ -197,11 +201,11 @@ export async function runTurn(
     if (msg && draftIds.length) await db.from("ai_action_drafts").update({ message_id: msg.id }).in("id", draftIds);
   }
   await db.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", convId);
-  // Re-síntesis profunda de la misión en background tras una acción relevante (como mucho una por hora).
+  // Re-síntesis de la misión en background tras una acción relevante (como mucho cada PULSE_EVERY_H horas, por costo).
   if (draftIds.length && mission && result.status !== "error") {
     const { data: applied } = await db.from("ai_action_drafts").select("id").in("id", draftIds).eq("status", "ejecutada").limit(1);
     const { data: c } = await db.from("campaigns").select("synthesized_at").eq("id", mission).maybeSingle();
-    if (applied?.length && (!c?.synthesized_at || Date.now() - new Date(c.synthesized_at).getTime() > 3_600_000)) {
+    if (applied?.length && pulseDue(c?.synthesized_at ?? null)) {
       const resynth = () => synthesizeMission(db, { workspaceId: opts.workspaceId, campaignId: mission, userId: opts.userId });
       try {
         after(async () => { await resynth(); });
@@ -220,8 +224,13 @@ export async function runTurn(
   return { ok: true, conversationId: convId!, text: result.text, citations: result.citations, draftIds, navigate, captureIds, webSources: result.webSources, homeChanged, missionChanged };
 }
 
-/** Prepara en background el Avanzar de lo que quedó visible (dentro de un request: after; en scripts: no). */
+/**
+ * Prepara en background el Avanzar de lo que quedó visible. Por costo, apagado por defecto: Avanzar se resuelve
+ * en el momento en que la persona lo toca. Se prende con RELEVO_PREPARE_MOVES=1.
+ */
+export const prepareAhead = () => process.env.RELEVO_PREPARE_MOVES === "1";
 export function laterPrepare(db: Db, opts: Parameters<typeof prepareMoves>[1]) {
+  if (!prepareAhead()) return;
   try {
     after(async () => { await prepareMoves(db, opts).catch(() => null); });
   } catch {

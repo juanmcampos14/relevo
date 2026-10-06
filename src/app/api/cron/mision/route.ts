@@ -11,7 +11,8 @@ import { isBriefMission } from "@/server/ai/mission";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const TARGETS_EVERY_H = 72;
+// Por costo: los objetivos se repreparan una vez por semana (o si entra uno nuevo).
+const TARGETS_EVERY_H = 168;
 
 /**
  * GET /api/cron/mision (Bearer $CRON_SECRET): "RELEVO ya trabajó". Después del Morning Brief y antes de la

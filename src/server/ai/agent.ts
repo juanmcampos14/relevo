@@ -3,6 +3,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { addUsage, costOf } from "./pricing";
 import { REF_PATTERN, TOOL_DEFINITIONS, runTool, type ToolContext } from "./tools";
+import { budgetBlock } from "./budget";
 
 // Los modelos son infraestructura: la conversación usa el tier rápido; el trabajo profundo va en background.
 // Conversación en Sonnet 5.5 por costo (mitad que Opus; calidad comparable en las pruebas). Para volver a Opus
@@ -172,6 +173,8 @@ export async function runAgent(opts: {
   /** Caché de la conversación: "1h" cuando una persona va a seguir hablando (entre mensajes pasan minutos); el
    * trabajo de fondo corre una vez y usa la de 5 minutos (escribir a 1 hora cuesta más). */
   cacheTtl?: "5m" | "1h";
+  /** Lo pide una persona (corre hasta el tope del mes); si no, es trabajo de fondo (solo si el gasto va al día). */
+  userFacing?: boolean;
 }): Promise<AgentResult> {
   const { client, tools } = opts;
   const turnStart: Anthropic.Beta.BetaMessageParam = {
@@ -211,6 +214,8 @@ export async function runAgent(opts: {
     return { status, text: s.text, citations: s.citations, webSources: [...web].map(([url, title]) => ({ url, title })), transcript, usage, error };
   };
 
+  const blocked = await budgetBlock(opts.userFacing ? "user" : "background");
+  if (blocked) return finish("error", "", blocked);
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const response = await client.beta.messages.create({
@@ -220,10 +225,10 @@ export async function runAgent(opts: {
         fallbacks: "default",
         thinking: { type: "adaptive" },
         output_config: { effort: AI_EFFORT },
-        // Prefijo fijo (herramientas + sistema) en caché de 1 hora; la conversación, según quién la usa (cacheTtl):
-        // en el campo, entre un mensaje y otro suelen pasar más de 5 minutos y releer cuesta mucho menos que reescribir.
+        // Prefijo fijo (herramientas + sistema) y conversación con la misma caché (cacheTtl): 5 minutos por defecto,
+        // que cuesta menos al escribirse; 1 hora solo si se pide (sesiones con mensajes cada 5–60 minutos).
         cache_control: opts.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }],
+        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: opts.cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } }],
         // Memoria de RELEVO (herramientas propias) + la web del lado de Anthropic, con citas.
         tools: [...TOOL_DEFINITIONS, { type: "web_search_20260209", name: "web_search", max_uses: 6 }, { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 }],
         messages,

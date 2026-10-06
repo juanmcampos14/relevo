@@ -13,10 +13,6 @@
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/cron/avanzar",
-      "schedule": "40 9 * * *"
-    },
-    {
       "path": "/api/cron/brief",
       "schedule": "0 10 * * *"
     },
@@ -31,10 +27,6 @@
     {
       "path": "/api/cron/vigilancia",
       "schedule": "30 13 * * *"
-    },
-    {
-      "path": "/api/cron/vigilancia",
-      "schedule": "30 21 * * *"
     },
     {
       "path": "/api/cron/sheet",

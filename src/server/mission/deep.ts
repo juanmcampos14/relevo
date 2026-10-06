@@ -7,6 +7,7 @@ import type * as z from "zod/v4";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { addUsage, costOf, type TokenUsage } from "@/server/ai/pricing";
+import { budgetBlock } from "@/server/ai/budget";
 
 // Trabajo profundo del Brain (background): puede tardar; corre antes de que el usuario entre. Los modelos
 // son infraestructura: el producto nunca los nombra. Cada corrida queda registrada con costo y duración.
@@ -21,9 +22,12 @@ export type DeepResult<T> = { ok: true; value: T; runId: string | null; costUsd:
 
 export async function deepCall<S extends z.ZodType>(
   db: Db,
-  opts: { workspaceId: string; promptVersion: string; system: string; prompt: string; schema: S; client?: Pick<Anthropic, "beta">; userId?: string | null; effort?: "low" | "medium" | "high"; model?: DeepModel },
+  opts: { workspaceId: string; promptVersion: string; system: string; prompt: string; schema: S; client?: Pick<Anthropic, "beta">; userId?: string | null; effort?: "low" | "medium" | "high"; model?: DeepModel; userFacing?: boolean },
 ): Promise<DeepResult<z.infer<S>>> {
   if (!process.env.ANTHROPIC_API_KEY && !opts.client) return { ok: false, message: "La IA no está configurada en este entorno." };
+  // Tope mensual: lo que pide una persona corre hasta el tope; el trabajo de fondo, solo si el gasto va al día.
+  const blocked = await budgetBlock(opts.userFacing ? "user" : "background");
+  if (blocked) return { ok: false, message: blocked };
   const started = Date.now();
   const model = opts.model ?? DEEP_MODEL;
   const usage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };

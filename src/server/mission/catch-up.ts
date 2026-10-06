@@ -28,7 +28,7 @@ export async function catchUp(db: Db, o: { workspaceId: string; missionId: strin
     cambios_materiales: m.items.slice(0, 15).map((x) => ({ que: KIND[x.kind], quien: who(x.by), dato: x.text })),
     lo_que_haria_relevo_ahora: o.doNext,
   });
-  const r = await deepCall(db, { workspaceId: o.workspaceId, userId: o.userId, client: o.client, promptVersion: "equipo-desde-tu-visita-v2", effort: "low", schema: CatchUpSchema, prompt,
+  const r = await deepCall(db, { userFacing: true, workspaceId: o.workspaceId, userId: o.userId, client: o.client, promptVersion: "equipo-desde-tu-visita-v2", effort: "low", schema: CatchUpSchema, prompt,
     system: "Contás a alguien del equipo qué cambió en su misión desde su última visita. Elegí lo que cambia una decisión, una prioridad, una reunión o una oportunidad (1 a 3 cosas como mucho; si es una sola, una sola) y decí por qué importa y para qué conversación o acción. Interpretá, no listes: nada de conteos ni ids. Si un cambio es de otra persona del equipo, nombrala. Español rioplatense, corto." });
   return r.ok ? { changed: r.value.changed.slice(0, 3), next: r.value.next } : null;
 }

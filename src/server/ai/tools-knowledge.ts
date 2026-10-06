@@ -522,12 +522,12 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const today = new Date().toISOString().slice(0, 10);
       const until = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
       const [{ data: plans }, { data: tasks }] = await Promise.all([
-        db.from("visit_plans").select("id, title, planned_on, visit_stops(id, target_time, status, campaign_targets(next_action, companies(id, trade_name, legal_name), establishments(id, name), assets(id, title)))").gte("planned_on", today).lte("planned_on", until).order("planned_on"),
+        db.from("visit_plans").select("id, title, planned_on, visit_stops(id, position, target_time, status, kind, label, time_slot, objective, key_question, contacts(id, full_name), campaign_targets(next_action, companies(id, trade_name, legal_name), establishments(id, name), assets(id, title)))").gte("planned_on", today).lte("planned_on", until).order("planned_on"),
         db.from("tasks").select("id, title, due_on, kind, finding_id, findings(statement), contacts(id, full_name)").neq("status", "done").gte("due_on", today).lte("due_on", until).order("due_on"),
       ]);
       return {
         content: track(ctx, {
-          visits: (plans ?? []).map((p) => ({ title: p.title, date: p.planned_on, stops: p.visit_stops.map((s) => { const t = s.campaign_targets; return { time: s.target_time, status: s.status, next_action: t?.next_action, place: t?.companies ? { ref: ref("company", t.companies.id), name: companyName(t.companies) } : t?.establishments ? { ref: ref("establishment", t.establishments.id), name: t.establishments.name } : t?.assets ? { ref: ref("asset", t.assets.id), name: t.assets.title } : null }; }) })),
+          visits: (plans ?? []).map((p) => ({ title: p.title, date: p.planned_on, stops: [...p.visit_stops].sort((x, y) => x.position - y.position).map((s) => { const t = s.campaign_targets; return { kind: s.kind, time: s.target_time ?? s.time_slot, status: s.status, objective: s.objective, key_question: s.key_question, next_action: t?.next_action, place: t?.companies ? { ref: ref("company", t.companies.id), name: companyName(t.companies) } : t?.establishments ? { ref: ref("establishment", t.establishments.id), name: t.establishments.name } : t?.assets ? { ref: ref("asset", t.assets.id), name: t.assets.title } : s.contacts ? { ref: ref("contact", s.contacts.id), name: s.contacts.full_name } : s.label ? { ref: null, name: s.label } : null }; }) })),
           tasks: (tasks ?? []).map((t) => ({ ref: ref("task", t.id), title: t.title, due_on: t.due_on, kind: t.kind, validates: t.finding_id ? { ref: ref("finding", t.finding_id), statement: t.findings?.statement } : null, with: t.contacts ? { ref: ref("contact", t.contacts.id), name: t.contacts.full_name } : null })),
         }),
       };

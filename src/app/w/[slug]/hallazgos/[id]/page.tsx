@@ -15,6 +15,7 @@ import { PageHeader, Pill, Section, VerificationBadge, formatDate } from "@/comp
 import { ActionForm, FieldError, SubmitButton } from "@/components/app/action-form";
 import { AutoRefresh } from "@/components/app/auto-refresh";
 import { decideProposalAction } from "../../capturas/actions";
+import { PromoteMaturity } from "@/components/findings/promote-maturity";
 import { assessFindingNow, changeCaseState, linkEvidence, promoteMaturity, requestHelp } from "../actions";
 import { BASIS_LABEL, ECONOMICS, unknownEconomics, type EconomicFact } from "@/domain/economics";
 import { STAGE_LABEL, caseStage, opportunityCriteria } from "@/domain/case";
@@ -122,9 +123,7 @@ export default async function FindingStatePage({ params }: PageProps<"/w/[slug]/
             {f.case_status !== "activo" && <Pill className="border-amber-500/40 text-amber-800 dark:text-amber-300">{CASE_STATUS[f.case_status]}</Pill>}
             <span className="text-xs">{MATURITY_NOTE[f.maturity]}</span>
             {ctx.canEdit && f.maturity !== "caso" && (
-              <ActionForm action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : f.maturity === "hipotesis" ? "finding" : "caso")} className="space-y-0">
-                <SubmitButton variant="outline">{f.maturity === "idea" ? "Tratar como hipótesis" : f.maturity === "hipotesis" ? "Promover a finding" : "Estudiar como caso"}</SubmitButton>
-              </ActionForm>
+              <PromoteMaturity action={promoteMaturity.bind(null, slug, f.id, f.maturity === "idea" ? "hipotesis" : f.maturity === "hipotesis" ? "finding" : "caso")} label={f.maturity === "idea" ? "Tratar como hipótesis" : f.maturity === "hipotesis" ? "Promover a finding" : "Estudiar como caso"} />
             )}
           </span>
         }

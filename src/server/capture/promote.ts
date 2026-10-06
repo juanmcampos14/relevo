@@ -50,7 +50,7 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
   const captureId = prop.capture_id;
 
   const [{ data: capture }, { data: siblings }] = await Promise.all([
-    db.from("captures").select("id, captured_at, captured_by, campaign_id, body, source_id, latitude, longitude, location_accuracy_m").eq("id", captureId).single(),
+    db.from("captures").select("id, captured_at, captured_by, campaign_id, stop_id, body, source_id, latitude, longitude, location_accuracy_m").eq("id", captureId).single(),
     db.from("proposals").select("id, kind, status, payload, quote, result_id, result_type").eq("capture_id", captureId),
   ]);
   if (!capture) return { ok: false, message: "Captura no encontrada." };
@@ -362,6 +362,8 @@ export async function decideProposal(db: Db, opts: { workspaceId: string; settin
             assignee_id: opts.userId,
             target_id: targetId,
             campaign_id: capture.campaign_id,
+            // Lo que se grabó al salir de una parada deja su próxima acción ligada a esa parada.
+            stop_id: capture.stop_id,
             contact_id: decided(who) && !unresolved(who) ? who!.result_id : null,
             kind: "Seguimiento",
           },

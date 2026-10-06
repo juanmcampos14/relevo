@@ -618,13 +618,13 @@ isOneToOne: false
                   ]
                 },"captures": {
                   Row: {
-                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"ai_unknowns": (string)[],"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"content_hash": string | null,"created_at": string,"duplicate_of": string | null,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"updated_at": string,"workspace_id": string
+                    "ai_consent": boolean,"ai_run_id": string | null,"ai_summary": string | null,"ai_unknowns": (string)[],"body": string | null,"campaign_id": string | null,"captured_at": string,"captured_by": string | null,"client_id": string,"content_hash": string | null,"created_at": string,"duplicate_of": string | null,"id": string,"latitude": number | null,"location_accuracy_m": number | null,"location_status": string | null,"longitude": number | null,"processed_at": string | null,"source_id": string | null,"status": string,"status_error": string | null,"stop_id": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at": string,"captured_by"?: string | null,"client_id": string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"stop_id"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "ai_consent"?: boolean,"ai_run_id"?: string | null,"ai_summary"?: string | null,"ai_unknowns"?: (string)[],"body"?: string | null,"campaign_id"?: string | null,"captured_at"?: string,"captured_by"?: string | null,"client_id"?: string,"content_hash"?: string | null,"created_at"?: string,"duplicate_of"?: string | null,"id"?: string,"latitude"?: number | null,"location_accuracy_m"?: number | null,"location_status"?: string | null,"longitude"?: number | null,"processed_at"?: string | null,"source_id"?: string | null,"status"?: string,"status_error"?: string | null,"stop_id"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -657,6 +657,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "workspaces"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "captures_workspace_id_stop_id_fkey"
+      columns: ["workspace_id","stop_id"]
+isOneToOne: false
+      referencedRelation: "visit_stops"
+      referencedColumns: ["workspace_id","id"]
     }
                   ]
                 },"comments": {
@@ -704,13 +710,13 @@ isOneToOne: false
                   ]
                 },"companies": {
                   Row: {
-                    "activity": string | null,"created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"notes": string | null,"origin_campaign_id": string | null,"public_phone": string | null,"sector": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
+                    "activity": string | null,"created_at": string,"created_by": string | null,"drive_folder_url": string | null,"id": string,"is_demo": boolean,"kind": string,"legal_name": string | null,"locality": string | null,"locked_fields": (string)[],"notes": string | null,"origin_campaign_id": string | null,"public_phone": string | null,"sector": string | null,"source_id": string | null,"tax_id": string | null,"trade_name": string | null,"updated_at": string,"verification_status": string,"website": string | null,"workspace_id": string
                   }
                   Insert: {
-                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"locked_fields"?: (string)[],"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id": string
                   }
                   Update: {
-                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
+                    "activity"?: string | null,"created_at"?: string,"created_by"?: string | null,"drive_folder_url"?: string | null,"id"?: string,"is_demo"?: boolean,"kind"?: string,"legal_name"?: string | null,"locality"?: string | null,"locked_fields"?: (string)[],"notes"?: string | null,"origin_campaign_id"?: string | null,"public_phone"?: string | null,"sector"?: string | null,"source_id"?: string | null,"tax_id"?: string | null,"trade_name"?: string | null,"updated_at"?: string,"verification_status"?: string,"website"?: string | null,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -778,13 +784,13 @@ isOneToOne: false
                   ]
                 },"contacts": {
                   Row: {
-                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"notes": string | null,"origin_campaign_id": string | null,"outreach_draft": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "contact_kind": string,"contact_permission": string,"created_at": string,"created_by": string | null,"email": string | null,"full_name": string,"id": string,"introduced_by": string | null,"is_demo": boolean,"locked_fields": (string)[],"network_roles": (string)[],"notes": string | null,"origin_campaign_id": string | null,"outreach_draft": string | null,"phone": string | null,"preferred_channel": string | null,"profile_url": string | null,"relationship_status": string | null,"role_title": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name": string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"locked_fields"?: (string)[],"network_roles"?: (string)[],"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "contact_kind"?: string,"contact_permission"?: string,"created_at"?: string,"created_by"?: string | null,"email"?: string | null,"full_name"?: string,"id"?: string,"introduced_by"?: string | null,"is_demo"?: boolean,"locked_fields"?: (string)[],"network_roles"?: (string)[],"notes"?: string | null,"origin_campaign_id"?: string | null,"outreach_draft"?: string | null,"phone"?: string | null,"preferred_channel"?: string | null,"profile_url"?: string | null,"relationship_status"?: string | null,"role_title"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -865,13 +871,13 @@ isOneToOne: false
                   ]
                 },"establishments": {
                   Row: {
-                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"longitude": number | null,"name": string,"notes": string | null,"origin_campaign_id": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
+                    "address_status": string,"address_text": string | null,"company_id": string | null,"country": string | null,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"latitude": number | null,"locality": string | null,"location_accuracy_m": number | null,"location_source": string | null,"location_source_id": string | null,"location_status": string | null,"location_verified_at": string | null,"locked_fields": (string)[],"longitude": number | null,"name": string,"notes": string | null,"origin_campaign_id": string | null,"province": string | null,"source_id": string | null,"updated_at": string,"verification_status": string,"workspace_id": string
                   }
                   Insert: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name": string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"name": string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id": string
                   }
                   Update: {
-                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"longitude"?: number | null,"name"?: string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
+                    "address_status"?: string,"address_text"?: string | null,"company_id"?: string | null,"country"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"is_demo"?: boolean,"latitude"?: number | null,"locality"?: string | null,"location_accuracy_m"?: number | null,"location_source"?: string | null,"location_source_id"?: string | null,"location_status"?: string | null,"location_verified_at"?: string | null,"locked_fields"?: (string)[],"longitude"?: number | null,"name"?: string,"notes"?: string | null,"origin_campaign_id"?: string | null,"province"?: string | null,"source_id"?: string | null,"updated_at"?: string,"verification_status"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1454,20 +1460,32 @@ isOneToOne: false
                   ]
                 },"opportunities": {
                   Row: {
-                    "campaign_id": string | null,"created_at": string,"created_by": string | null,"id": string,"idempotency_key": string | null,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"route": string,"stage": string | null,"stage_reason": string | null,"status": string,"thesis": string | null,"title": string,"updated_at": string,"workspace_id": string
+                    "asset_id": string | null,"campaign_id": string | null,"card": NonNullable<Json>,"company_id": string | null,"created_at": string,"created_by": string | null,"economic_unit": string | null,"gap": string | null,"id": string,"idempotency_key": string | null,"lane": string,"maturity": string,"next_action": string | null,"next_action_due": string | null,"owner_id": string | null,"route": string,"stage": string | null,"stage_reason": string | null,"status": string,"thesis": string | null,"title": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "campaign_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"idempotency_key"?: string | null,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
+                    "asset_id"?: string | null,"campaign_id"?: string | null,"card"?: NonNullable<Json>,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"economic_unit"?: string | null,"gap"?: string | null,"id"?: string,"idempotency_key"?: string | null,"lane"?: string,"maturity"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "campaign_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"idempotency_key"?: string | null,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "asset_id"?: string | null,"campaign_id"?: string | null,"card"?: NonNullable<Json>,"company_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"economic_unit"?: string | null,"gap"?: string | null,"id"?: string,"idempotency_key"?: string | null,"lane"?: string,"maturity"?: string,"next_action"?: string | null,"next_action_due"?: string | null,"owner_id"?: string | null,"route"?: string,"stage"?: string | null,"stage_reason"?: string | null,"status"?: string,"thesis"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "opportunities_workspace_id_asset_id_fkey"
+      columns: ["workspace_id","asset_id"]
+isOneToOne: false
+      referencedRelation: "assets"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "opportunities_workspace_id_campaign_id_fkey"
       columns: ["workspace_id","campaign_id"]
 isOneToOne: false
       referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunities_workspace_id_company_id_fkey"
+      columns: ["workspace_id","company_id"]
+isOneToOne: false
+      referencedRelation: "companies"
       referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "opportunities_workspace_id_fkey"
@@ -1496,6 +1514,49 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "opportunity_findings_workspace_id_opportunity_id_fkey"
+      columns: ["workspace_id","opportunity_id"]
+isOneToOne: false
+      referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
+    }
+                  ]
+                },"opportunity_parties": {
+                  Row: {
+                    "company_id": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"evidence_id": string | null,"id": string,"label": string | null,"note": string | null,"opportunity_id": string,"role": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"evidence_id"?: string | null,"id"?: string,"label"?: string | null,"note"?: string | null,"opportunity_id": string,"role": string,"workspace_id": string
+                  }
+                  Update: {
+                    "company_id"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"evidence_id"?: string | null,"id"?: string,"label"?: string | null,"note"?: string | null,"opportunity_id"?: string,"role"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "opportunity_parties_workspace_id_company_id_fkey"
+      columns: ["workspace_id","company_id"]
+isOneToOne: false
+      referencedRelation: "companies"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunity_parties_workspace_id_contact_id_fkey"
+      columns: ["workspace_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunity_parties_workspace_id_evidence_id_fkey"
+      columns: ["workspace_id","evidence_id"]
+isOneToOne: false
+      referencedRelation: "evidence"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "opportunity_parties_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "opportunity_parties_workspace_id_opportunity_id_fkey"
       columns: ["workspace_id","opportunity_id"]
 isOneToOne: false
       referencedRelation: "opportunities"
@@ -1633,6 +1694,25 @@ isOneToOne: false
       referencedColumns: ["workspace_id","id"]
     }
                   ]
+                },"source_discrepancies": {
+                  Row: {
+                    "created_at": string,"current_value": string | null,"decided_at": string | null,"decided_by": string | null,"entity_id": string,"entity_type": string,"field": string,"id": string,"incoming_value": string | null,"source": string,"source_ref": string | null,"source_url": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"current_value"?: string | null,"decided_at"?: string | null,"decided_by"?: string | null,"entity_id": string,"entity_type": string,"field": string,"id"?: string,"incoming_value"?: string | null,"source": string,"source_ref"?: string | null,"source_url"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"current_value"?: string | null,"decided_at"?: string | null,"decided_by"?: string | null,"entity_id"?: string,"entity_type"?: string,"field"?: string,"id"?: string,"incoming_value"?: string | null,"source"?: string,"source_ref"?: string | null,"source_url"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "source_discrepancies_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"sources": {
                   Row: {
                     "captured_at": string,"created_at": string,"created_by": string | null,"id": string,"is_demo": boolean,"kind": string,"notes": string | null,"published_at": string | null,"publisher": string | null,"quality": string | null,"reference": string | null,"title": string,"updated_at": string,"url": string | null,"workspace_id": string
@@ -1767,13 +1847,13 @@ isOneToOne: false
                   ]
                 },"tasks": {
                   Row: {
-                    "assignee_id": string | null,"campaign_id": string | null,"channel": string | null,"completed_at": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"finding_id": string | null,"id": string,"idempotency_key": string | null,"kind": string | null,"opportunity_id": string | null,"status": string,"target_id": string | null,"title": string,"updated_at": string,"workspace_id": string
+                    "asset_id": string | null,"assignee_id": string | null,"campaign_id": string | null,"channel": string | null,"completed_at": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"finding_id": string | null,"id": string,"idempotency_key": string | null,"kind": string | null,"opportunity_id": string | null,"status": string,"stop_id": string | null,"target_id": string | null,"title": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"status"?: string,"target_id"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
+                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"status"?: string,"target_id"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -1787,6 +1867,12 @@ isOneToOne: false
       columns: ["workspace_id","contact_id"]
 isOneToOne: false
       referencedRelation: "contacts"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "tasks_workspace_id_asset_id_fkey"
+      columns: ["workspace_id","asset_id"]
+isOneToOne: false
+      referencedRelation: "assets"
       referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "tasks_workspace_id_finding_id_fkey"
@@ -1805,6 +1891,12 @@ isOneToOne: false
       columns: ["workspace_id","opportunity_id"]
 isOneToOne: false
       referencedRelation: "opportunities"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "tasks_workspace_id_stop_id_fkey"
+      columns: ["workspace_id","stop_id"]
+isOneToOne: false
+      referencedRelation: "visit_stops"
       referencedColumns: ["workspace_id","id"]
     },{
       foreignKeyName: "tasks_workspace_id_target_id_fkey"
@@ -1953,16 +2045,22 @@ isOneToOne: false
                   ]
                 },"visit_stops": {
                   Row: {
-                    "created_at": string,"id": string,"notes": string | null,"plan_id": string,"position": number,"status": string,"target_id": string,"target_time": string | null,"updated_at": string,"workspace_id": string
+                    "contact_id": string | null,"created_at": string,"external_ref": string | null,"id": string,"key_question": string | null,"kind": string,"label": string | null,"latitude": number | null,"longitude": number | null,"notes": string | null,"objective": string | null,"outcome": string | null,"plan_id": string,"position": number,"status": string,"target_id": string | null,"target_time": string | null,"time_slot": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"id"?: string,"notes"?: string | null,"plan_id": string,"position": number,"status"?: string,"target_id": string,"target_time"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "contact_id"?: string | null,"created_at"?: string,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id": string,"position": number,"status"?: string,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"notes"?: string | null,"plan_id"?: string,"position"?: number,"status"?: string,"target_id"?: string,"target_time"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "contact_id"?: string | null,"created_at"?: string,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id"?: string,"position"?: number,"status"?: string,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "visit_stops_workspace_id_contact_id_fkey"
+      columns: ["workspace_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["workspace_id","id"]
+    },{
       foreignKeyName: "visit_stops_workspace_id_fkey"
       columns: ["workspace_id"]
 isOneToOne: false
@@ -2131,6 +2229,12 @@ isOneToOne: false
                            },
 "is_verification_status":
 { Args: { "v": string }; Returns: boolean
+                           },
+"opportunity_visible":
+{ Args: { "p_opportunity": string }; Returns: boolean
+                           },
+"opportunity_workable":
+{ Args: { "p_opportunity": string }; Returns: boolean
                            },
 "owns_conversation":
 { Args: { "conv": string }; Returns: boolean

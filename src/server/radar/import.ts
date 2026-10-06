@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { mapRadar, priceStatusOf } from "@/domain/radar/sheet";
 import { matchCompanies } from "@/domain/brief/derive";
 import { parseTab } from "@/server/crm-import/parse";
+import { ingestPatch } from "@/server/locks";
 
 // RADAR DE MERCADO del Sheet → Radar de RELEVO. Reejecutable: señales por ID (RAD-xxx), activos por
 // radar_ref, precios solo si son una observación nueva (nunca se pisa el historial). Mientras el Sheet
@@ -15,7 +16,7 @@ type Db = SupabaseClient<Database>;
 export type RadarReport = {
   dryRun: boolean;
   signals: { created: string[]; updated: string[] };
-  assets: { created: string[]; updated: string[]; inconsistent: string[]; review: string[] };
+  assets: { created: string[]; updated: string[]; inconsistent: string[]; review: string[]; discrepancies: string[] };
   prices: { added: number; existing: number };
   conversations: { created: number; existing: number };
   hypothesesLinked: string[];
@@ -27,7 +28,7 @@ const words = (s: string) => new Set(fold(s).split(" ").filter((w) => w.length >
 
 export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuffer, opts: { dryRun: boolean }): Promise<RadarReport> {
   const plan = mapRadar(await parseTab(buffer, "RADAR DE MERCADO", "Hallazgo"));
-  const r: RadarReport = { dryRun: opts.dryRun, signals: { created: [], updated: [] }, assets: { created: [], updated: [], inconsistent: [], review: [] }, prices: { added: 0, existing: 0 }, conversations: { created: 0, existing: 0 }, hypothesesLinked: [], seenUrls: 0 };
+  const r: RadarReport = { dryRun: opts.dryRun, signals: { created: [], updated: [] }, assets: { created: [], updated: [], inconsistent: [], review: [], discrepancies: [] }, prices: { added: 0, existing: 0 }, conversations: { created: 0, existing: 0 }, hypothesesLinked: [], seenUrls: 0 };
   const today = new Date().toISOString().slice(0, 10);
 
   // Fuente "RADAR del Sheet" (procedencia de lo migrado).
@@ -41,7 +42,8 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
   }
 
   // 1. Activos y su historial de precios.
-  const { data: existingAssets } = await db.from("assets").select("id, radar_ref, locked_fields").eq("workspace_id", workspaceId).not("radar_ref", "is", null);
+  const { data: existingAssets } = await db.from("assets").select("*").eq("workspace_id", workspaceId).not("radar_ref", "is", null);
+  const currentByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, a as Record<string, unknown>]));
   const assetByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, a.id]));
   // Campos corregidos a mano en RELEVO: el Sheet no los pisa (ni su estado de precio, si está bloqueado).
   const lockedByRef = new Map((existingAssets ?? []).map((a) => [a.radar_ref!, new Set(a.locked_fields ?? [])]));
@@ -57,7 +59,9 @@ export async function migrateRadar(db: Db, workspaceId: string, buffer: ArrayBuf
     let id = assetByRef.get(a.ref);
     if (id) {
       r.assets.updated.push(a.ref);
-      const free = Object.fromEntries(Object.entries(fields).filter(([k]) => !locked.has(k))) as Partial<typeof fields>;
+      // Lo corregido a mano no se pisa: si el Sheet trae otro valor, queda como discrepancia para decidir.
+      const { apply: free, discrepancies } = await ingestPatch(db, { workspaceId, table: "assets", id, current: currentByRef.get(a.ref) ?? {}, incoming: fields, source: "radar_sheet", sourceRef: a.ref, dryRun: opts.dryRun });
+      if (discrepancies) r.assets.discrepancies.push(a.ref);
       if (!opts.dryRun) await db.from("assets").update(free).eq("id", id);
     } else {
       r.assets.created.push(a.ref);

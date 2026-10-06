@@ -19,6 +19,7 @@ import {
   zodFieldErrors,
 } from "@/domain/schemas";
 import { entityFkFields, entityTable, isEntityKind, type EntityKind } from "@/server/entities";
+import { lockAfterHumanEdit } from "@/server/locks";
 
 async function setup(slug: string) {
   const ctx = await getWorkspaceContext(slug);
@@ -206,8 +207,11 @@ export async function updateEntity(slug: string, kind: EntityKind, id: string, _
   if (!built.ok) return built.state;
   const committed = await commitPendingSources(supabase, ctx.workspace.id, fd, built.row, SOURCE_FIELDS);
   if (committed.error) return { message: committed.error };
+  const { data: before } = await supabase.from(entityTable[kind]).select("*").eq("id", id).maybeSingle();
   const { error } = await supabase.from(entityTable[kind]).update(committed.row as never).eq("id", id);
   if (error) return { message: dbErrorMessage(error) };
+  // Lo que una persona corrigió queda bloqueado: una ingesta posterior (Sheet, Radar) no lo pisa.
+  if (before) await lockAfterHumanEdit(supabase, entityTable[kind], id, before as Record<string, unknown>, committed.row as Record<string, unknown>);
   revalidatePath(`/w/${slug}`, "layout");
   return { ok: true, message: "Cambios guardados." };
 }

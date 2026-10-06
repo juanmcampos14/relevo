@@ -11,6 +11,7 @@ import { ActionForm, SubmitButton } from "@/components/app/action-form";
 import { SelectField, TextField } from "@/components/app/fields";
 import { MapsButton } from "@/components/app/maps-button";
 import { addStop, moveStop, removeStop, setStopStatus } from "../actions";
+import { STOP_KIND_LABEL, stopPending, stopTitle, type StopKind, type StopStatus } from "@/domain/stops";
 
 export default async function PlanPage({ params }: PageProps<"/w/[slug]/agenda/[planId]">) {
   const { slug, planId } = await params;
@@ -27,7 +28,7 @@ export default async function PlanPage({ params }: PageProps<"/w/[slug]/agenda/[
   const [{ data: stops }, { data: candidates }] = await Promise.all([
     supabase
       .from("visit_stops")
-      .select(`id, position, target_time, status, target_id, visits(id), campaign_targets(id, status, ${targetEntitySelect})`)
+      .select(`id, position, target_time, status, target_id, kind, label, time_slot, objective, key_question, outcome, contacts(id, full_name), visits(id), campaign_targets(id, status, ${targetEntitySelect})`)
       .eq("plan_id", planId)
       .order("position"),
     (() => {
@@ -51,7 +52,7 @@ export default async function PlanPage({ params }: PageProps<"/w/[slug]/agenda/[
       return { value: c.id, label: `${e?.name ?? "?"}${addr}${plan.campaign_id ? "" : ` (${c.campaigns?.name})`}` };
     });
 
-  const pending = rows.filter((r) => r.status !== "realizada" && r.status !== "no_realizada");
+  const pending = rows.filter((r) => stopPending(r.status as StopStatus));
   const route = multiStopLink(pending.map((r) => r.entity?.place).filter((p) => p != null));
 
   return (
@@ -90,24 +91,28 @@ export default async function PlanPage({ params }: PageProps<"/w/[slug]/agenda/[
                       {s.entity ? (
                         <Link href={entityHref(slug, s.entity.kind, s.entity.id)} className="font-medium hover:underline">{s.entity.name}</Link>
                       ) : (
-                        <span className="font-medium">(objetivo no disponible)</span>
+                        <span className="font-medium">{stopTitle({ kind: s.kind as StopKind, label: s.label }, s.contacts?.full_name)}</span>
                       )}
+                      {s.kind !== "empresa" && <Pill>{STOP_KIND_LABEL[s.kind as StopKind]}</Pill>}
                       <Pill>{stopStatus.label(s.status)}</Pill>
-                      {s.target_time && <Pill>{s.target_time.slice(0, 5)} h</Pill>}
+                      {s.target_time ? <Pill>{s.target_time.slice(0, 5)} h</Pill> : s.time_slot ? <Pill>{s.time_slot}</Pill> : null}
                       <DemoBadge show={!!s.entity?.isDemo} />
                     </div>
                     {s.entity?.place ? (
                       <p className="text-sm text-muted-foreground">
                         {[s.entity.place.address_text, s.entity.place.locality].filter(Boolean).join(", ") || "Sin dirección"} · {addressStatus.label(s.entity.place.address_status)}
                       </p>
-                    ) : (
+                    ) : s.kind === "empresa" ? (
                       <p className="text-sm text-muted-foreground">Empresa sin ubicación: agregá un establecimiento para navegar.</p>
-                    )}
+                    ) : null}
+                    {s.objective && <p className="text-sm"><span className="text-muted-foreground">Para qué:</span> {s.objective}</p>}
+                    {s.key_question && <p className="text-sm"><span className="text-muted-foreground">Pregunta clave:</span> {s.key_question}</p>}
+                    {s.outcome && <p className="text-sm"><span className="text-muted-foreground">Qué pasó:</span> {s.outcome}</p>}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <MapsButton place={s.entity?.place ?? null} compact />
-                  {ctx.canEdit && s.visits.length === 0 && (
+                  {ctx.canEdit && s.visits.length === 0 && s.target_id && (
                     <Link href={`/w/${slug}/agenda/visita?target=${s.target_id}&stop=${s.id}`} className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground hover:bg-primary/85">
                       Registrar visita
                     </Link>

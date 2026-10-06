@@ -159,8 +159,10 @@ export const contactRelation = catalog({
 export const stopStatus = catalog({
   programada: "Programada",
   confirmada: "Confirmada",
+  en_curso: "En curso",
   realizada: "Realizada",
   no_realizada: "No realizada",
+  cancelada: "Cancelada",
 });
 
 export const consentStatus = catalog({
@@ -211,6 +213,7 @@ export const opportunityRoute = catalog({
   gestion: "Gestión",
   alianza: "Alianza",
   creacion_propia: "Creación propia",
+  conexion: "Conexión",
 });
 
 export const opportunityStatus = catalog({

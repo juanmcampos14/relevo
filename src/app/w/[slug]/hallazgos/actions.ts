@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/server/context";
 import { dbErrorMessage, type ActionState } from "@/server/action-result";
 import { assessFinding } from "@/server/findings/assess";
+import { promotionWarning } from "@/domain/promotion";
 
 export async function assessFindingNow(slug: string, findingId: string): Promise<ActionState> {
   const ctx = await getWorkspaceContext(slug);
@@ -40,16 +41,32 @@ export async function linkEvidence(slug: string, findingId: string, _: ActionSta
   return { ok: true, message: "Evidencia vinculada. El estado se actualiza en unos segundos." };
 }
 
-/** Idea → hipótesis → finding: promoción humana, registrada en la historia de la hipótesis. */
-export async function promoteMaturity(slug: string, findingId: string, to: "hipotesis" | "finding" | "caso"): Promise<ActionState> {
+export type PromoteState = ActionState & { confirm?: string };
+
+/**
+ * Idea → hipótesis → finding → caso: promoción humana, registrada en la historia de la hipótesis. Sin
+ * evidencia suficiente no se bloquea, pero se avisa y se pide confirmación (caso H-VA-02); si se promueve
+ * igual, la historia guarda quién, cuándo, de qué a qué y el motivo.
+ */
+export async function promoteMaturity(slug: string, findingId: string, to: "hipotesis" | "finding" | "caso", _: PromoteState, fd: FormData): Promise<PromoteState> {
   const ctx = await getWorkspaceContext(slug);
   if (!ctx.canEdit) return { message: "Tu rol es de solo lectura." };
   const supabase = await createClient();
   const { data: f } = await supabase.from("findings").select("maturity").eq("id", findingId).single();
   if (!f || f.maturity === to) return { message: "Ya estaba así." };
+  const confirmed = fd.get("confirm") === "1";
+  const reason = String(fd.get("reason") ?? "").trim().slice(0, 500);
+  if (!confirmed) {
+    const [{ count: evidence }, { data: last }] = await Promise.all([
+      supabase.from("finding_evidence").select("evidence_id", { count: "exact", head: true }).eq("finding_id", findingId),
+      supabase.from("finding_assessments").select("supports, independent_cases, gaps").eq("finding_id", findingId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    const warning = promotionWarning(to, { evidence: evidence ?? 0, supports: last?.supports ?? 0, independentCases: last?.independent_cases ?? 0, gaps: last?.gaps ?? [] });
+    if (warning) return { confirm: warning };
+  }
   const { error } = await supabase.from("findings").update({ maturity: to }).eq("id", findingId);
   if (error) return { message: dbErrorMessage(error) };
-  await supabase.from("finding_revisions").insert({ workspace_id: ctx.workspace.id, finding_id: findingId, kind: "madurez", previous_value: f.maturity, new_value: to, reason: "Promoción" });
+  await supabase.from("finding_revisions").insert({ workspace_id: ctx.workspace.id, finding_id: findingId, kind: "madurez", previous_value: f.maturity, new_value: to, reason: confirmed ? `Promovida sin evidencia suficiente${reason ? `: ${reason}` : " (sin motivo)"}` : reason || "Promoción" });
   revalidatePath(`/w/${slug}`, "layout");
   return { ok: true, message: to === "caso" ? "Ahora es un caso en estudio." : to === "finding" ? "Promovido a finding." : "Ahora es una hipótesis a validar." };
 }

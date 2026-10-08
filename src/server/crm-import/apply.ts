@@ -359,6 +359,8 @@ export async function applyBatch(db: Db, workspaceId: string, batchId: string): 
           status: v.status as "todo",
           assignee_id: owners.ids[0] ?? null,
           description,
+          prep_priority: (v.prep_priority as string | null) ?? null,
+          prep_block: (v.prep_block as string | null) ?? null,
         };
         if (creating) {
           const target = (company?.last_values._ids as EntityIds | undefined)?.target ?? null;

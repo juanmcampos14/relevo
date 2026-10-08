@@ -4,11 +4,13 @@ import { createHash } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import { parseCrmWorkbook, parseTab, SHEETS, type ParsedWorkbook, type SheetKey } from "@/server/crm-import/parse";
+import { parseCrmWorkbook, parseTab, parseTables, SHEETS, type ParsedWorkbook, type SheetKey } from "@/server/crm-import/parse";
 import type { RawRow } from "@/domain/crm-import/map";
 import { applyBatch } from "@/server/crm-import/apply";
 import { planImport, stageImport } from "@/server/crm-import/stage";
 import { reconcileRadar } from "@/server/radar/reconcile";
+import { aogStops, routeStops, type FieldStop } from "@/domain/field-plan";
+import { applyStops, crmCompanies } from "./field";
 
 // El Sheet operativo como fuente viva. Cada corrida: ¿cambió el archivo? → ¿qué filas cambiaron? (huella
 // por fila) → solo eso pasa por la reconciliación: el Radar por el motor del Bloque B; empresas, contactos,
@@ -18,6 +20,15 @@ import { reconcileRadar } from "@/server/radar/reconcile";
 type Db = SupabaseClient<Database>;
 type Raw = { row: number; values: Record<string, string | null> };
 const RADAR = "RADAR DE MERCADO";
+const RUTA = "RUTA | VISITAS";
+const AOG = "AOG | MAPA FÍSICO";
+
+/** Una fila del CRM de RUTA o AOG como fila con ID (la pestaña no lo tiene): sus paradas y su clasificación. */
+function fieldRows(stops: FieldStop[]): Raw[] {
+  const byRow = new Map<string, FieldStop[]>();
+  for (const s of stops) byRow.set(s.rowId, [...(byRow.get(s.rowId) ?? []), s]);
+  return [...byRow.entries()].map(([id, list], i) => ({ row: i, values: { ID: id, paradas: JSON.stringify(list.map((s) => ({ ...s, rowId: undefined }))) } }));
+}
 const CRM_TABS: SheetKey[] = ["companies", "contacts", "tasks", "sources"];
 const TAB_NAME: Record<SheetKey, string> = { companies: "EMPRESAS", contacts: "RED | CONTACTOS", tasks: "ACTIVIDADES", sources: "FUENTES" };
 
@@ -35,6 +46,7 @@ export type SyncResult = {
   result: {
     crm?: { batchId: string; aplicadas: number; sinCambios: number; paraRevisar: number; informacionDiferente: number; errores: { external_id: string; message: string }[] };
     radar?: { creadas: number; reconciliadas: number; activosNuevos: number; discrepancias: number; material: number; tareas: number; costUsd: number };
+    campo?: { creadas: number; actualizadas: number; sinFecha: number; porClase: Record<string, number> };
   };
   batchIds: string[];
   error?: string;
@@ -123,6 +135,28 @@ export async function syncSheet(
       if (r.run.batchId) out.batchIds.push(r.run.batchId);
       await remember(db, o.workspaceId, o.sheetId, RADAR, radarChanged, r.run.batchId);
     }
+    // 3. Campo: RUTA | VISITAS y AOG | MAPA FÍSICO → paradas de la agenda, con la clasificación aprobada.
+    //    La huella incluye la clasificación (si una empresa entra a EMPRESAS, la parada se reclasifica).
+    const companies = await crmCompanies(db, o.workspaceId);
+    const known = new Set(companies.keys());
+    const year = new Date().getFullYear();
+    const route = (await parseTables(o.buffer, RUTA, ["Punto de visita"]))["Punto de visita"];
+    const aog = await parseTables(o.buffer, AOG, ["Actor", "Quién / empresa"]);
+    const maps = new Map(((await parseTables(o.buffer, "MAPA | IMPORTAR", ["ID CRM / mapa"]))["ID CRM / mapa"]).map((r) => [(r.values["ID CRM / mapa"] ?? "").trim().toUpperCase(), r.values["Vertical"] ?? ""]));
+    const stops = [...routeStops(route, { year, companies: known, maps }), ...aogStops(aog["Actor"], aog["Quién / empresa"], { year, companies: known, eventDay: `${year}-10-20` })];
+    for (const [tab, list] of [[RUTA, stops.filter((s) => s.rowId.startsWith("RUTA:"))], [AOG, stops.filter((s) => !s.rowId.startsWith("RUTA:"))]] as const) {
+      const rows = fieldRows(list);
+      const fd = await delta(db, o.workspaceId, o.sheetId, tab, rows);
+      const changedIds = new Set([...fd.nuevas, ...fd.modificadas].map(idOf));
+      if (!changedIds.size) continue;
+      out.changed[tab] = { nuevas: fd.nuevas.map(idOf), modificadas: fd.modificadas.map(idOf) };
+      const r = await applyStops(db, { workspaceId: o.workspaceId, missionId: o.missionId, stops: list.filter((s) => changedIds.has(s.rowId.toUpperCase())), companies });
+      const prev = out.result.campo ?? { creadas: 0, actualizadas: 0, sinFecha: 0, porClase: {} };
+      for (const [k, n] of Object.entries(r.porClase)) prev.porClase[k] = (prev.porClase[k] ?? 0) + n;
+      out.result.campo = { creadas: prev.creadas + r.creadas, actualizadas: prev.actualizadas + r.actualizadas, sinFecha: prev.sinFecha + r.sinFecha, porClase: prev.porClase };
+      await remember(db, o.workspaceId, o.sheetId, tab, [...fd.nuevas, ...fd.modificadas], null);
+    }
+
     out.status = Object.keys(out.changed).length ? "procesado" : "sin_cambios";
   } catch (e) {
     out.status = "error";

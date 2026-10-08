@@ -190,6 +190,41 @@ export async function parseCrmWorkbook(buffer: ArrayBuffer): Promise<ParsedWorkb
 }
 
 /** Filas de una pestaña cualquiera (por nombre plegado), detectando el encabezado por una columna clave. */
+/**
+ * Una pestaña con más de una tabla (AOG | MAPA FÍSICO: actores y, más abajo, sesiones): cada fila que
+ * contiene uno de los encabezados clave abre una tabla nueva. Devuelve las filas agrupadas por esa clave.
+ */
+export async function parseTables(buffer: ArrayBuffer, sheetName: string, keys: string[]): Promise<Record<string, { row: number; values: Record<string, string | null> }[]>> {
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(buffer);
+  } catch {
+    await wb.xlsx.load(await normalizePackage(buffer));
+  }
+  const out: Record<string, { row: number; values: Record<string, string | null> }[]> = Object.fromEntries(keys.map((k) => [k, []]));
+  const ws = wb.worksheets.find((w) => fold(w.name) === fold(sheetName));
+  if (!ws) return out;
+  let header: string[] | null = null;
+  let current: string | null = null;
+  ws.eachRow({ includeEmpty: false }, (r, n) => {
+    const vals = (r.values as Cell[]).map((c) => cellText(c).text ?? "");
+    const key = keys.find((k) => vals.includes(k));
+    if (key) {
+      header = vals;
+      current = key;
+      return;
+    }
+    if (!header || !current) return;
+    const values: Record<string, string | null> = {};
+    (r.values as Cell[]).forEach((c, i) => {
+      const h = header![i];
+      if (h) values[h] = cellText(c).text;
+    });
+    if (Object.values(values).filter(Boolean).length >= 2) out[current].push({ row: n, values });
+  });
+  return out;
+}
+
 export async function parseTab(buffer: ArrayBuffer, sheetName: string, key: string): Promise<{ row: number; values: Record<string, string | null> }[]> {
   const wb = new ExcelJS.Workbook();
   try {

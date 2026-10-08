@@ -71,9 +71,12 @@ export type TaskValues = {
   kind: string | null;
   channel: string | null;
   due_on: string | null;
-  status: "todo" | "in_progress" | "blocked" | "done";
+  status: "todo" | "in_progress" | "blocked" | "done" | "cancelada";
   owner_name: string | null;
   result: string | null;
+  /** Tal cual el CRM: "Prioridad preparación" (P1 · foco inicial…) y "Bloque operativo · RELEVO". */
+  prep_priority: string | null;
+  prep_block: string | null;
   company_ref: string | null;
   contact_ref: string | null;
 };
@@ -117,6 +120,12 @@ export function parseDate(v: string | null | undefined): string | null {
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
   if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  // Fecha escrita como texto por una automatización ("Mon Oct 05 2026 21:00:00 GMT-0300 (…)"): es una
+  // fecha sin hora guardada como medianoche UTC, así que el día es el de UTC (21:00 de Argentina = 00:00 UTC).
+  if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4}/.test(t)) {
+    const d = new Date(t.replace(/ \(.*\)$/, ""));
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
   return null;
 }
 
@@ -346,6 +355,8 @@ const TASK_STATUS: Record<string, TaskValues["status"]> = {
   hecho: "done",
   completada: "done",
   realizada: "done",
+  cancelada: "cancelada",
+  cancelado: "cancelada",
 };
 
 export function mapTask(r: RawRow): Mapped<TaskValues> {
@@ -379,6 +390,8 @@ export function mapTask(r: RawRow): Mapped<TaskValues> {
       status: status ?? "todo",
       owner_name: owner,
       result: txt(v["Resultado"]),
+      prep_priority: txt(v["Prioridad preparación"]),
+      prep_block: txt(v["Bloque operativo · RELEVO"]),
       company_ref: txt(v["Empresa ID"]),
       contact_ref: txt(v["Contacto ID"]),
     },

@@ -43,6 +43,16 @@ export async function sheetModifiedAt(sheetId: string): Promise<string> {
   return ((await res.json()) as { modifiedTime: string }).modifiedTime;
 }
 
+/** Título y última modificación de un documento de la misión (Mission Master, Field Plan). Solo metadatos: no
+ *  se lee el contenido. Sin acceso (no compartido con la cuenta de servicio) → null. */
+export async function fileMeta(fileId: string): Promise<{ name: string; modifiedTime: string } | null> {
+  const sa = serviceAccount();
+  if (!sa) return null;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,modifiedTime`, { headers: { authorization: `Bearer ${await accessToken(sa)}` } });
+  if (!res.ok) return null;
+  return (await res.json()) as { name: string; modifiedTime: string };
+}
+
 /** El Sheet entero como .xlsx (mismo formato que ya leen el importador del CRM y el del Radar). */
 export async function exportSheet(sheetId: string): Promise<ArrayBuffer> {
   const sa = serviceAccount();

@@ -838,6 +838,31 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"crm_candidates": {
+                  Row: {
+                    "campaign_id": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"detail": string | null,"entity_id": string | null,"entity_type": string | null,"id": string,"kind": string,"name": string,"possible_duplicate": string | null,"provenance": string,"source_url": string | null,"status": string,"workspace_id": string
+                  }
+                  Insert: {
+                    "campaign_id"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"detail"?: string | null,"entity_id"?: string | null,"entity_type"?: string | null,"id"?: string,"kind": string,"name": string,"possible_duplicate"?: string | null,"provenance": string,"source_url"?: string | null,"status"?: string,"workspace_id": string
+                  }
+                  Update: {
+                    "campaign_id"?: string | null,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"detail"?: string | null,"entity_id"?: string | null,"entity_type"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"possible_duplicate"?: string | null,"provenance"?: string,"source_url"?: string | null,"status"?: string,"workspace_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "crm_candidates_workspace_id_campaign_id_fkey"
+      columns: ["workspace_id","campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["workspace_id","id"]
+    },{
+      foreignKeyName: "crm_candidates_workspace_id_fkey"
+      columns: ["workspace_id"]
+isOneToOne: false
+      referencedRelation: "workspaces"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"decisions": {
                   Row: {
                     "context": string | null,"created_at": string,"decided_at": string | null,"decided_by": string | null,"decision_note": string | null,"due_on": string | null,"experiment_id": string | null,"id": string,"kind": string,"opportunity_id": string | null,"question": string,"requested_by": string | null,"status": string,"updated_at": string,"workspace_id": string
@@ -1885,13 +1910,13 @@ isOneToOne: false
                   ]
                 },"tasks": {
                   Row: {
-                    "asset_id": string | null,"assignee_id": string | null,"campaign_id": string | null,"channel": string | null,"completed_at": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"finding_id": string | null,"id": string,"idempotency_key": string | null,"kind": string | null,"opportunity_id": string | null,"signal_id": string | null,"status": string,"stop_id": string | null,"target_id": string | null,"title": string,"updated_at": string,"workspace_id": string
+                    "asset_id": string | null,"assignee_id": string | null,"campaign_id": string | null,"channel": string | null,"completed_at": string | null,"contact_id": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_on": string | null,"finding_id": string | null,"id": string,"idempotency_key": string | null,"kind": string | null,"opportunity_id": string | null,"prep_block": string | null,"prep_priority": string | null,"signal_id": string | null,"status": string,"stop_id": string | null,"target_id": string | null,"title": string,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"signal_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
+                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"prep_block"?: string | null,"prep_priority"?: string | null,"signal_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title": string,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"signal_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
+                    "asset_id"?: string | null,"assignee_id"?: string | null,"campaign_id"?: string | null,"channel"?: string | null,"completed_at"?: string | null,"contact_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_on"?: string | null,"finding_id"?: string | null,"id"?: string,"idempotency_key"?: string | null,"kind"?: string | null,"opportunity_id"?: string | null,"prep_block"?: string | null,"prep_priority"?: string | null,"signal_id"?: string | null,"status"?: string,"stop_id"?: string | null,"target_id"?: string | null,"title"?: string,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {
@@ -2089,13 +2114,13 @@ isOneToOne: false
                   ]
                 },"visit_stops": {
                   Row: {
-                    "contact_id": string | null,"created_at": string,"external_ref": string | null,"id": string,"key_question": string | null,"kind": string,"label": string | null,"latitude": number | null,"longitude": number | null,"notes": string | null,"objective": string | null,"outcome": string | null,"plan_id": string,"position": number,"status": string,"target_id": string | null,"target_time": string | null,"time_slot": string | null,"updated_at": string,"workspace_id": string
+                    "contact_id": string | null,"created_at": string,"crm_status": string | null,"external_ref": string | null,"id": string,"key_question": string | null,"kind": string,"label": string | null,"latitude": number | null,"longitude": number | null,"notes": string | null,"objective": string | null,"outcome": string | null,"plan_id": string,"position": number,"status": string,"stop_class": string | null,"target_id": string | null,"target_time": string | null,"time_slot": string | null,"updated_at": string,"workspace_id": string
                   }
                   Insert: {
-                    "contact_id"?: string | null,"created_at"?: string,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id": string,"position": number,"status"?: string,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id": string
+                    "contact_id"?: string | null,"created_at"?: string,"crm_status"?: string | null,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id": string,"position": number,"status"?: string,"stop_class"?: string | null,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id": string
                   }
                   Update: {
-                    "contact_id"?: string | null,"created_at"?: string,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id"?: string,"position"?: number,"status"?: string,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id"?: string
+                    "contact_id"?: string | null,"created_at"?: string,"crm_status"?: string | null,"external_ref"?: string | null,"id"?: string,"key_question"?: string | null,"kind"?: string,"label"?: string | null,"latitude"?: number | null,"longitude"?: number | null,"notes"?: string | null,"objective"?: string | null,"outcome"?: string | null,"plan_id"?: string,"position"?: number,"status"?: string,"stop_class"?: string | null,"target_id"?: string | null,"target_time"?: string | null,"time_slot"?: string | null,"updated_at"?: string,"workspace_id"?: string
                   }
                   Relationships: [
                     {

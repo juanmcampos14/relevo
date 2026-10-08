@@ -27,7 +27,7 @@ export type EntityType = "company" | "contact" | "task" | "source";
 export const COMPARED: Record<EntityType, readonly string[]> = {
   company: ["trade_name", "activity", "locality", "address_text", "public_phone", "website", "sector", "priority", "stage", "owner_name", "verification_status", "next_action", "next_action_due", "notes", "drive_folder_url"],
   contact: ["full_name", "contact_kind", "role_title", "email", "phone", "profile_url", "preferred_channel", "relationship_status", "contact_permission", "notes", "outreach_draft"],
-  task: ["title", "kind", "channel", "due_on", "status", "owner_name", "result"],
+  task: ["title", "kind", "channel", "due_on", "status", "owner_name", "result", "prep_priority", "prep_block"],
   source: ["title", "url", "publisher", "published_on", "captured_on", "quality", "supports", "limitations"],
 };
 
@@ -118,7 +118,7 @@ async function currentContact(db: Db, ref: Ref): Promise<Record<string, unknown>
 }
 
 async function currentTask(db: Db, ref: Ref, ctx: StageContext): Promise<Record<string, unknown> | null> {
-  const { data } = await db.from("tasks").select("title, kind, channel, due_on, status, assignee_id, description").eq("id", ref.entity_id).maybeSingle();
+  const { data } = await db.from("tasks").select("title, kind, channel, due_on, status, assignee_id, description, prep_priority, prep_block").eq("id", ref.entity_id).maybeSingle();
   if (!data) return null;
   const lastOwner = resolveOwners(ref.last_values.owner_name as string | null, ctx.members).ids[0] ?? null;
   return {
@@ -130,6 +130,8 @@ async function currentTask(db: Db, ref: Ref, ctx: StageContext): Promise<Record<
     owner_name: data.assignee_id && data.assignee_id === lastOwner ? ref.last_values.owner_name : data.assignee_id,
     // La nota de responsables compartidos la agrega el importador: no cuenta como edición en RELEVO.
     result: (data.description ?? "").split("\n").filter((l) => !l.startsWith("Responsables en el CRM: ")).join("\n") || null,
+    prep_priority: data.prep_priority,
+    prep_block: data.prep_block,
   };
 }
 

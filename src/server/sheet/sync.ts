@@ -47,10 +47,20 @@ export type SyncResult = {
     crm?: { batchId: string; aplicadas: number; sinCambios: number; paraRevisar: number; informacionDiferente: number; errores: { external_id: string; message: string }[] };
     radar?: { creadas: number; reconciliadas: number; activosNuevos: number; discrepancias: number; material: number; tareas: number; costUsd: number };
     campo?: { creadas: number; actualizadas: number; sinFecha: number; porClase: Record<string, number> };
+    /** IDs repetidos en una pestaña del CRM: esas filas no se procesan (no hay cómo saber cuál vale). */
+    idsDuplicados?: Record<string, string[]>;
   };
   batchIds: string[];
   error?: string;
 };
+
+/** Filas con un ID que aparece una sola vez; las de IDs repetidos se apartan para informarlas. */
+function uniqueIds<R extends Raw>(rows: R[]): { rows: R[]; duplicated: string[] } {
+  const count = new Map<string, number>();
+  for (const r of rows) count.set(idOf(r), (count.get(idOf(r)) ?? 0) + 1);
+  const duplicated = [...count.entries()].filter(([id, n]) => id && n > 1).map(([id]) => id);
+  return { rows: rows.filter((r) => (count.get(idOf(r)) ?? 0) <= 1), duplicated };
+}
 
 /** Qué filas cambiaron desde la última vez (nuevas o con otra huella). */
 async function delta<R extends Raw>(db: Db, workspaceId: string, sheetId: string, tab: string, rows: R[]) {
@@ -86,8 +96,11 @@ export async function syncSheet(
     // 1. Pestañas del CRM: solo las filas que cambiaron pasan por el diff de tres vías.
     const parsed = await parseCrmWorkbook(o.buffer);
     const crmChanged: Partial<Record<SheetKey, RawRow[]>> = {};
+    const duplicated: Record<string, string[]> = {};
     for (const k of CRM_TABS) {
-      const d = await delta<RawRow>(db, o.workspaceId, o.sheetId, TAB_NAME[k], parsed.rows[k]);
+      const u = uniqueIds(parsed.rows[k]);
+      if (u.duplicated.length) duplicated[TAB_NAME[k]] = u.duplicated;
+      const d = await delta<RawRow>(db, o.workspaceId, o.sheetId, TAB_NAME[k], u.rows);
       if (d.nuevas.length || d.modificadas.length) {
         crmChanged[k] = [...d.nuevas, ...d.modificadas];
         out.changed[TAB_NAME[k]] = { nuevas: d.nuevas.map(idOf), modificadas: d.modificadas.map(idOf) };
@@ -117,8 +130,10 @@ export async function syncSheet(
     }
 
     // 2. Radar: solo las filas nuevas o modificadas, por la reconciliación del Bloque B.
-    const radarRows = await parseTab(o.buffer, RADAR, "Hallazgo");
-    const rd = await delta(db, o.workspaceId, o.sheetId, RADAR, radarRows);
+    const radarU = uniqueIds(await parseTab(o.buffer, RADAR, "Hallazgo"));
+    if (radarU.duplicated.length) duplicated[RADAR] = radarU.duplicated;
+    if (Object.keys(duplicated).length) out.result.idsDuplicados = duplicated;
+    const rd = await delta(db, o.workspaceId, o.sheetId, RADAR, radarU.rows);
     const radarChanged = [...rd.nuevas, ...rd.modificadas];
     if (radarChanged.length) {
       out.changed[RADAR] = { nuevas: rd.nuevas.map(idOf), modificadas: rd.modificadas.map(idOf) };

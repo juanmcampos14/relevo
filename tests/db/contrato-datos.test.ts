@@ -13,7 +13,7 @@ const db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process
 const SHEET = `contrato-${Date.now()}`;
 let ws: string, vm: string;
 
-async function book(o: { rutaHallazgo?: string } = {}): Promise<ArrayBuffer> {
+async function book(o: { rutaHallazgo?: string; duplicateAct?: boolean } = {}): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   const e = wb.addWorksheet("EMPRESAS");
   e.addRow(["ID anterior", "ID", "Empresa / establecimiento", "Sector", "Localidad / zona", "Prioridad"]);
@@ -24,6 +24,10 @@ async function book(o: { rutaHallazgo?: string } = {}): Promise<ArrayBuffer> {
   a.addRow(["ID", "Empresa ID", "Contacto ID", "Tipo", "Actividad / objetivo", "Responsable", "Vencimiento", "Estado", "Resultado", "Bloque operativo · RELEVO", "Prioridad preparación"]);
   a.addRow(["ACT-901", "AN-9202", "", "Investigación", "Pedir ocupación y tarifa por cama", "Tano", "Mon Oct 05 2026 21:00:00 GMT-0300 (Argentina Standard Time)", "Pendiente", "", "PREVIAJE · confirmar si se ejecutó", "P1 · foco inicial"]);
   a.addRow(["ACT-902", "AN-9201", "", "Correo", "Escribir a compras", "Tano", "19/10/2026", "Pendiente", "", "AOG 20–21 · preparación", "P2 · mantener en cartera"]);
+  if (o.duplicateAct) {
+    a.addRow(["ACT-903", "AN-9201", "", "Llamada", "Llamar a la operadora", "Tano", "20/10/2026", "Pendiente", "", "", "P2 · mantener en cartera"]);
+    a.addRow(["ACT-903", "AN-9202", "", "Llamada", "Otra actividad con el mismo ID", "Tano", "21/10/2026", "Pendiente", "", "", "P2 · mantener en cartera"]);
+  }
   wb.addWorksheet("FUENTES").addRow(["ID", "Entidad vinculada", "URL original"]);
   const r = wb.addWorksheet("RUTA | VISITAS");
   r.addRow(["CAMPO · NEUQUÉN + AÑELO"]);
@@ -100,6 +104,12 @@ describe("contrato de datos con el CRM", () => {
     // Revertir el resultado en el Sheet lo saca de RELEVO (sin perder la parada).
     await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book(), trigger: "prueba" });
     expect((await stops()).find((s) => s.external_ref === "RUTA:23 OCT#4:AN-9202")!.outcome).toBeNull();
+
+    // Un ID repetido en el CRM no frena la sincronización: esas filas no se procesan y se informan.
+    const s5 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book({ duplicateAct: true }), trigger: "prueba" });
+    expect(s5.status).not.toBe("error");
+    expect(s5.result.idsDuplicados).toEqual({ ACTIVIDADES: ["ACT-903"] });
+    expect((await db.from("tasks").select("id").eq("workspace_id", ws)).data).toHaveLength(2);
 
     // Una actividad puede quedar cancelada, con su historial.
     const { error } = await db.from("tasks").update({ status: "cancelada" }).eq("workspace_id", ws).eq("title", "Escribir a compras");

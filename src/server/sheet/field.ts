@@ -72,3 +72,21 @@ export async function applyStops(db: Db, o: { workspaceId: string; missionId: st
   }
   return res;
 }
+
+/**
+ * Filas de RUTA o AOG que ya no están en el CRM: sus paradas salen de la agenda (no se presentan como
+ * activas). La huella de la fila queda en sheet_rows como historial técnico. Solo con una lectura válida:
+ * si la pestaña trae menos de la mitad de las filas que tenía, no se retira nada.
+ */
+export async function retireStops(db: Db, o: { workspaceId: string; sheetId: string; tab: string; currentRowIds: Set<string> }): Promise<{ retiradas: string[]; dudosa: boolean }> {
+  const { data: seen } = await db.from("sheet_rows").select("external_id").eq("workspace_id", o.workspaceId).eq("sheet_id", o.sheetId).eq("tab", o.tab);
+  const prev = (seen ?? []).map((r) => r.external_id);
+  if (prev.length && o.currentRowIds.size < prev.length / 2) return { retiradas: [], dudosa: true };
+  const gone = prev.filter((id) => !o.currentRowIds.has(id));
+  const retiradas: string[] = [];
+  for (const id of gone) {
+    const { data } = await db.from("visit_stops").delete().eq("workspace_id", o.workspaceId).not("stop_class", "is", null).or(`external_ref.eq.${JSON.stringify(id)},external_ref.like.${JSON.stringify(`${id}:%`)}`).select("id");
+    if (data?.length) retiradas.push(id);
+  }
+  return { retiradas, dudosa: false };
+}

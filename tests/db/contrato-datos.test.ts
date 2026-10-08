@@ -13,7 +13,7 @@ const db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process
 const SHEET = `contrato-${Date.now()}`;
 let ws: string, vm: string;
 
-async function book(o: { rutaHallazgo?: string; duplicateAct?: boolean } = {}): Promise<ArrayBuffer> {
+async function book(o: { rutaHallazgo?: string; duplicateAct?: boolean; ordenNeuquen?: string } = {}): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   const e = wb.addWorksheet("EMPRESAS");
   e.addRow(["ID anterior", "ID", "Empresa / establecimiento", "Sector", "Localidad / zona", "Prioridad"]);
@@ -35,7 +35,7 @@ async function book(o: { rutaHallazgo?: string; duplicateAct?: boolean } = {}): 
   r.addRow(["20 OCT", "2", "13:00–17:15", "DUAM", "Compradores", "Operadoras + buyer targets", "AOG / BUYER DISCOVERY", "", "En agenda", "", "Conferencias", "AN-9201 / AN-9999"]);
   r.addRow(["23 OCT", "1", "08:00–09:00", "Añelo", "Red local", "CEISA / Cámara", "CAMPO DÍA 2 / ORIGINACIÓN", "", "Por coordinar", "", "Reunión", "MAP-024"]);
   r.addRow(["23 OCT", "4", "12:15–13:30", "Añelo", "Housing", "Operador de housing", "CAMPO DÍA 2 / HOUSING", "¿Qué no pueden absorber?", "Por coordinar", o.rutaHallazgo ?? "", "Reunión", "AN-9202"]);
-  r.addRow(["19 OCT", "4", "10:30–12:00", "Alto Neuquén", "Shopping / franquicias", "Alto Comahue Shopping", "NEUQUÉN / FRANCHISE SCAN", "", "En agenda", "", "Mystery shopping", ""]);
+  r.addRow(["19 OCT", o.ordenNeuquen ?? "4", "10:30–12:00", "Alto Neuquén", "Shopping / franquicias", "Alto Comahue Shopping", "NEUQUÉN / FRANCHISE SCAN", "", "En agenda", "", "Mystery shopping", ""]);
   r.addRow(["26 OCT", "2", "Media mañana", "Neuquén", "Traslado", "Traslado al aeropuerto", "REGRESO / LUNES", "", "Por reservar", "", "Traslado", ""]);
   const g = wb.addWorksheet("AOG | MAPA FÍSICO");
   g.addRow(["Prioridad", "Actor", "Stand oficial", "Zona física", "CRM", "Rol misión", "Día sugerido", "Objetivo", "Contacto / acceso", "Estado"]);
@@ -105,8 +105,17 @@ describe("contrato de datos con el CRM", () => {
     await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book(), trigger: "prueba" });
     expect((await stops()).find((s) => s.external_ref === "RUTA:23 OCT#4:AN-9202")!.outcome).toBeNull();
 
+    // El CRM cambia el Orden de una visita (pasa a un código, "NQN-3"): la parada vieja sale de la agenda y
+    // entra la nueva; no quedan duplicadas.
+    const s4 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book({ ordenNeuquen: "NQN-3" }), trigger: "prueba" });
+    expect(s4.result.campo?.retiradas).toEqual(["RUTA:19 OCT#4"]);
+    const refs4 = (await stops()).map((s) => s.external_ref);
+    expect(refs4).toHaveLength(9);
+    expect(refs4).toContain("RUTA:19 OCT#NQN-3");
+    expect(refs4).not.toContain("RUTA:19 OCT#4");
+
     // Un ID repetido en el CRM no frena la sincronización: esas filas no se procesan y se informan.
-    const s5 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book({ duplicateAct: true }), trigger: "prueba" });
+    const s5 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book({ duplicateAct: true, ordenNeuquen: "NQN-3" }), trigger: "prueba" });
     expect(s5.status).not.toBe("error");
     expect(s5.result.idsDuplicados).toEqual({ ACTIVIDADES: ["ACT-903"] });
     expect((await db.from("tasks").select("id").eq("workspace_id", ws)).data).toHaveLength(2);

@@ -73,8 +73,10 @@ export function routeStops(rows: FieldRow[], o: { year: number; companies: Set<s
     const label = t(v["Punto de visita"]);
     const dayText = t(v["Día"]);
     if (!label || !dayText) continue;
-    const order = Number.parseInt(t(v["Orden"]) ?? "", 10);
-    const rowId = `RUTA:${dayText.toUpperCase()}#${Number.isFinite(order) ? order : r.row}`;
+    // Identidad: Día + Orden tal cual (un número o un código como "NQN-1"); sin Orden, la fila.
+    const orderText = (t(v["Orden"]) ?? "").toUpperCase();
+    const order = Number.parseInt(orderText, 10);
+    const rowId = `RUTA:${dayText.toUpperCase()}#${orderText || r.row}`;
     const base = {
       rowId,
       day: fieldDay(dayText, o.year),

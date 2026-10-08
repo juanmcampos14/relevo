@@ -10,7 +10,7 @@ import { applyBatch } from "@/server/crm-import/apply";
 import { planImport, stageImport } from "@/server/crm-import/stage";
 import { reconcileRadar } from "@/server/radar/reconcile";
 import { aogStops, routeStops, type FieldStop } from "@/domain/field-plan";
-import { applyStops, crmCompanies } from "./field";
+import { applyStops, crmCompanies, retireStops } from "./field";
 
 // El Sheet operativo como fuente viva. Cada corrida: ¿cambió el archivo? → ¿qué filas cambiaron? (huella
 // por fila) → solo eso pasa por la reconciliación: el Radar por el motor del Bloque B; empresas, contactos,
@@ -46,7 +46,7 @@ export type SyncResult = {
   result: {
     crm?: { batchId: string; aplicadas: number; sinCambios: number; paraRevisar: number; informacionDiferente: number; errores: { external_id: string; message: string }[] };
     radar?: { creadas: number; reconciliadas: number; activosNuevos: number; discrepancias: number; material: number; tareas: number; costUsd: number };
-    campo?: { creadas: number; actualizadas: number; sinFecha: number; porClase: Record<string, number> };
+    campo?: { creadas: number; actualizadas: number; sinFecha: number; porClase: Record<string, number>; retiradas?: string[]; lecturaDudosa?: string[] };
     /** IDs repetidos en una pestaña del CRM: esas filas no se procesan (no hay cómo saber cuál vale). */
     idsDuplicados?: Record<string, string[]>;
   };
@@ -161,6 +161,12 @@ export async function syncSheet(
     const stops = [...routeStops(route, { year, companies: known, maps }), ...aogStops(aog["Actor"], aog["Quién / empresa"], { year, companies: known, eventDay: `${year}-10-20` })];
     for (const [tab, list] of [[RUTA, stops.filter((s) => s.rowId.startsWith("RUTA:"))], [AOG, stops.filter((s) => !s.rowId.startsWith("RUTA:"))]] as const) {
       const rows = fieldRows(list);
+      const gone = await retireStops(db, { workspaceId: o.workspaceId, sheetId: o.sheetId, tab, currentRowIds: new Set(rows.map(idOf)) });
+      if (gone.retiradas.length || gone.dudosa) {
+        const prev = out.result.campo ?? { creadas: 0, actualizadas: 0, sinFecha: 0, porClase: {} };
+        out.result.campo = { ...prev, retiradas: [...(prev.retiradas ?? []), ...gone.retiradas], lecturaDudosa: gone.dudosa ? [...(prev.lecturaDudosa ?? []), tab] : prev.lecturaDudosa };
+        if (gone.retiradas.length) out.changed[`${tab} · retiradas`] = { nuevas: [], modificadas: gone.retiradas };
+      }
       const fd = await delta(db, o.workspaceId, o.sheetId, tab, rows);
       const changedIds = new Set([...fd.nuevas, ...fd.modificadas].map(idOf));
       if (!changedIds.size) continue;
@@ -168,7 +174,7 @@ export async function syncSheet(
       const r = await applyStops(db, { workspaceId: o.workspaceId, missionId: o.missionId, stops: list.filter((s) => changedIds.has(s.rowId.toUpperCase())), companies });
       const prev = out.result.campo ?? { creadas: 0, actualizadas: 0, sinFecha: 0, porClase: {} };
       for (const [k, n] of Object.entries(r.porClase)) prev.porClase[k] = (prev.porClase[k] ?? 0) + n;
-      out.result.campo = { creadas: prev.creadas + r.creadas, actualizadas: prev.actualizadas + r.actualizadas, sinFecha: prev.sinFecha + r.sinFecha, porClase: prev.porClase };
+      out.result.campo = { ...prev, creadas: prev.creadas + r.creadas, actualizadas: prev.actualizadas + r.actualizadas, sinFecha: prev.sinFecha + r.sinFecha, porClase: prev.porClase };
       await remember(db, o.workspaceId, o.sheetId, tab, [...fd.nuevas, ...fd.modificadas], null);
     }
 

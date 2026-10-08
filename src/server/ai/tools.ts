@@ -394,7 +394,12 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
           ...data,
           notes: clip(data.notes, 4000),
           ...(await claimsAndFindings("company_id")),
-          opportunities: (opps ?? []).map((o) => ({ ref: ref("opportunity", o.id), title: o.title, crm_id: (o.card as { crm_id?: string } | null)?.crm_id ?? null, etapa_crm: (o.card as { crm?: Record<string, string> } | null)?.crm?.["Etapa"] ?? null })),
+          // Sus oportunidades con la ficha del CRM completa (registro maestro, sin reinterpretar): con esto alcanza
+          // para responder qué se propone, riesgos, qué falta, próximo paso y decisión.
+          opportunities: (opps ?? []).map((o) => {
+            const card = (o.card ?? {}) as { crm_id?: string; crm?: Record<string, string>; decision?: { value: string; recorded: boolean } };
+            return { ref: ref("opportunity", o.id), title: o.title, crm_id: card.crm_id ?? null, crm: card.crm ?? null, decision: card.decision ? (card.decision.recorded ? card.decision.value : "Pendiente (sin decisión registrada en el CRM)") : null };
+          }),
           open_tasks: (targetTasks ?? []).map((t) => ({ ref: ref("task", t.id), title: t.title, kind: t.kind, status: t.status, due_on: t.due_on, opportunity: t.opportunity_id ? { ref: ref("opportunity", t.opportunity_id) } : null })),
         }),
       };

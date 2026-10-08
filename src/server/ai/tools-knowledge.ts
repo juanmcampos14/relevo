@@ -285,7 +285,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
       const m = ctx.background ? ctx.missionId ?? "00000000-0000-0000-0000-000000000000" : null;
       const own = <T extends { or: (f: string) => T }>(q: T) => (m ? q.or(`origin_campaign_id.is.null,origin_campaign_id.eq.${m}`) : q);
       const inMission = <T extends { eq: (c: string, v: string) => T }>(q: T) => (m ? q.eq("campaign_id", m) : q);
-      const [c, as, es, ct, f, ev, cap, u] = await Promise.all([
+      const [c, as, es, ct, f, ev, cap, u, op] = await Promise.all([
         own(db.from("companies").select("id, trade_name, legal_name, activity, locality").or(`trade_name.ilike.${term},legal_name.ilike.${term},activity.ilike.${term}`)).limit(10),
         own(db.from("assets").select("id, title, kind, operation, locality").or(`title.ilike.${term},address_text.ilike.${term}`)).limit(10),
         own(db.from("establishments").select("id, name, address_text").or(`name.ilike.${term},address_text.ilike.${term}`)).limit(10),
@@ -294,6 +294,7 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
         inMission(db.from("evidence").select("id, statement, origin_kind, verification_status, declared_by, capture_id, company_id").ilike("statement", term)).limit(12),
         inMission(db.from("captures").select("id, captured_at, ai_summary, status").or(`body.ilike.${term},ai_summary.ilike.${term}`)).limit(8),
         db.from("unresolved_entities").select("id, kind, label").ilike("label", term).is("resolved_at", null).limit(8),
+        inMission(db.from("opportunities").select("id, title, card, company_id").ilike("title", term)).limit(8),
       ]);
       return {
         content: track(ctx, {
@@ -305,6 +306,8 @@ export async function runKnowledgeTool(name: string, a: Record<string, unknown>,
           evidence: (ev.data ?? []).map((x) => ({ ref: ref("evidence", x.id), statement: x.statement, provenance: provenanceOf(x), capture: x.capture_id ? { ref: ref("capture", x.capture_id) } : null, company: x.company_id ? { ref: ref("company", x.company_id) } : null })),
           captures: (cap.data ?? []).map((x) => ({ ref: ref("capture", x.id), captured_at: x.captured_at, summary: clip(x.ai_summary, 200), status: x.status })),
           unidentified: (u.data ?? []).map((x) => ({ kind: x.kind, label: x.label, note: "entidad sin identificar (organización o persona real todavía desconocida)" })),
+          // Oportunidades del CRM (OP-###): get_record trae la ficha completa, la empresa y sus actividades.
+          opportunities: (op.data ?? []).map((x) => ({ ref: ref("opportunity", x.id), title: x.title, crm_id: (x.card as { crm_id?: string } | null)?.crm_id ?? null, company: x.company_id ? { ref: ref("company", x.company_id) } : null })),
         }),
       };
     }

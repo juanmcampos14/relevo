@@ -44,6 +44,7 @@ const FIELD: Record<string, string> = {
 export const ISSUE_LABEL: Record<IssueCode, string> = {
   id_inestable: "ID que cambió de fila",
   dato_en_campo_incorrecto: "dato en un campo que no corresponde",
+  etapa_nueva: "etapa del CRM sin equivalente (se conserva)",
   fuente_texto_libre: "fuente citada como texto (no es un SRC): se registra como fuente del CRM",
   fuente_inexistente: "fuente que no está en FUENTES: se usa el CRM como fuente",
   estado_texto_libre: "estado de evidencia en texto libre",

@@ -8,6 +8,7 @@ export type Severity = "bloquea" | "revisar" | "info";
 export type IssueCode =
   | "id_inestable"
   | "dato_en_campo_incorrecto"
+  | "etapa_nueva"
   | "fuente_texto_libre"
   | "fuente_inexistente"
   | "estado_texto_libre"
@@ -79,6 +80,8 @@ export type TaskValues = {
   prep_block: string | null;
   company_ref: string | null;
   contact_ref: string | null;
+  /** "Oportunidad ID" del CRM (OP-###): vincula la actividad con su oportunidad. */
+  opportunity_ref: string | null;
 };
 
 export type SourceValues = {
@@ -227,7 +230,9 @@ export function mapCompany(r: RawRow): Mapped<CompanyValues> {
   }
 
   const stage = mapStage(v["Etapa CRM"]);
-  if (!stage) issues.push({ code: "dato_en_campo_incorrecto", severity: "revisar", field: "Etapa CRM", message: `Etapa desconocida: "${v["Etapa CRM"]}". Se usa Investigación.` });
+  // Una etapa nueva del CRM (p. ej. "Descubrimiento") no frena la empresa: se importa con la etapa base y el
+  // valor literal queda en el aviso y en la fila guardada (el CRM es el registro maestro de su etapa).
+  if (!stage && txt(v["Etapa CRM"])) issues.push({ code: "etapa_nueva", severity: "info", field: "Etapa CRM", message: `Etapa del CRM sin equivalente en RELEVO: "${v["Etapa CRM"]}". Se registra como Investigación y se conserva el valor del CRM.` });
   const priority = mapPriority(v["Prioridad"]);
   if (!priority && txt(v["Prioridad"])) {
     issues.push({ code: "dato_en_campo_incorrecto", severity: "revisar", field: "Prioridad", message: `Prioridad desconocida: "${v["Prioridad"]}". Se usa Media.` });
@@ -394,6 +399,7 @@ export function mapTask(r: RawRow): Mapped<TaskValues> {
       prep_block: txt(v["Bloque operativo · RELEVO"]),
       company_ref: txt(v["Empresa ID"]),
       contact_ref: txt(v["Contacto ID"]),
+      opportunity_ref: txt(v["Oportunidad ID"])?.toUpperCase() ?? null,
     },
   };
 }

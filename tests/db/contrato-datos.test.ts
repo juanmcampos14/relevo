@@ -16,12 +16,20 @@ let ws: string, vm: string;
 async function book(o: { rutaHallazgo?: string; duplicateAct?: boolean; ordenNeuquen?: string } = {}): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   const e = wb.addWorksheet("EMPRESAS");
-  e.addRow(["ID anterior", "ID", "Empresa / establecimiento", "Sector", "Localidad / zona", "Prioridad"]);
-  e.addRow(["AN-9201", "AN-9201", "Operadora Uno", "Operadora", "Neuquén", "Alta"]);
-  e.addRow(["AN-9202", "AN-9202", "Housing Dos", "Alojamiento", "Añelo", "Alta"]);
+  e.addRow(["ID anterior", "ID", "Empresa / establecimiento", "Sector", "Localidad / zona", "Prioridad", "Etapa CRM"]);
+  e.addRow(["AN-9201", "AN-9201", "Operadora Uno", "Operadora", "Neuquén", "Alta", "Investigación"]);
+  e.addRow(["AN-9202", "AN-9202", "Housing Dos", "Alojamiento", "Añelo", "Alta", "Investigación"]);
+  e.addRow(["AN-9203", "AN-9203", "Desarrolladora · Village", "Real estate", "Añelo", "Alta", "Descubrimiento"]);
+  const op = wb.addWorksheet("OPORTUNIDADES");
+  op.addRow(["OPORTUNIDADES"]);
+  op.addRow([]);
+  op.addRow([]);
+  op.addRow(["ID", "Oportunidad", "Empresa ID", "Etapa", "Subtipo / tesis del caso", "Riesgo principal", "Próximo hito", "Fecha objetivo", "Decisión", "Qué falta saber"]);
+  op.addRow(["OP-901", "Village · alojamiento corporativo", "AN-9203", "Descubrimiento", "Compra de camas con pool; alternativa: asociación operativa", "Riesgo de obra y de ocupación", "Pedir dossier y visitar", "16/10/2026", "", "Precio, contratos y operador"]);
   wb.addWorksheet("RED | CONTACTOS").addRow(["ID", "Nombre", "Empresa ID", "Acceso / vínculo"]);
   const a = wb.addWorksheet("ACTIVIDADES");
-  a.addRow(["ID", "Empresa ID", "Contacto ID", "Tipo", "Actividad / objetivo", "Responsable", "Vencimiento", "Estado", "Resultado", "Bloque operativo · RELEVO", "Prioridad preparación"]);
+  a.addRow(["ID", "Empresa ID", "Contacto ID", "Tipo", "Actividad / objetivo", "Responsable", "Vencimiento", "Estado", "Resultado", "Bloque operativo · RELEVO", "Prioridad preparación", "Oportunidad ID"]);
+  a.addRow(["ACT-904", "AN-9203", "", "Reunión", "Explorar asociación operativa", "Tano", "22/10/2026", "Pendiente", "", "", "P1 · foco inicial", "OP-901"]);
   a.addRow(["ACT-901", "AN-9202", "", "Investigación", "Pedir ocupación y tarifa por cama", "Tano", "Mon Oct 05 2026 21:00:00 GMT-0300 (Argentina Standard Time)", "Pendiente", "", "PREVIAJE · confirmar si se ejecutó", "P1 · foco inicial"]);
   a.addRow(["ACT-902", "AN-9201", "", "Correo", "Escribir a compras", "Tano", "19/10/2026", "Pendiente", "", "AOG 20–21 · preparación", "P2 · mantener en cartera"]);
   if (o.duplicateAct) {
@@ -65,7 +73,16 @@ describe("contrato de datos con el CRM", () => {
     const s1 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book(), trigger: "prueba" });
     expect(s1.status).toBe("procesado");
 
-    const { data: tasks } = await db.from("tasks").select("title, due_on, prep_priority, prep_block").eq("workspace_id", ws).order("title");
+    // OPORTUNIDADES: la ficha del CRM tal cual, con su empresa (aunque la etapa del CRM sea nueva) y su actividad.
+    const { data: opps } = await db.from("opportunities").select("id, title, thesis, next_action, next_action_due, card, companies(trade_name)").eq("workspace_id", ws);
+    expect(opps).toHaveLength(1);
+    expect(opps![0]).toMatchObject({ title: "Village · alojamiento corporativo", next_action: "Pedir dossier y visitar", next_action_due: "2026-10-16", companies: { trade_name: "Desarrolladora · Village" } });
+    expect((opps![0].card as { crm: Record<string, string>; decision: unknown }).crm["Riesgo principal"]).toBe("Riesgo de obra y de ocupación");
+    expect((opps![0].card as { decision: unknown }).decision).toEqual({ value: "Pendiente", recorded: false });
+    expect((await db.from("tasks").select("title").eq("opportunity_id", opps![0].id)).data).toEqual([{ title: "Explorar asociación operativa" }]);
+    expect(s1.result.oportunidades).toMatchObject({ creadas: 1, sinEmpresa: [] });
+
+    const { data: tasks } = await db.from("tasks").select("title, due_on, prep_priority, prep_block").eq("workspace_id", ws).neq("title", "Explorar asociación operativa").order("title");
     expect(tasks).toEqual([
       { title: "Escribir a compras", due_on: "2026-10-19", prep_priority: "P2 · mantener en cartera", prep_block: "AOG 20–21 · preparación" },
       { title: "Pedir ocupación y tarifa por cama", due_on: "2026-10-06", prep_priority: "P1 · foco inicial", prep_block: "PREVIAJE · confirmar si se ejecutó" },
@@ -118,7 +135,7 @@ describe("contrato de datos con el CRM", () => {
     const s5 = await syncSheet(db, { workspaceId: ws, missionId: vm, sheetId: SHEET, buffer: await book({ duplicateAct: true, ordenNeuquen: "NQN-3" }), trigger: "prueba" });
     expect(s5.status).not.toBe("error");
     expect(s5.result.idsDuplicados).toEqual({ ACTIVIDADES: ["ACT-903"] });
-    expect((await db.from("tasks").select("id").eq("workspace_id", ws)).data).toHaveLength(2);
+    expect((await db.from("tasks").select("id").eq("workspace_id", ws)).data).toHaveLength(3);
 
     // Una actividad puede quedar cancelada, con su historial.
     const { error } = await db.from("tasks").update({ status: "cancelada" }).eq("workspace_id", ws).eq("title", "Escribir a compras");

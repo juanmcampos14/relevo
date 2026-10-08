@@ -264,7 +264,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
       };
     }
     case "list_opportunities": {
-      let q = db.from("opportunities").select("id, title, thesis, route, status, stage, next_action, created_at, opportunity_findings(count)").order("created_at", { ascending: false }).limit(50);
+      let q = db.from("opportunities").select("id, title, thesis, route, status, stage, next_action, created_at, company_id, card, opportunity_findings(count)").order("created_at", { ascending: false }).limit(50);
       if (typeof a.status === "string" && a.status !== "todas") q = q.eq("status", a.status);
       const { data } = await q;
       return {
@@ -276,6 +276,9 @@ export async function runTool(name: string, rawInput: unknown, ctx: ToolContext)
           status: opportunityStatus.label(o.status),
           stage: o.stage ? dealflowStage.label(o.stage) : null,
           next_action: o.next_action,
+          company: o.company_id ? { ref: ref("company", o.company_id) } : null,
+          crm_id: (o.card as { crm_id?: string } | null)?.crm_id ?? null,
+          etapa_crm: (o.card as { crm?: Record<string, string> } | null)?.crm?.["Etapa"] ?? null,
           supporting_findings: o.opportunity_findings[0]?.count ?? 0,
         }))),
       };
@@ -380,7 +383,21 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
     case "company": {
       const { data } = await db.from("companies").select("id, trade_name, legal_name, kind, locality, website, verification_status, is_demo, notes, sources(id, title, url)").eq("id", id).maybeSingle();
       if (!data) return notFound;
-      return { content: track(ctx, { ref: ref("company", id), name: companyName(data), ...data, notes: clip(data.notes), ...(await claimsAndFindings("company_id")) }) };
+      const [{ data: opps }, { data: targetTasks }] = await Promise.all([
+        db.from("opportunities").select("id, title, card").eq("company_id", id),
+        db.from("tasks").select("id, title, kind, status, due_on, opportunity_id, campaign_targets!inner(company_id)").eq("campaign_targets.company_id", id).neq("status", "done").order("due_on").limit(20),
+      ]);
+      return {
+        content: track(ctx, {
+          ref: ref("company", id),
+          name: companyName(data),
+          ...data,
+          notes: clip(data.notes, 4000),
+          ...(await claimsAndFindings("company_id")),
+          opportunities: (opps ?? []).map((o) => ({ ref: ref("opportunity", o.id), title: o.title, crm_id: (o.card as { crm_id?: string } | null)?.crm_id ?? null, etapa_crm: (o.card as { crm?: Record<string, string> } | null)?.crm?.["Etapa"] ?? null })),
+          open_tasks: (targetTasks ?? []).map((t) => ({ ref: ref("task", t.id), title: t.title, kind: t.kind, status: t.status, due_on: t.due_on, opportunity: t.opportunity_id ? { ref: ref("opportunity", t.opportunity_id) } : null })),
+        }),
+      };
     }
     case "establishment": {
       const { data } = await db.from("establishments").select("id, name, address_text, locality, address_status, verification_status, is_demo, notes, company_id, latitude, longitude").eq("id", id).maybeSingle();
@@ -424,20 +441,29 @@ async function getRecord(ctx: ToolContext, type: string, id: string): Promise<{ 
       return { content: track(ctx, { ref: ref("finding", id), ...data, source: data.sources ? { ref: ref("source", data.sources.id), ...data.sources } : null }) };
     }
     case "opportunity": {
-      const { data } = await db.from("opportunities").select("id, title, thesis, route, status, stage, stage_reason, next_action, created_at").eq("id", id).maybeSingle();
+      const { data } = await db.from("opportunities").select("id, title, thesis, route, status, stage, stage_reason, next_action, next_action_due, company_id, card, created_at, companies(id, trade_name, legal_name)").eq("id", id).maybeSingle();
       if (!data) return notFound;
       const [{ data: links }, { data: decisions }, { data: tasks }] = await Promise.all([
         db.from("opportunity_findings").select("findings(id, kind, statement, verification_status)").eq("opportunity_id", id),
         db.from("decisions").select("id, question, status, decision_note").eq("opportunity_id", id),
-        db.from("tasks").select("id, title, status, due_on").eq("opportunity_id", id),
+        db.from("tasks").select("id, title, kind, channel, status, due_on, description, prep_priority, prep_block").eq("opportunity_id", id).order("due_on"),
       ]);
+      const card = (data.card ?? {}) as { crm_id?: string; crm?: Record<string, string>; decision?: { value: string; recorded: boolean } };
+      const { card: _card, companies: company, ...rest } = data;
+      void _card;
       return {
         content: track(ctx, {
           ref: ref("opportunity", id),
-          ...data,
+          ...rest,
+          company: company ? { ref: ref("company", company.id), name: companyName(company) } : null,
+          // La ficha del CRM (registro maestro) tal cual: etapa, confianza, riesgos, economía, qué falta y decisión
+          // son los del CRM; no se reinterpretan. Decisión vacía = pendiente (no hay una decisión registrada).
+          crm_id: card.crm_id ?? null,
+          crm: card.crm ?? null,
+          decision: card.decision ? (card.decision.recorded ? card.decision.value : "Pendiente (sin decisión registrada en el CRM)") : null,
           findings: (links ?? []).flatMap((l) => (l.findings ? [{ ref: ref("finding", l.findings.id), ...l.findings }] : [])),
           decisions: (decisions ?? []).map((d) => ({ ref: ref("decision", d.id), ...d })),
-          tasks: (tasks ?? []).map((t) => ({ ref: ref("task", t.id), ...t })),
+          tasks: (tasks ?? []).map((t) => ({ ref: ref("task", t.id), ...t, description: clip(t.description, 600) })),
         }),
       };
     }

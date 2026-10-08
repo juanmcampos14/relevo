@@ -11,6 +11,8 @@ import { planImport, stageImport } from "@/server/crm-import/stage";
 import { reconcileRadar } from "@/server/radar/reconcile";
 import { aogStops, routeStops, type FieldStop } from "@/domain/field-plan";
 import { applyStops, crmCompanies, retireStops } from "./field";
+import { applyOpportunities, linkOpportunityTasks } from "./opportunities";
+import { mapOpportunity } from "@/domain/crm-opportunity";
 
 // El Sheet operativo como fuente viva. Cada corrida: ¿cambió el archivo? → ¿qué filas cambiaron? (huella
 // por fila) → solo eso pasa por la reconciliación: el Radar por el motor del Bloque B; empresas, contactos,
@@ -46,6 +48,7 @@ export type SyncResult = {
   result: {
     crm?: { batchId: string; aplicadas: number; sinCambios: number; paraRevisar: number; informacionDiferente: number; errores: { external_id: string; message: string }[] };
     radar?: { creadas: number; reconciliadas: number; activosNuevos: number; discrepancias: number; material: number; tareas: number; costUsd: number };
+    oportunidades?: { creadas: number; actualizadas: number; sinEmpresa: string[]; actividadesVinculadas: number };
     campo?: { creadas: number; actualizadas: number; sinFecha: number; porClase: Record<string, number>; retiradas?: string[]; lecturaDudosa?: string[] };
     /** IDs repetidos en una pestaña del CRM: esas filas no se procesan (no hay cómo saber cuál vale). */
     idsDuplicados?: Record<string, string[]>;
@@ -128,6 +131,21 @@ export async function syncSheet(
       out.batchIds.push(batchId);
       for (const k of Object.keys(crmChanged) as SheetKey[]) await remember(db, o.workspaceId, o.sheetId, TAB_NAME[k], crmChanged[k]!, batchId);
     }
+
+    // 1b. OPORTUNIDADES: la ficha del CRM tal cual, con su empresa y sus actividades.
+    const oppU = uniqueIds((await parseTables(o.buffer, "OPORTUNIDADES", ["Oportunidad"]))["Oportunidad"].map((r) => ({ ...r, values: { ...r.values, ID: (r.values["ID"] ?? "").trim().toUpperCase() } })));
+    if (oppU.duplicated.length) duplicated["OPORTUNIDADES"] = oppU.duplicated;
+    const od = await delta(db, o.workspaceId, o.sheetId, "OPORTUNIDADES", oppU.rows);
+    const oppChanged = [...od.nuevas, ...od.modificadas];
+    const oppCompanies = await crmCompanies(db, o.workspaceId);
+    if (oppChanged.length) {
+      out.changed["OPORTUNIDADES"] = { nuevas: od.nuevas.map(idOf), modificadas: od.modificadas.map(idOf) };
+      const r = await applyOpportunities(db, { workspaceId: o.workspaceId, missionId: o.missionId, opportunities: oppChanged.map((x) => mapOpportunity(x.values)).filter((x) => x !== null), companies: oppCompanies });
+      await remember(db, o.workspaceId, o.sheetId, "OPORTUNIDADES", oppChanged, null);
+      out.result.oportunidades = { ...r, actividadesVinculadas: 0 };
+    }
+    const linked = await linkOpportunityTasks(db, o.workspaceId);
+    if (linked) out.result.oportunidades = { ...(out.result.oportunidades ?? { creadas: 0, actualizadas: 0, sinEmpresa: [] }), actividadesVinculadas: linked };
 
     // 2. Radar: solo las filas nuevas o modificadas, por la reconciliación del Bloque B.
     const radarU = uniqueIds(await parseTab(o.buffer, RADAR, "Hallazgo"));
